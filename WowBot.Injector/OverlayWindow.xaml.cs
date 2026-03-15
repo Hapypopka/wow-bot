@@ -11,6 +11,7 @@ public partial class OverlayWindow : Window
 
     public event Action? OnRotationToggle;
     public event Action? OnFollowToggle;
+    public event Action? OnSetFollowTarget;
 
     public OverlayWindow()
     {
@@ -32,6 +33,12 @@ public partial class OverlayWindow : Window
     {
         e.Handled = true;
         OnFollowToggle?.Invoke();
+    }
+
+    private void BtnSetFollow_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        OnSetFollowTarget?.Invoke();
     }
 
     public void UpdateRotation(bool active)

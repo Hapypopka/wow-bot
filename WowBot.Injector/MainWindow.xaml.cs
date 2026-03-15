@@ -119,6 +119,12 @@ public partial class MainWindow : Window
                     _followEngine.Start();
                 _overlay.UpdateFollow(_followEngine.IsRunning);
             };
+            _overlay.OnSetFollowTarget += () =>
+            {
+                if (_followEngine == null) return;
+                _followEngine.SetFollowTarget();
+                _overlay.UpdateFollow(_followEngine.IsRunning);
+            };
             _overlay.Show();
         }
         catch (Exception ex)
