@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+publish/
+*.user
+*.suo
+descriptor_dump.txt
+endscene_diag.txt
+spells.txt
