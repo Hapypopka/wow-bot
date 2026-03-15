@@ -49,10 +49,8 @@ public class RotationEngine : IDisposable
 
     public void SetFollowFromFocus()
     {
-        // Сохраняем текущий таргет → таргетим фокус → читаем GUID → возвращаем таргет
         _hook.ExecuteLua("TargetUnit('focus')", 500);
-        Thread.Sleep(200); // Даём WoW обновить таргет в памяти
-
+        Thread.Sleep(200);
         _objectManager.Update();
         var target = _objectManager.GetTarget();
         if (target != null && target.Guid != _objectManager.LocalPlayerGuid)
@@ -60,7 +58,6 @@ public class RotationEngine : IDisposable
             _followGuid = target.Guid;
             OnStatusChanged?.Invoke($"Following focus");
         }
-
         Thread.Sleep(50);
         _hook.ExecuteLua("TargetLastTarget()", 500);
     }
