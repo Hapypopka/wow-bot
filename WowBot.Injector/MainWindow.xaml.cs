@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private EndSceneHook? _endSceneHook;
     private RotationEngine? _rotationEngine;
     private DispatcherTimer? _updateTimer;
+    private OverlayWindow? _overlay;
 
     public MainWindow()
     {
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
+        _overlay?.Close();
         _rotationEngine?.Dispose();
         _endSceneHook?.Dispose();
         _memory.Dispose();
@@ -96,6 +98,10 @@ public partial class MainWindow : Window
             BtnSetFollow.IsEnabled = true;
             BtnClearFollow.IsEnabled = true;
             BtnScanSpells.IsEnabled = true;
+
+            // Открываем оверлей
+            _overlay = new OverlayWindow();
+            _overlay.Show();
         }
         catch (Exception ex)
         {
@@ -290,6 +296,23 @@ public partial class MainWindow : Window
         }
 
         LstObjects.ItemsSource = items;
+
+        // Обновляем оверлей
+        if (_overlay != null && player != null)
+        {
+            _overlay.UpdatePlayerHp(player.Health, player.MaxHealth, player.HealthPercent);
+
+            var target = _objectManager.GetTarget();
+            _overlay.UpdateTarget(target != null
+                ? $"HP:{target.HealthPercent:F0}% Dist:{player.DistanceTo(target):F0}yd"
+                : "none");
+
+            bool rotActive = _rotationEngine?.IsRunning == true;
+            _overlay.UpdateRotationStatus("Balance Druid", rotActive);
+
+            bool hasFollow = _rotationEngine?.FollowGuid != 0;
+            _overlay.UpdateFollow(hasFollow ? $"dist:{(_objectManager.GetUnitByGuid(_rotationEngine!.FollowGuid) is { } fu ? player.DistanceTo(fu).ToString("F0") + "yd" : "lost")}" : "none");
+        }
     }
 
     private void BtnScanSpells_Click(object sender, RoutedEventArgs e)

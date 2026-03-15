@@ -1,0 +1,25 @@
+<Window x:Class="WowBot.Injector.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WowBot Overlay" Width="220" Height="120"
+        WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" Topmost="True"
+        ShowInTaskbar="False" ResizeMode="NoResize"
+        Left="10" Top="300">
+
+    <Border Background="#AA000000" CornerRadius="8" Padding="10" MouseLeftButtonDown="Border_MouseLeftButtonDown">
+        <StackPanel>
+            <TextBlock x:Name="TxtRotation" Text="[OFF] Balance Druid"
+                       Foreground="#e94560" FontSize="12" FontWeight="Bold" FontFamily="Consolas"/>
+
+            <TextBlock x:Name="TxtPlayerHp" Text="HP: -"
+                       Foreground="#55ff55" FontSize="11" FontFamily="Consolas" Margin="0,4,0,0"/>
+
+            <TextBlock x:Name="TxtTargetInfo" Text="Target: -"
+                       Foreground="#ffaa00" FontSize="11" FontFamily="Consolas" Margin="0,2,0,0"/>
+
+            <TextBlock x:Name="TxtFollowInfo" Text="Follow: -"
+                       Foreground="#55aaff" FontSize="11" FontFamily="Consolas" Margin="0,2,0,0"/>
+        </StackPanel>
+    </Border>
+</Window>
