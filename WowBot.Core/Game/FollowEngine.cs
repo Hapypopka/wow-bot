@@ -103,7 +103,13 @@ public class FollowEngine : IDisposable
             if (followTarget == null) return;
 
             float dist = player.DistanceTo(followTarget);
-            NeedsToMove = dist > _followDistance;
+
+            // Гистерезис: начинаем бежать при dist > followDistance + 3,
+            // останавливаемся при dist <= followDistance
+            if (NeedsToMove)
+                NeedsToMove = dist > _followDistance;        // уже бежим — стоп когда близко
+            else
+                NeedsToMove = dist > _followDistance + 3f;   // стоим — старт когда далеко
 
             if (NeedsToMove)
             {
