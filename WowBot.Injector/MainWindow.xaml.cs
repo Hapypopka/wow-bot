@@ -14,8 +14,7 @@ public partial class MainWindow : Window
     private readonly MemoryReader _memory = new();
     private ObjectManager? _objectManager;
     private EndSceneHook? _endSceneHook;
-    private RotationEngine? _rotationEngine;
-    private FollowEngine? _followEngine;
+    private BotEngine? _botEngine;
     private DispatcherTimer? _updateTimer;
     private OverlayWindow? _overlay;
 
@@ -28,8 +27,7 @@ public partial class MainWindow : Window
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _overlay?.Close();
-        _followEngine?.Dispose();
-        _rotationEngine?.Dispose();
+        _botEngine?.Dispose();
         _endSceneHook?.Dispose();
         _memory.Dispose();
     }
@@ -87,16 +85,11 @@ public partial class MainWindow : Window
             TxtLuaStatus.Text = "Hook active. Enter Lua and press Run or Enter.";
             BtnExecuteLua.IsEnabled = true;
 
-            // Инициализируем навигацию, follow и ротацию
+            // Инициализируем BotEngine
             var navigation = new Navigation(_memory, _endSceneHook);
-
-            _followEngine = new FollowEngine(_endSceneHook, _objectManager, navigation);
-            _followEngine.OnStatusChanged += status =>
-                Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
-
-            _rotationEngine = new RotationEngine(_endSceneHook, _objectManager, navigation);
-            _rotationEngine.LoadRotation(BalanceDruidPvE.GetScript());
-            _rotationEngine.OnStatusChanged += status =>
+            _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation);
+            _botEngine.LoadRotation(BalanceDruidPvE.GetInstantScript(), BalanceDruidPvE.GetScript());
+            _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
             BtnRotationToggle.IsEnabled = true;
             BtnSetFollow.IsEnabled = true;
@@ -107,28 +100,25 @@ public partial class MainWindow : Window
             _overlay = new OverlayWindow();
             _overlay.OnRotationToggle += () =>
             {
-                BtnRotationToggle_Click(this, new RoutedEventArgs());
-                _overlay.UpdateRotation(_rotationEngine?.IsRunning == true);
+                if (_botEngine == null) return;
+                _botEngine.ToggleRotation();
+                _overlay.UpdateRotation(_botEngine.RotationEnabled);
             };
             _overlay.OnFollowToggle += () =>
             {
-                if (_followEngine == null) return;
-                if (_followEngine.IsRunning)
-                    _followEngine.Stop();
-                else
-                    _followEngine.Start();
-                _overlay.UpdateFollow(_followEngine.IsRunning);
+                if (_botEngine == null) return;
+                _botEngine.ToggleFollow();
+                _overlay.UpdateFollow(_botEngine.FollowEnabled);
             };
             _overlay.OnSetFollowTarget += () =>
             {
-                if (_followEngine == null) return;
-                _followEngine.SetFollowTarget();
-                _overlay.UpdateFollow(_followEngine.IsRunning);
+                if (_botEngine == null) return;
+                _botEngine.SetFollowTarget();
             };
             _overlay.OnFollowDistanceChanged += (dist) =>
             {
-                if (_followEngine != null)
-                    _followEngine.FollowDistance = dist;
+                if (_botEngine != null)
+                    _botEngine.FollowDistance = dist;
             };
             _overlay.Show();
         }
@@ -146,11 +136,9 @@ public partial class MainWindow : Window
     {
         StopUpdateLoop();
 
-        // Останавливаем follow, ротацию и снимаем хук
-        _followEngine?.Dispose();
-        _followEngine = null;
-        _rotationEngine?.Dispose();
-        _rotationEngine = null;
+        // Останавливаем бот и снимаем хук
+        _botEngine?.Dispose();
+        _botEngine = null;
         _endSceneHook?.Dispose();
         _endSceneHook = null;
 
@@ -173,21 +161,21 @@ public partial class MainWindow : Window
 
     private void BtnRotationToggle_Click(object sender, RoutedEventArgs e)
     {
-        if (_rotationEngine == null) return;
-        _rotationEngine.Toggle();
-        BtnRotationToggle.Content = _rotationEngine.IsRunning ? "Stop Rotation" : "Start Rotation";
+        if (_botEngine == null) return;
+        _botEngine.ToggleRotation();
+        BtnRotationToggle.Content = _botEngine.RotationEnabled ? "Stop Rotation" : "Start Rotation";
     }
 
     private void BtnSetFollow_Click(object sender, RoutedEventArgs e)
     {
-        if (_followEngine == null) return;
-        _followEngine.SetFollowTarget();
+        if (_botEngine == null) return;
+        _botEngine.SetFollowTarget();
     }
 
     private void BtnClearFollow_Click(object sender, RoutedEventArgs e)
     {
-        if (_followEngine == null) return;
-        _followEngine.ClearFollowTarget();
+        if (_botEngine == null) return;
+        _botEngine.ClearFollowTarget();
     }
 
     // --- Lua Console ---
@@ -331,13 +319,13 @@ public partial class MainWindow : Window
         // Обновляем оверлей
         if (_overlay != null && player != null)
         {
-            _overlay.UpdateRotation(_rotationEngine?.IsRunning == true);
+            _overlay.UpdateRotation(_botEngine?.RotationEnabled == true);
 
-            bool followActive = _followEngine?.IsRunning == true;
+            bool followActive = _botEngine?.FollowEnabled == true;
             string followInfo = "";
-            if (followActive && _followEngine != null && _followEngine.FollowGuid != 0)
+            if (followActive && _botEngine != null && _botEngine.FollowGuid != 0)
             {
-                var fu = _objectManager.GetUnitByGuid(_followEngine.FollowGuid);
+                var fu = _objectManager.GetUnitByGuid(_botEngine.FollowGuid);
                 followInfo = fu != null ? $"{player.DistanceTo(fu):F0}yd" : "lost";
             }
             _overlay.UpdateFollow(followActive, followInfo);

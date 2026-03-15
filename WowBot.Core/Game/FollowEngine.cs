@@ -107,7 +107,13 @@ public class FollowEngine : IDisposable
 
             if (NeedsToMove)
             {
-                _navigation.FaceUnit(player, followTarget);
+                // Face follow только если нет боевого таргета
+                // (иначе RotationEngine рулит facing к таргету)
+                var combatTarget = _objectManager.GetTarget();
+                bool hasCombatTarget = combatTarget != null && combatTarget.IsAlive;
+
+                if (!hasCombatTarget)
+                    _navigation.FaceUnit(player, followTarget);
 
                 _hook.ExecuteLua(@"
                     if not UnitCastingInfo('player') and not UnitChannelInfo('player') then
