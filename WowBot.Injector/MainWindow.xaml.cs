@@ -101,6 +101,20 @@ public partial class MainWindow : Window
 
             // Открываем оверлей
             _overlay = new OverlayWindow();
+            _overlay.OnRotationToggle += () =>
+            {
+                BtnRotationToggle_Click(this, new RoutedEventArgs());
+                _overlay.UpdateRotation(_rotationEngine?.IsRunning == true);
+            };
+            _overlay.OnFollowToggle += () =>
+            {
+                if (_rotationEngine == null) return;
+                if (_rotationEngine.FollowGuid != 0)
+                    _rotationEngine.ClearFollowTarget();
+                else
+                    _rotationEngine.SetFollowFromFocus();
+                _overlay.UpdateFollow(_rotationEngine.FollowGuid != 0);
+            };
             _overlay.Show();
         }
         catch (Exception ex)
@@ -300,18 +314,22 @@ public partial class MainWindow : Window
         // Обновляем оверлей
         if (_overlay != null && player != null)
         {
-            _overlay.UpdatePlayerHp(player.Health, player.MaxHealth, player.HealthPercent);
-
-            var target = _objectManager.GetTarget();
-            _overlay.UpdateTarget(target != null
-                ? $"HP:{target.HealthPercent:F0}% Dist:{player.DistanceTo(target):F0}yd"
-                : "none");
-
-            bool rotActive = _rotationEngine?.IsRunning == true;
-            _overlay.UpdateRotationStatus("Balance Druid", rotActive);
+            _overlay.UpdateRotation(_rotationEngine?.IsRunning == true);
 
             bool hasFollow = _rotationEngine?.FollowGuid != 0;
-            _overlay.UpdateFollow(hasFollow ? $"dist:{(_objectManager.GetUnitByGuid(_rotationEngine!.FollowGuid) is { } fu ? player.DistanceTo(fu).ToString("F0") + "yd" : "lost")}" : "none");
+            string followInfo = "";
+            if (hasFollow && _rotationEngine != null)
+            {
+                var fu = _objectManager.GetUnitByGuid(_rotationEngine.FollowGuid);
+                followInfo = fu != null ? $"{player.DistanceTo(fu):F0}yd" : "lost";
+            }
+            _overlay.UpdateFollow(hasFollow, followInfo);
+
+            var tgt = _objectManager.GetTarget();
+            string info = $"HP: {player.HealthPercent:F0}%";
+            if (tgt != null)
+                info += $" | Target: {tgt.HealthPercent:F0}% {player.DistanceTo(tgt):F0}yd";
+            _overlay.UpdateInfo(info);
         }
     }
 

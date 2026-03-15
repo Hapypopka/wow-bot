@@ -1,64 +1,62 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace WowBot.Injector;
 
 public partial class OverlayWindow : Window
 {
-    // Click-through: мышь проходит сквозь окно (кроме перетаскивания)
-    private const int WS_EX_TRANSPARENT = 0x00000020;
-    private const int GWL_EXSTYLE = -20;
+    private static readonly SolidColorBrush Green = new(Color.FromRgb(0x00, 0xff, 0x88));
+    private static readonly SolidColorBrush Red = new(Color.FromRgb(0xe9, 0x45, 0x60));
 
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hwnd, int index);
-
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+    public event Action? OnRotationToggle;
+    public event Action? OnFollowToggle;
 
     public OverlayWindow()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // Делаем окно click-through (мышь проходит сквозь)
-        var hwnd = new WindowInteropHelper(this).Handle;
-        int extStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-        SetWindowLong(hwnd, GWL_EXSTYLE, extStyle | WS_EX_TRANSPARENT);
+        if (e.ClickCount == 1) DragMove();
     }
 
-    /// <summary>
-    /// Включает перетаскивание (временно убирает click-through)
-    /// </summary>
-    private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void BtnRotation_Click(object sender, MouseButtonEventArgs e)
     {
-        DragMove();
+        e.Handled = true;
+        OnRotationToggle?.Invoke();
     }
 
-    public void UpdateRotationStatus(string status, bool isActive)
+    private void BtnFollow_Click(object sender, MouseButtonEventArgs e)
     {
-        TxtRotation.Text = $"[{(isActive ? "ON" : "OFF")}] {status}";
-        TxtRotation.Foreground = isActive
-            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x00, 0xff, 0x88))
-            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xe9, 0x45, 0x60));
+        e.Handled = true;
+        OnFollowToggle?.Invoke();
     }
 
-    public void UpdatePlayerHp(int hp, int maxHp, float percent)
+    public void UpdateRotation(bool active)
     {
-        TxtPlayerHp.Text = $"HP: {hp}/{maxHp} ({percent:F0}%)";
+        TxtRotationState.Text = active ? "ON" : "OFF";
+        TxtRotationState.Foreground = active ? Green : Red;
+        RotationDot.Background = active ? Green : Red;
     }
 
-    public void UpdateTarget(string info)
+    public void UpdateFollow(bool active, string info = "")
     {
-        TxtTargetInfo.Text = $"Target: {info}";
+        TxtFollowState.Text = active ? "ON" : "OFF";
+        TxtFollowState.Foreground = active ? Green : Red;
+        FollowDot.Background = active ? Green : Red;
+        if (!string.IsNullOrEmpty(info))
+            TxtFollowState.Text = $"ON {info}";
     }
 
-    public void UpdateFollow(string info)
+    public void UpdateInfo(string text)
     {
-        TxtFollowInfo.Text = $"Follow: {info}";
+        TxtInfo.Text = text;
+    }
+
+    public void UpdateStatus(string text)
+    {
+        TxtStatus.Text = text;
     }
 }
