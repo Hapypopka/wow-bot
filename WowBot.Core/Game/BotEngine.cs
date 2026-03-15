@@ -166,17 +166,13 @@ public class BotEngine : IDisposable
             }
             else if (needsToMove)
             {
-                // БЕЖИМ к follow + instants на бегу
+                // БЕЖИМ к follow — лицом к follow, не дёргаемся
                 _navigation.FaceUnit(player, followTarget!);
                 _hook.ExecuteLua("MoveForwardStart()", 100);
 
-                // Instants на бегу (дёргается к таргету — ок)
+                // Instants на бегу БЕЗ поворота — попадёт или нет, пофиг
                 if (hasTarget)
-                {
-                    _navigation.FaceUnit(player, target!);
                     _hook.ExecuteLua(_instantScript, 300);
-                    _navigation.FaceUnit(player, followTarget!);
-                }
             }
             else
             {
