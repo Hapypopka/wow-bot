@@ -27,6 +27,11 @@ public class WowUnit : WowObject
     public bool IsAlive => Health > 0;
     public bool IsDead => Health <= 0;
 
+    // --- Каст ---
+    public int CastingSpellId => Memory.ReadInt32(BaseAddress + Offsets.CurrentCastId);
+    public int ChannelingSpellId => Memory.ReadInt32(BaseAddress + Offsets.CurrentChannelId);
+    public bool IsCasting => CastingSpellId != 0 || ChannelingSpellId != 0;
+
     // --- Позиция ---
     public float X => Memory.ReadFloat(BaseAddress + Offsets.UnitPositionX);
     public float Y => Memory.ReadFloat(BaseAddress + Offsets.UnitPositionY);

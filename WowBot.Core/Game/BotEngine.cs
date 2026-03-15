@@ -157,32 +157,30 @@ public class BotEngine : IDisposable
 
             // === ОБА: FOLLOW + ROTATION ===
 
-            // Кастуем? → стоим, не двигаемся
-            _hook.ExecuteLua(@"
-                if UnitCastingInfo('player') or UnitChannelInfo('player') then
-                    MoveForwardStop()
-                end
-            ", 100);
+            bool isCasting = player.IsCasting;
 
-            if (needsToMove)
+            if (isCasting)
+            {
+                // КАСТУЕМ — не двигаемся, не трогаем facing, ждём
+                _hook.ExecuteLua("MoveForwardStop()", 100);
+            }
+            else if (needsToMove)
             {
                 // БЕЖИМ к follow + instants на бегу
-                // Лицом к follow для движения
                 _navigation.FaceUnit(player, followTarget!);
                 _hook.ExecuteLua("MoveForwardStart()", 100);
 
-                // Кратко повернуться к таргету для instants
+                // Instants на бегу (дёргается к таргету — ок)
                 if (hasTarget)
                 {
                     _navigation.FaceUnit(player, target!);
                     _hook.ExecuteLua(_instantScript, 300);
-                    // Вернуть facing к follow для движения
                     _navigation.FaceUnit(player, followTarget!);
                 }
             }
             else
             {
-                // СТОИМ — полная ротация, лицом к таргету
+                // СТОИМ — полная ротация
                 _hook.ExecuteLua("MoveForwardStop()", 100);
 
                 if (hasTarget)

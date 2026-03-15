@@ -40,6 +40,10 @@ public static class Offsets
     public const uint UnitFieldDisplayId = 0x3E;  // idx=62
     public const uint UnitFieldFlags = 0x3B;      // idx=59
 
+    // --- Каст ---
+    public const uint CurrentCastId = 0xA60;
+    public const uint CurrentChannelId = 0xA6C;
+
     // --- Ауры/баффы ---
     public const uint AuraCount = 0xDD0;
     public const uint AuraTableBase = 0xC50;

@@ -407,31 +407,57 @@ DEFAULT_CHAT_FRAME:AddMessage('|cff00ff88=== [WB] Scan Complete ===|r')
 
     private void BtnDump_Click(object sender, RoutedEventArgs e)
     {
-        if (_objectManager?.LocalPlayer == null || !_memory.IsAttached) return;
+        if (_objectManager?.LocalPlayer == null || !_memory.IsAttached || _endSceneHook == null) return;
 
-        var player = _objectManager.LocalPlayer;
-        uint descBase = _memory.ReadUInt32(player.BaseAddress + 0x08);
+        TxtStatus.Text = "Casting Wrath + scanning 5 sec...";
+        BtnDump.IsEnabled = false;
 
-        var lines = new List<string>();
-        lines.Add($"=== DESCRIPTOR DUMP for {_objectManager.GetPlayerName()} ===");
-        lines.Add($"BaseAddress: 0x{player.BaseAddress:X8}");
-        lines.Add($"DescriptorBase: 0x{descBase:X8}");
-        lines.Add("");
-
-        for (int i = 0; i < 256; i++)
+        // Запускаем в отдельном потоке чтобы UI не зависал
+        Task.Run(() =>
         {
-            int val = _memory.ReadInt32(descBase + (uint)(i * 4));
-            if (val != 0 || i < 10)
-                lines.Add($"[0x{i:X3}] idx={i,-4} val={val,-12} (0x{(uint)val:X8})");
-        }
+            // Кастуем Гнев через Lua
+            _endSceneHook.ExecuteLua("CastSpellByName('Гнев')", 500);
 
-        var dumpPath = System.IO.Path.Combine(
-            System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
-            "descriptor_dump.txt");
-        System.IO.File.WriteAllLines(dumpPath, lines);
+            var allFound = new List<string>();
+            _objectManager.Update();
+            var player = _objectManager.LocalPlayer;
+            if (player == null) return;
+            uint pBase = player.BaseAddress;
 
-        LstObjects.ItemsSource = lines;
-        TxtStatus.Text = $"Dump saved to {dumpPath}";
+            allFound.Add($"=== AUTO CAST SCAN — BaseAddress: 0x{pBase:X8} ===");
+
+            // Сканируем 5 секунд подряд
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 5000)
+            {
+                for (int i = 0; i < 16000; i++)
+                {
+                    uint addr = pBase + (uint)(i * 4);
+                    int val = _memory.ReadInt32(addr);
+                    if (val == 48461 || val == 48465 || val == 48463 || val == 48468)
+                    {
+                        string line = $"[{sw.ElapsedMilliseconds}ms] FOUND {val} at offset +0x{i * 4:X} (addr 0x{addr:X8})";
+                        if (!allFound.Contains(line.Substring(line.IndexOf("FOUND"))))
+                            allFound.Add(line);
+                    }
+                }
+                Thread.Sleep(100);
+            }
+
+            if (allFound.Count == 1)
+                allFound.Add("Nothing found in 5 seconds.");
+
+            var dumpPath = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
+                "cast_dump.txt");
+            System.IO.File.WriteAllLines(dumpPath, allFound);
+
+            Dispatcher.Invoke(() =>
+            {
+                TxtStatus.Text = $"Scan done! {allFound.Count - 1} results. Saved to cast_dump.txt";
+                BtnDump.IsEnabled = true;
+            });
+        });
     }
 
     private void ClearDisplay()
