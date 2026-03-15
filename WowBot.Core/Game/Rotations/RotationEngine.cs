@@ -8,13 +8,15 @@ public class RotationEngine : IDisposable
     private readonly ObjectManager _objectManager;
     private readonly Navigation _navigation;
     private Timer? _timer;
-    private string _rotationScript = "";
+    private string _instantScript = "";
+    private string _castScript = "";
+    private string _fullScript = "";
     private bool _isRunning;
     private int _tickIntervalMs = 150;
 
     private ulong _followGuid;
     private bool _isMoving;
-    private float _followDistance = 8f; // дистанция при которой останавливается
+    private float _followDistance = 8f;
 
     public bool IsRunning => _isRunning;
     public ulong FollowGuid => _followGuid;
@@ -27,14 +29,13 @@ public class RotationEngine : IDisposable
         _navigation = navigation;
     }
 
-    public void LoadRotation(string luaScript)
+    public void LoadRotation(string instantScript, string castScript, string fullScript)
     {
-        _rotationScript = luaScript;
+        _instantScript = instantScript;
+        _castScript = castScript;
+        _fullScript = fullScript;
     }
 
-    /// <summary>
-    /// Запоминает текущий таргет как цель для follow
-    /// </summary>
     public void SetFollowTarget()
     {
         _objectManager.Update();
@@ -46,12 +47,8 @@ public class RotationEngine : IDisposable
         }
     }
 
-    /// <summary>
-    /// Запоминает фокус как цель для follow (через быстрый swap таргета)
-    /// </summary>
     public void SetFollowFromFocus()
     {
-        // Таргетим фокус → читаем GUID → возвращаем таргет
         _hook.ExecuteLua("TargetUnit('focus')", 300);
         Thread.Sleep(50);
         _objectManager.Update();
@@ -64,33 +61,23 @@ public class RotationEngine : IDisposable
         _hook.ExecuteLua("TargetLastTarget()", 300);
     }
 
-    /// <summary>
-    /// Убирает цель follow
-    /// </summary>
     public void ClearFollowTarget()
     {
         _followGuid = 0;
-        if (_isMoving)
-        {
-            _navigation.StopMoving();
-            _isMoving = false;
-        }
+        _navigation.StopAll();
+        _isMoving = false;
         OnStatusChanged?.Invoke("Follow cleared");
     }
 
     public void Start()
     {
-        if (_isRunning || !_hook.IsHooked || string.IsNullOrEmpty(_rotationScript)) return;
+        if (_isRunning || !_hook.IsHooked) return;
 
-        // Автоматически подхватить фокус как follow-цель
-        if (_followGuid == 0)
-        {
-            SetFollowFromFocus();
-        }
+        if (_followGuid == 0) SetFollowFromFocus();
 
         _isRunning = true;
         _timer = new Timer(Tick, null, 0, _tickIntervalMs);
-        OnStatusChanged?.Invoke(_followGuid != 0 ? "Rotation ACTIVE + Following focus" : "Rotation ACTIVE (no follow)");
+        OnStatusChanged?.Invoke(_followGuid != 0 ? "ACTIVE + Following" : "ACTIVE (no follow)");
     }
 
     public void Stop()
@@ -98,12 +85,9 @@ public class RotationEngine : IDisposable
         _isRunning = false;
         _timer?.Dispose();
         _timer = null;
-        if (_isMoving)
-        {
-            try { _navigation.StopMoving(); } catch { }
-            _isMoving = false;
-        }
-        OnStatusChanged?.Invoke("Rotation STOPPED");
+        _navigation.StopAll();
+        _isMoving = false;
+        OnStatusChanged?.Invoke("STOPPED");
     }
 
     public void Toggle()
@@ -121,43 +105,53 @@ public class RotationEngine : IDisposable
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
 
-            // --- Follow логика ---
-            if (_followGuid != 0)
-            {
-                var followTarget = _objectManager.GetUnitByGuid(_followGuid);
-                if (followTarget != null)
-                {
-                    float dist = player.DistanceTo(followTarget);
+            var combatTarget = _objectManager.GetTarget();
+            bool hasTarget = combatTarget != null && combatTarget.IsAlive;
 
-                    if (dist > _followDistance)
-                    {
-                        // Далеко — бежим к цели (не кастуем)
-                        _navigation.FaceUnit(player, followTarget);
-                        if (!_isMoving)
-                        {
-                            _hook.ExecuteLua("MoveForwardStart()", 100);
-                            _isMoving = true;
-                        }
-                        return; // Не кастуем пока бежим
-                    }
-                    else if (_isMoving)
-                    {
-                        // Подбежали — останавливаемся
-                        _hook.ExecuteLua("MoveForwardStop()", 100);
-                        _isMoving = false;
-                    }
+            WowUnit? followTarget = null;
+            float followDist = 0;
+
+            if (_followGuid != 0)
+                followTarget = _objectManager.GetUnitByGuid(_followGuid);
+
+            if (followTarget != null)
+                followDist = player.DistanceTo(followTarget);
+
+            bool needsToMove = followTarget != null && followDist > _followDistance;
+            if (needsToMove && hasTarget)
+            {
+                // === РЕЖИМ: бежим к follow + атакуем ===
+
+                // 1. Пробуем instant-спеллы на бегу (лицом к таргету, strafe к follow)
+                _navigation.StrafeToward(player, followTarget!, combatTarget!);
+                _isMoving = true;
+
+                // Кастуем instant-спеллы (работают на бегу)
+                _hook.ExecuteLua(_instantScript, 400);
+
+                // Не кастуем cast-спеллы на бегу — только instants
+            }
+            else if (needsToMove && !hasTarget)
+            {
+                // === РЕЖИМ: просто бежим к follow (нет таргета) ===
+                _navigation.MoveToward(player, followTarget!);
+                _isMoving = true;
+            }
+            else
+            {
+                // === РЕЖИМ: стоим на месте, полная ротация ===
+                if (_isMoving)
+                {
+                    _navigation.StopAll();
+                    _isMoving = false;
+                }
+
+                if (hasTarget)
+                {
+                    _navigation.FaceUnit(player, combatTarget!);
+                    _hook.ExecuteLua(_fullScript, 500);
                 }
             }
-
-            // --- Face target перед кастом ---
-            var target = _objectManager.GetTarget();
-            if (target != null && target.IsAlive)
-            {
-                _navigation.FaceUnit(player, target);
-            }
-
-            // --- Ротация ---
-            _hook.ExecuteLua(_rotationScript, 500);
         }
         catch { }
     }

@@ -86,7 +86,10 @@ public partial class MainWindow : Window
             // Инициализируем навигацию и ротацию
             var navigation = new Navigation(_memory, _endSceneHook);
             _rotationEngine = new RotationEngine(_endSceneHook, _objectManager, navigation);
-            _rotationEngine.LoadRotation(BalanceDruidPvE.GetScript());
+            _rotationEngine.LoadRotation(
+                BalanceDruidPvE.GetInstantScript(),
+                BalanceDruidPvE.GetCastScript(),
+                BalanceDruidPvE.GetScript());
             _rotationEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
             BtnRotationToggle.IsEnabled = true;
