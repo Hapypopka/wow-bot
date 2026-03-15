@@ -12,6 +12,7 @@ public partial class OverlayWindow : Window
     public event Action? OnRotationToggle;
     public event Action? OnFollowToggle;
     public event Action? OnSetFollowTarget;
+    public event Action<float>? OnFollowDistanceChanged;
 
     public OverlayWindow()
     {
@@ -39,6 +40,13 @@ public partial class OverlayWindow : Window
     {
         e.Handled = true;
         OnSetFollowTarget?.Invoke();
+    }
+
+    private void SliderDist_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (TxtDistValue != null)
+            TxtDistValue.Text = $"{(int)e.NewValue}";
+        OnFollowDistanceChanged?.Invoke((float)e.NewValue);
     }
 
     public void UpdateRotation(bool active)

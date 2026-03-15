@@ -13,6 +13,12 @@ public class FollowEngine : IDisposable
     private ulong _followGuid;
     private float _followDistance = 8f;
 
+    public float FollowDistance
+    {
+        get => _followDistance;
+        set => _followDistance = Math.Clamp(value, 0f, 20f);
+    }
+
     public bool IsRunning => _isRunning;
     public ulong FollowGuid => _followGuid;
     public bool NeedsToMove { get; private set; }

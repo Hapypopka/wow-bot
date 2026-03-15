@@ -125,6 +125,11 @@ public partial class MainWindow : Window
                 _followEngine.SetFollowTarget();
                 _overlay.UpdateFollow(_followEngine.IsRunning);
             };
+            _overlay.OnFollowDistanceChanged += (dist) =>
+            {
+                if (_followEngine != null)
+                    _followEngine.FollowDistance = dist;
+            };
             _overlay.Show();
         }
         catch (Exception ex)
