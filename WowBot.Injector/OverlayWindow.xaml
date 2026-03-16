@@ -120,12 +120,6 @@
                             <CheckBox x:Name="ChkDisp" IsChecked="True" Foreground="#8b8d93" Content="Слияние с Тьмой" FontSize="11"/>
                         </Border>
 
-                        <!-- Auto Face -->
-                        <Border Style="{StaticResource SpellRow}">
-                            <CheckBox x:Name="ChkAutoFace" IsChecked="True" Foreground="#8b8d93"
-                                      Content="Автоповорот к таргету" FontSize="11"/>
-                        </Border>
-
                         <!-- Thresholds -->
                         <Border Style="{StaticResource SpellRow}">
                             <StackPanel>
@@ -179,6 +173,15 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+
+                    <!-- === AUTO FACE === -->
+                    <Border Style="{StaticResource SectionHeader}" Margin="0,6,0,0">
+                        <DockPanel>
+                            <TextBlock Text="&#x25B6; Автоповорот" Foreground="#c8aa6e" FontSize="12" FontWeight="Bold"/>
+                            <ToggleButton x:Name="BtnAutoFace" Style="{StaticResource ToggleBtn}" Content="ON"
+                                          IsChecked="True" DockPanel.Dock="Right" Click="BtnAutoFace_Click" Width="40"/>
+                        </DockPanel>
+                    </Border>
 
                     <!-- === INFO === -->
                     <Border Background="#16181e" CornerRadius="4" Padding="8,6" Margin="0,6,0,0">

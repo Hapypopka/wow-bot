@@ -21,7 +21,7 @@ public partial class OverlayWindow : Window
     public bool UseMF => ChkMF.IsChecked == true;
     public bool UseSF => ChkSF.IsChecked == true;
     public bool UseDisp => ChkDisp.IsChecked == true;
-    public bool AutoFace => ChkAutoFace.IsChecked == true;
+    public bool AutoFace => BtnAutoFace.IsChecked == true;
     public int DispManaThreshold => (int)SliderDispMana.Value;
     public int SFManaThreshold => (int)SliderSFMana.Value;
 
@@ -49,6 +49,11 @@ public partial class OverlayWindow : Window
     private void BtnFollow_Click(object sender, RoutedEventArgs e)
     {
         OnFollowToggle?.Invoke();
+    }
+
+    private void BtnAutoFace_Click(object sender, RoutedEventArgs e)
+    {
+        BtnAutoFace.Content = BtnAutoFace.IsChecked == true ? "ON" : "OFF";
     }
 
     private void BtnSetFollow_Click2(object sender, RoutedEventArgs e)
