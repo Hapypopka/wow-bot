@@ -88,10 +88,17 @@ public partial class MainWindow : Window
 
             // Инициализируем LuaReader (чтение Lua через макрос)
             _luaReader = new LuaReader(_memory, _endSceneHook);
-            if (_luaReader.Initialize())
-                TxtStatus.Text += " | LuaReader OK";
-            else
-                TxtStatus.Text += " | LuaReader FAIL";
+            _luaReader.Initialize();
+
+            // Автодетект класса/спека
+            string specName = "Unknown";
+            if (_luaReader.IsInitialized)
+            {
+                string? classInfo = _luaReader.Eval("(function() local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) return c..'|'..t1..'|'..t2..'|'..t3 end)()");
+                if (classInfo != null)
+                    specName = DetectSpec(classInfo);
+            }
+            TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
 
             // Инициализируем BotEngine
             var navigation = new Navigation(_memory, _endSceneHook);
@@ -129,6 +136,7 @@ public partial class MainWindow : Window
                 if (_botEngine != null)
                     _botEngine.FollowDistance = dist;
             };
+            _overlay.UpdateStatus(specName);
             _overlay.Show();
         }
         catch (Exception ex)
@@ -502,6 +510,32 @@ DEFAULT_CHAT_FRAME:AddMessage('|cff00ff88=== [WB] Scan Complete ===|r')
                 BtnDump.IsEnabled = true;
             });
         });
+    }
+
+    private string DetectSpec(string classInfo)
+    {
+        var parts = classInfo.Split('|');
+        if (parts.Length < 4) return classInfo;
+
+        string cls = parts[0];
+        int.TryParse(parts[1], out int t1);
+        int.TryParse(parts[2], out int t2);
+        int.TryParse(parts[3], out int t3);
+
+        return cls switch
+        {
+            "DRUID" => t1 >= t2 && t1 >= t3 ? "Balance Druid" :
+                       t2 >= t1 && t2 >= t3 ? "Feral Druid" : "Resto Druid",
+            "PRIEST" => t3 >= t1 && t3 >= t2 ? "Shadow Priest" :
+                        t1 >= t2 ? "Disc Priest" : "Holy Priest",
+            "WARLOCK" => t1 >= t2 && t1 >= t3 ? "Affliction Lock" :
+                         t2 >= t1 && t2 >= t3 ? "Demonology Lock" : "Destruction Lock",
+            "MAGE" => t1 >= t2 && t1 >= t3 ? "Arcane Mage" :
+                      t2 >= t1 && t2 >= t3 ? "Fire Mage" : "Frost Mage",
+            "SHAMAN" => t1 >= t2 && t1 >= t3 ? "Elemental Shaman" :
+                        t2 >= t1 && t2 >= t3 ? "Enhancement Shaman" : "Resto Shaman",
+            _ => $"{cls} ({t1}/{t2}/{t3})"
+        };
     }
 
     private void ClearDisplay()
