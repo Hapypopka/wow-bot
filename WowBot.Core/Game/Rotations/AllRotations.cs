@@ -75,7 +75,8 @@ local function WB_Run()
         if not HasDebuff('target','Прикосновение вампира') then CastSpellByName('Прикосновение вампира') return end
         if not HasDebuff('target','Всепожирающая чума') then CastSpellByName('Всепожирающая чума') return end
         if not HasDebuff('target','Слово Тьмы: Боль') then CastSpellByName('Слово Тьмы: Боль') return end
-        if IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
+        local _,_,_,_,mbPts = GetTalentInfo(3,8)
+        if mbPts and mbPts > 0 and IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
         if MP() < 0.5 and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end
         CastSpellByName('Пытка разума')
     end
