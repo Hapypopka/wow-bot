@@ -1,74 +1,191 @@
 <Window x:Class="WowBot.Injector.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="WowBot" Width="240" Height="270"
+        Title="WowBot" Width="280" Height="520"
         WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" Topmost="True"
         ShowInTaskbar="False" ResizeMode="NoResize"
-        Left="20" Top="300">
+        Left="20" Top="200">
 
-    <Border Background="#DD0d1117" CornerRadius="12" BorderBrush="#30363d" BorderThickness="1"
+    <Window.Resources>
+        <!-- Toggle button style -->
+        <Style x:Key="ToggleBtn" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#252830"/>
+            <Setter Property="Foreground" Value="#8b8d93"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="#c8aa6e"/>
+                                <Setter Property="Foreground" Value="#1a1a2e"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#3a3d45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Section header -->
+        <Style x:Key="SectionHeader" TargetType="Border">
+            <Setter Property="Background" Value="#1e2028"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <!-- Spell row -->
+        <Style x:Key="SpellRow" TargetType="Border">
+            <Setter Property="Background" Value="#16181e"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="0,1"/>
+        </Style>
+
+        <!-- Slider style -->
+        <Style x:Key="GoldSlider" TargetType="Slider">
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="IsSnapToTickEnabled" Value="True"/>
+            <Setter Property="TickFrequency" Value="5"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#E5111319" CornerRadius="8" BorderBrush="#2a2d35" BorderThickness="1"
             MouseLeftButtonDown="Header_MouseLeftButtonDown">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <StackPanel Margin="14">
             <!-- Header -->
-            <DockPanel Margin="0,0,0,10">
-                <TextBlock Text="WowBot" FontSize="16" FontWeight="Bold" Foreground="#e94560"
-                           VerticalAlignment="Center"/>
-                <TextBlock x:Name="TxtStatus" Text="" FontSize="10" Foreground="#555"
-                           VerticalAlignment="Center" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
-            </DockPanel>
-
-            <!-- Rotation Toggle -->
-            <Border Background="#161b22" CornerRadius="8" Padding="10,8" Margin="0,0,0,6"
-                    MouseLeftButtonDown="BtnRotation_Click" Cursor="Hand">
+            <Border Grid.Row="0" Background="#1a1c24" CornerRadius="8,8,0,0" Padding="12,8">
                 <DockPanel>
-                    <Border x:Name="RotationDot" Width="10" Height="10" CornerRadius="5"
-                            Background="#e94560" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="Rotation" Foreground="#c9d1d9" FontSize="13" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TxtRotationState" Text="OFF" Foreground="#e94560"
-                               FontSize="13" FontWeight="Bold" HorizontalAlignment="Right"
-                               DockPanel.Dock="Right" VerticalAlignment="Center"/>
+                    <TextBlock Text="WowBot" FontSize="15" FontWeight="Bold" Foreground="#c8aa6e"/>
+                    <TextBlock x:Name="TxtSpec" Text="" FontSize="11" Foreground="#5a5d65"
+                               VerticalAlignment="Center" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
                 </DockPanel>
             </Border>
 
-            <!-- Follow Toggle -->
-            <Border Background="#161b22" CornerRadius="8" Padding="10,8" Margin="0,0,0,4"
-                    MouseLeftButtonDown="BtnFollow_Click" Cursor="Hand">
-                <DockPanel>
-                    <Border x:Name="FollowDot" Width="10" Height="10" CornerRadius="5"
-                            Background="#e94560" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="Follow" Foreground="#c9d1d9" FontSize="13" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TxtFollowState" Text="OFF" Foreground="#e94560"
-                               FontSize="13" FontWeight="Bold" HorizontalAlignment="Right"
-                               DockPanel.Dock="Right" VerticalAlignment="Center"/>
-                </DockPanel>
-            </Border>
+            <!-- Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="8,4,8,8">
+                <StackPanel>
 
-            <!-- Set Follow Target -->
-            <Border Background="#161b22" CornerRadius="8" Padding="10,6" Margin="0,0,0,4"
-                    MouseLeftButtonDown="BtnSetFollow_Click" Cursor="Hand">
-                <TextBlock Text="Set Follow Target" Foreground="#484f58" FontSize="11"
-                           HorizontalAlignment="Center"/>
-            </Border>
+                    <!-- === ROTATION === -->
+                    <Border Style="{StaticResource SectionHeader}" MouseLeftButtonDown="ToggleRotation_Click">
+                        <DockPanel>
+                            <TextBlock Text="&#x25B6; Ротация" Foreground="#c8aa6e" FontSize="12" FontWeight="Bold"/>
+                            <ToggleButton x:Name="BtnRotation" Style="{StaticResource ToggleBtn}" Content="OFF"
+                                          DockPanel.Dock="Right" Click="BtnRotation_Click" Width="40"/>
+                        </DockPanel>
+                    </Border>
 
-            <!-- Follow Distance -->
-            <Border Background="#161b22" CornerRadius="8" Padding="10,6" Margin="0,0,0,6">
-                <DockPanel>
-                    <TextBlock Text="Dist:" Foreground="#484f58" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="TxtDistValue" Text="8" Foreground="#c9d1d9" FontSize="11"
-                               FontWeight="Bold" VerticalAlignment="Center" Width="20"
-                               DockPanel.Dock="Right" HorizontalAlignment="Right"/>
-                    <Slider x:Name="SliderDist" Minimum="0" Maximum="20" Value="8"
-                            IsSnapToTickEnabled="True" TickFrequency="1"
-                            VerticalAlignment="Center"
-                            ValueChanged="SliderDist_ValueChanged"/>
-                </DockPanel>
-            </Border>
+                    <StackPanel x:Name="PanelRotation" Margin="4,0,0,0">
+                        <!-- Spells -->
+                        <Border Style="{StaticResource SpellRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="ChkVT" IsChecked="True" Foreground="#8b8d93" Content="Прикосновение вампира" FontSize="11"/>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkDP" IsChecked="True" Foreground="#8b8d93" Content="Всепожирающая чума" FontSize="11"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkSWP" IsChecked="True" Foreground="#8b8d93" Content="Слово Тьмы: Боль" FontSize="11"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkMB" IsChecked="True" Foreground="#8b8d93" Content="Взрыв разума" FontSize="11"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkMF" IsChecked="True" Foreground="#8b8d93" Content="Пытка разума" FontSize="11"/>
+                        </Border>
 
-            <!-- Info line -->
-            <TextBlock x:Name="TxtInfo" Text="HP: - | Target: -" Foreground="#484f58"
-                       FontSize="10" FontFamily="Consolas" Margin="0,4,0,0" TextWrapping="Wrap"/>
-        </StackPanel>
+                        <!-- Cooldowns -->
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkSF" IsChecked="True" Foreground="#8b8d93" Content="Исчадие Тьмы" FontSize="11"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkDisp" IsChecked="True" Foreground="#8b8d93" Content="Слияние с Тьмой" FontSize="11"/>
+                        </Border>
+
+                        <!-- Thresholds -->
+                        <Border Style="{StaticResource SpellRow}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock Text="Мана для Слияния" Foreground="#5a5d65" FontSize="10"/>
+                                    <TextBlock x:Name="TxtDispMana" Text="15" Foreground="#c8aa6e" FontSize="10"
+                                               DockPanel.Dock="Right" FontWeight="Bold"/>
+                                </DockPanel>
+                                <Slider x:Name="SliderDispMana" Style="{StaticResource GoldSlider}"
+                                        Value="15" ValueChanged="SliderDispMana_Changed"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock Text="Мана для Исчадия" Foreground="#5a5d65" FontSize="10"/>
+                                    <TextBlock x:Name="TxtSFMana" Text="50" Foreground="#c8aa6e" FontSize="10"
+                                               DockPanel.Dock="Right" FontWeight="Bold"/>
+                                </DockPanel>
+                                <Slider x:Name="SliderSFMana" Style="{StaticResource GoldSlider}"
+                                        Value="50" ValueChanged="SliderSFMana_Changed"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- === FOLLOW === -->
+                    <Border Style="{StaticResource SectionHeader}" MouseLeftButtonDown="ToggleFollow_Click" Margin="0,6,0,0">
+                        <DockPanel>
+                            <TextBlock Text="&#x25B6; Следование" Foreground="#c8aa6e" FontSize="12" FontWeight="Bold"/>
+                            <ToggleButton x:Name="BtnFollow" Style="{StaticResource ToggleBtn}" Content="OFF"
+                                          DockPanel.Dock="Right" Click="BtnFollow_Click" Width="40"/>
+                        </DockPanel>
+                    </Border>
+
+                    <StackPanel x:Name="PanelFollow" Margin="4,0,0,0">
+                        <Border Style="{StaticResource SpellRow}">
+                            <Button Content="Set Follow Target" Background="#252830" Foreground="#8b8d93"
+                                    BorderThickness="0" Padding="6,4" Cursor="Hand" FontSize="11"
+                                    Click="BtnSetFollow_Click2" HorizontalAlignment="Stretch"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock Text="Дистанция" Foreground="#5a5d65" FontSize="10"/>
+                                    <TextBlock x:Name="TxtDist" Text="8" Foreground="#c8aa6e" FontSize="10"
+                                               DockPanel.Dock="Right" FontWeight="Bold"/>
+                                </DockPanel>
+                                <Slider x:Name="SliderDist2" Minimum="0" Maximum="20" Value="8"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        ValueChanged="SliderDist2_Changed"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- === INFO === -->
+                    <Border Background="#16181e" CornerRadius="4" Padding="8,6" Margin="0,6,0,0">
+                        <StackPanel>
+                            <TextBlock x:Name="TxtInfo" Text="HP: 100%" Foreground="#5a5d65" FontSize="10"
+                                       FontFamily="Consolas"/>
+                            <TextBlock x:Name="TxtFollowInfo" Text="" Foreground="#5a5d65" FontSize="10"
+                                       FontFamily="Consolas"/>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Border>
 </Window>

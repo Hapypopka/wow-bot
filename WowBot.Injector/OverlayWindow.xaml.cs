@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -6,13 +8,21 @@ namespace WowBot.Injector;
 
 public partial class OverlayWindow : Window
 {
-    private static readonly SolidColorBrush Green = new(Color.FromRgb(0x00, 0xff, 0x88));
-    private static readonly SolidColorBrush Red = new(Color.FromRgb(0xe9, 0x45, 0x60));
-
     public event Action? OnRotationToggle;
     public event Action? OnFollowToggle;
     public event Action? OnSetFollowTarget;
     public event Action<float>? OnFollowDistanceChanged;
+
+    // Настройки ротации — доступны из MainWindow
+    public bool UseVT => ChkVT.IsChecked == true;
+    public bool UseDP => ChkDP.IsChecked == true;
+    public bool UseSWP => ChkSWP.IsChecked == true;
+    public bool UseMB => ChkMB.IsChecked == true;
+    public bool UseMF => ChkMF.IsChecked == true;
+    public bool UseSF => ChkSF.IsChecked == true;
+    public bool UseDisp => ChkDisp.IsChecked == true;
+    public int DispManaThreshold => (int)SliderDispMana.Value;
+    public int SFManaThreshold => (int)SliderSFMana.Value;
 
     public OverlayWindow()
     {
@@ -24,45 +34,56 @@ public partial class OverlayWindow : Window
         if (e.ClickCount == 1) DragMove();
     }
 
-    private void BtnRotation_Click(object sender, MouseButtonEventArgs e)
+    // --- Rotation ---
+    private void ToggleRotation_Click(object sender, MouseButtonEventArgs e) { }
+
+    private void BtnRotation_Click(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
         OnRotationToggle?.Invoke();
     }
 
-    private void BtnFollow_Click(object sender, MouseButtonEventArgs e)
+    // --- Follow ---
+    private void ToggleFollow_Click(object sender, MouseButtonEventArgs e) { }
+
+    private void BtnFollow_Click(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
         OnFollowToggle?.Invoke();
     }
 
-    private void BtnSetFollow_Click(object sender, MouseButtonEventArgs e)
+    private void BtnSetFollow_Click2(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
         OnSetFollowTarget?.Invoke();
     }
 
-    private void SliderDist_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    // --- Sliders ---
+    private void SliderDispMana_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (TxtDistValue != null)
-            TxtDistValue.Text = $"{(int)e.NewValue}";
+        if (TxtDispMana != null) TxtDispMana.Text = $"{(int)e.NewValue}";
+    }
+
+    private void SliderSFMana_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (TxtSFMana != null) TxtSFMana.Text = $"{(int)e.NewValue}";
+    }
+
+    private void SliderDist2_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (TxtDist != null) TxtDist.Text = $"{(int)e.NewValue}";
         OnFollowDistanceChanged?.Invoke((float)e.NewValue);
     }
 
+    // --- Updates from MainWindow ---
     public void UpdateRotation(bool active)
     {
-        TxtRotationState.Text = active ? "ON" : "OFF";
-        TxtRotationState.Foreground = active ? Green : Red;
-        RotationDot.Background = active ? Green : Red;
+        BtnRotation.IsChecked = active;
+        BtnRotation.Content = active ? "ON" : "OFF";
     }
 
     public void UpdateFollow(bool active, string info = "")
     {
-        TxtFollowState.Text = active ? "ON" : "OFF";
-        TxtFollowState.Foreground = active ? Green : Red;
-        FollowDot.Background = active ? Green : Red;
-        if (!string.IsNullOrEmpty(info))
-            TxtFollowState.Text = $"ON {info}";
+        BtnFollow.IsChecked = active;
+        BtnFollow.Content = active ? "ON" : "OFF";
+        TxtFollowInfo.Text = active && !string.IsNullOrEmpty(info) ? $"Follow: {info}" : "";
     }
 
     public void UpdateInfo(string text)
@@ -72,6 +93,6 @@ public partial class OverlayWindow : Window
 
     public void UpdateStatus(string text)
     {
-        TxtStatus.Text = text;
+        TxtSpec.Text = text;
     }
 }
