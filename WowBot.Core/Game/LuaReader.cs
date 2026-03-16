@@ -32,6 +32,10 @@ public class LuaReader
         _hook.ExecuteLua($"if GetNumMacros() == 0 then CreateMacro('WB', 1, '{marker}') else EditMacro(1, 'WB', 1, '{marker}') end", 500);
         System.Threading.Thread.Sleep(200);
 
+        // Затираем Lua-буфер чтобы маркер остался ТОЛЬКО в макросе
+        _hook.ExecuteLua("local x=1", 100);
+        System.Threading.Thread.Sleep(100);
+
         // Сканируем память
         byte[] needle = System.Text.Encoding.UTF8.GetBytes(marker);
         _macroAddr = ScanForString(needle);
