@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private ObjectManager? _objectManager;
     private EndSceneHook? _endSceneHook;
     private BotEngine? _botEngine;
+    private LuaReader? _luaReader;
     private DispatcherTimer? _updateTimer;
     private OverlayWindow? _overlay;
 
@@ -85,11 +86,18 @@ public partial class MainWindow : Window
             TxtLuaStatus.Text = "Hook active. Enter Lua and press Run or Enter.";
             BtnExecuteLua.IsEnabled = true;
 
+            // Инициализируем LuaReader (чтение Lua через макрос)
+            _luaReader = new LuaReader(_memory, _endSceneHook);
+            if (_luaReader.Initialize())
+                TxtStatus.Text += " | LuaReader OK";
+            else
+                TxtStatus.Text += " | LuaReader FAIL";
+
             // Инициализируем BotEngine
             var navigation = new Navigation(_memory, _endSceneHook);
             var ctm = new ClickToMove(_memory);
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
-            _botEngine.LoadRotation(BalanceDruidPvE.GetInstantScript(), BalanceDruidPvE.GetScript());
+            _botEngine.LoadRotation(AllRotations.GetInstantScript(), AllRotations.GetFullScript());
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
             BtnRotationToggle.IsEnabled = true;
@@ -343,7 +351,15 @@ public partial class MainWindow : Window
     {
         if (_endSceneHook == null || !_endSceneHook.IsHooked) return;
 
-        TxtStatus.Text = "Scanning druid spells...";
+        // Сначала определим класс через LuaReader
+        if (_luaReader?.IsInitialized == true)
+        {
+            string? classInfo = _luaReader.Eval("(function() local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) return c..'|'..t1..'|'..t2..'|'..t3 end)()");
+            if (classInfo != null)
+                TxtStatus.Text = $"Class: {classInfo}";
+        }
+
+        TxtStatus.Text = "Scanning spells...";
 
         // Все важные спеллы Balance Druid + общие друид спеллы (по ID)
         string lua = @"
@@ -408,54 +424,81 @@ DEFAULT_CHAT_FRAME:AddMessage('|cff00ff88=== [WB] Scan Complete ===|r')
 
     private void BtnDump_Click(object sender, RoutedEventArgs e)
     {
-        if (_objectManager?.LocalPlayer == null || !_memory.IsAttached || _endSceneHook == null) return;
+        if (!_memory.IsAttached || _endSceneHook == null) return;
 
-        TxtStatus.Text = "Casting Wrath + scanning 5 sec...";
+        TxtStatus.Text = "Writing macro + scanning memory...";
         BtnDump.IsEnabled = false;
 
-        // Запускаем в отдельном потоке чтобы UI не зависал
         Task.Run(() =>
         {
-            // Кастуем Гнев через Lua
-            _endSceneHook.ExecuteLua("CastSpellByName('Гнев')", 500);
+            // Пишем уникальную строку в макрос
+            _endSceneHook.ExecuteLua("EditMacro(1, 'WB', 1, 'WBTEST9988')", 500);
+            Thread.Sleep(200);
 
-            var allFound = new List<string>();
-            _objectManager.Update();
-            var player = _objectManager.LocalPlayer;
-            if (player == null) return;
-            uint pBase = player.BaseAddress;
+            var results = new List<string>();
+            results.Add("=== MACRO SCAN — looking for 'WBSCAN7749' ===");
 
-            allFound.Add($"=== AUTO CAST SCAN — BaseAddress: 0x{pBase:X8} ===");
+            // Ищем строку в памяти WoW (сканируем основные регионы)
+            byte[] needle = System.Text.Encoding.UTF8.GetBytes("WBTEST9988");
 
-            // Сканируем 5 секунд подряд
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            while (sw.ElapsedMilliseconds < 5000)
+            // Сканируем регионы где WoW хранит данные
+            uint[][] regions = {
+                new uint[] { 0x00800000, 0x01200000 },  // .data/.rdata
+                new uint[] { 0x01200000, 0x02000000 },  // heap
+                new uint[] { 0x02000000, 0x04000000 },  // heap
+                new uint[] { 0x04000000, 0x08000000 },  // heap
+                new uint[] { 0x08000000, 0x10000000 },  // heap
+                new uint[] { 0x10000000, 0x30000000 },  // heap/mapped
+            };
+
+            foreach (var region in regions)
             {
-                for (int i = 0; i < 16000; i++)
+                uint start = region[0];
+                uint end = region[1];
+                uint step = 4096; // читаем по 4KB
+
+                for (uint addr = start; addr < end; addr += step)
                 {
-                    uint addr = pBase + (uint)(i * 4);
-                    int val = _memory.ReadInt32(addr);
-                    if (val == 48461 || val == 48465 || val == 48463 || val == 48468)
+                    try
                     {
-                        string line = $"[{sw.ElapsedMilliseconds}ms] FOUND {val} at offset +0x{i * 4:X} (addr 0x{addr:X8})";
-                        if (!allFound.Contains(line.Substring(line.IndexOf("FOUND"))))
-                            allFound.Add(line);
+                        byte[] block = _memory.ReadBytes(addr, (int)step + needle.Length);
+                        for (int i = 0; i < (int)step; i++)
+                        {
+                            bool match = true;
+                            for (int j = 0; j < needle.Length; j++)
+                            {
+                                if (block[i + j] != needle[j]) { match = false; break; }
+                            }
+                            if (match)
+                            {
+                                uint foundAddr = addr + (uint)i;
+                                results.Add($"*** FOUND at 0x{foundAddr:X8} ***");
+                            }
+                        }
                     }
+                    catch { }
                 }
-                Thread.Sleep(100);
             }
 
-            if (allFound.Count == 1)
-                allFound.Add("Nothing found in 5 seconds.");
+            // Проверяем старые адреса — что там сейчас
+            uint[] oldAddrs = { 0x12EF0217, 0x1CC858B0, 0x22419B1C };
+            foreach (var a in oldAddrs)
+            {
+                string val = _memory.ReadString(a, 20);
+                results.Add($"Old addr 0x{a:X8} now contains: '{val}'");
+            }
+
+            if (results.Count == 1)
+                results.Add("Nothing found.");
 
             var dumpPath = System.IO.Path.Combine(
                 System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
-                "cast_dump.txt");
-            System.IO.File.WriteAllLines(dumpPath, allFound);
+                "macro_scan.txt");
+            System.IO.File.WriteAllLines(dumpPath, results);
 
             Dispatcher.Invoke(() =>
             {
-                TxtStatus.Text = $"Scan done! {allFound.Count - 1} results. Saved to cast_dump.txt";
+                TxtStatus.Text = $"Scan done! {results.Count - 1} results. Saved to macro_scan.txt";
                 BtnDump.IsEnabled = true;
             });
         });
