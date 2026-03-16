@@ -134,6 +134,7 @@ public class BotEngine : IDisposable
             {
                 if (needsToMove)
                 {
+                    _hook.ExecuteLua("MoveForwardStop()", 50);
                     _navigation.FaceUnit(player, followTarget!);
                     _hook.ExecuteLua("MoveForwardStart()", 100);
                 }
@@ -166,7 +167,8 @@ public class BotEngine : IDisposable
             }
             else if (needsToMove)
             {
-                // БЕЖИМ к follow — лицом к follow, не дёргаемся
+                // БЕЖИМ к follow — рестарт движения для обновления направления
+                _hook.ExecuteLua("MoveForwardStop()", 50);
                 _navigation.FaceUnit(player, followTarget!);
                 _hook.ExecuteLua("MoveForwardStart()", 100);
 
