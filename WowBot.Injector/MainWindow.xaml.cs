@@ -87,7 +87,8 @@ public partial class MainWindow : Window
 
             // Инициализируем BotEngine
             var navigation = new Navigation(_memory, _endSceneHook);
-            _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation);
+            var ctm = new ClickToMove(_memory);
+            _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.LoadRotation(BalanceDruidPvE.GetInstantScript(), BalanceDruidPvE.GetScript());
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);

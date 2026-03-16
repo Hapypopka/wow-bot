@@ -7,6 +7,7 @@ public class BotEngine : IDisposable
     private readonly EndSceneHook _hook;
     private readonly ObjectManager _objectManager;
     private readonly Navigation _navigation;
+    private readonly ClickToMove _ctm;
     private Timer? _timer;
 
     private string _instantScript = "";
@@ -28,11 +29,12 @@ public class BotEngine : IDisposable
 
     public event Action<string>? OnStatusChanged;
 
-    public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation)
+    public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
     {
         _hook = hook;
         _objectManager = objectManager;
         _navigation = navigation;
+        _ctm = ctm;
     }
 
     public void LoadRotation(string instantScript, string fullScript)
@@ -85,7 +87,7 @@ public class BotEngine : IDisposable
         _followEnabled = false;
         _rotationEnabled = false;
         StopTimer();
-        _hook.ExecuteLua("MoveForwardStop()", 100);
+        _ctm.Stop();
         OnStatusChanged?.Invoke("Stopped");
     }
 
@@ -133,15 +135,8 @@ public class BotEngine : IDisposable
             if (_followEnabled && !_rotationEnabled)
             {
                 if (needsToMove)
-                {
-                    _hook.ExecuteLua("MoveForwardStop()", 50);
-                    _navigation.FaceUnit(player, followTarget!);
-                    _hook.ExecuteLua("MoveForwardStart()", 100);
-                }
-                else
-                {
-                    _hook.ExecuteLua("MoveForwardStop()", 100);
-                }
+                    _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
+                // Не вызываем Stop — CTM сам остановится когда дойдёт
                 return;
             }
 
@@ -163,23 +158,20 @@ public class BotEngine : IDisposable
             if (isCasting)
             {
                 // КАСТУЕМ — не двигаемся, не трогаем facing, ждём
-                _hook.ExecuteLua("MoveForwardStop()", 100);
+                _ctm.Stop();
             }
             else if (needsToMove)
             {
-                // БЕЖИМ к follow — рестарт движения для обновления направления
-                _hook.ExecuteLua("MoveForwardStop()", 50);
-                _navigation.FaceUnit(player, followTarget!);
-                _hook.ExecuteLua("MoveForwardStart()", 100);
+                // БЕЖИМ к follow — CTM плавно рулит
+                _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
 
-                // Instants на бегу БЕЗ поворота — попадёт или нет, пофиг
+                // Instants на бегу БЕЗ поворота
                 if (hasTarget)
                     _hook.ExecuteLua(_instantScript, 300);
             }
             else
             {
-                // СТОИМ — полная ротация
-                _hook.ExecuteLua("MoveForwardStop()", 100);
+                // СТОИМ — полная ротация (CTM сам остановился)
 
                 if (hasTarget)
                 {
