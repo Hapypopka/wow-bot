@@ -7,3 +7,5 @@ publish/
 descriptor_dump.txt
 endscene_diag.txt
 spells.txt
+cast_dump.txt
+*.zip
