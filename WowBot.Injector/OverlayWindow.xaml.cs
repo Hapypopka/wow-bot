@@ -22,6 +22,11 @@ public partial class OverlayWindow : Window
     public bool UseSF => ChkSF.IsChecked == true;
     public bool UseDisp => ChkDisp.IsChecked == true;
     public bool AutoFace => BtnAutoFace.IsChecked == true;
+    public bool AoeEnabled => BtnAoe.IsChecked == true;
+    public bool UseMultiDot => ChkMultiDot.IsChecked == true;
+    public int MaxDotTargets => (int)SliderMaxDots.Value;
+    public bool UseMindSear => ChkMindSear.IsChecked == true;
+    public int MindSearTargets => (int)SliderMindSear.Value;
     public int DispManaThreshold => (int)SliderDispMana.Value;
     public int SFManaThreshold => (int)SliderSFMana.Value;
 
@@ -49,6 +54,21 @@ public partial class OverlayWindow : Window
     private void BtnFollow_Click(object sender, RoutedEventArgs e)
     {
         OnFollowToggle?.Invoke();
+    }
+
+    private void BtnAoe_Click(object sender, RoutedEventArgs e)
+    {
+        BtnAoe.Content = BtnAoe.IsChecked == true ? "ON" : "OFF";
+    }
+
+    private void SliderMaxDots_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (TxtMaxDots != null) TxtMaxDots.Text = $"{(int)e.NewValue}";
+    }
+
+    private void SliderMindSear_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (TxtMindSearTargets != null) TxtMindSearTargets.Text = $"{(int)e.NewValue}";
     }
 
     private void BtnAutoFace_Click(object sender, RoutedEventArgs e)

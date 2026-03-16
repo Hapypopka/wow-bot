@@ -1,7 +1,7 @@
 <Window x:Class="WowBot.Injector.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="WowBot" Width="280" Height="520"
+        Title="WowBot" Width="280" Height="640"
         WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" Topmost="True"
         ShowInTaskbar="False" ResizeMode="NoResize"
@@ -170,6 +170,50 @@
                                 <Slider x:Name="SliderDist2" Minimum="0" Maximum="20" Value="8"
                                         IsSnapToTickEnabled="True" TickFrequency="1"
                                         ValueChanged="SliderDist2_Changed"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- === AOE === -->
+                    <Border Style="{StaticResource SectionHeader}" Margin="0,6,0,0">
+                        <DockPanel>
+                            <TextBlock Text="&#x25B6; AoE" Foreground="#c8aa6e" FontSize="12" FontWeight="Bold"/>
+                            <ToggleButton x:Name="BtnAoe" Style="{StaticResource ToggleBtn}" Content="OFF"
+                                          DockPanel.Dock="Right" Click="BtnAoe_Click" Width="40"/>
+                        </DockPanel>
+                    </Border>
+
+                    <StackPanel x:Name="PanelAoe" Margin="4,0,0,0">
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkMultiDot" IsChecked="True" Foreground="#8b8d93"
+                                      Content="Мультидоттинг (VT)" FontSize="11"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock Text="Макс. целей для VT" Foreground="#5a5d65" FontSize="10"/>
+                                    <TextBlock x:Name="TxtMaxDots" Text="4" Foreground="#c8aa6e" FontSize="10"
+                                               DockPanel.Dock="Right" FontWeight="Bold"/>
+                                </DockPanel>
+                                <Slider x:Name="SliderMaxDots" Minimum="1" Maximum="10" Value="4"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        ValueChanged="SliderMaxDots_Changed"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkMindSear" IsChecked="True" Foreground="#8b8d93"
+                                      Content="Иссушение разума" FontSize="11"/>
+                        </Border>
+                        <Border Style="{StaticResource SpellRow}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock Text="Целей для Иссушения" Foreground="#5a5d65" FontSize="10"/>
+                                    <TextBlock x:Name="TxtMindSearTargets" Text="4" Foreground="#c8aa6e" FontSize="10"
+                                               DockPanel.Dock="Right" FontWeight="Bold"/>
+                                </DockPanel>
+                                <Slider x:Name="SliderMindSear" Minimum="2" Maximum="15" Value="4"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        ValueChanged="SliderMindSear_Changed"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
