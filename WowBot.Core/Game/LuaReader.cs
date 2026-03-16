@@ -27,23 +27,38 @@ public class LuaReader
     /// </summary>
     public bool Initialize()
     {
-        // Пишем уникальную строку в макрос
-        string marker = "WB_INIT_" + Environment.TickCount;
-        _hook.ExecuteLua($"if GetNumMacros() == 0 then CreateMacro('WB', 1, '{marker}') else EditMacro(1, 'WB', 1, '{marker}') end", 500);
-        System.Threading.Thread.Sleep(200);
+        // Двухпроходный скан — находим адрес который обновляется при EditMacro
 
-        // Затираем Lua-буфер чтобы маркер остался ТОЛЬКО в макросе
+        // Проход 1: пишем маркер A
+        string markerA = "WBMA_" + (Environment.TickCount % 100000);
+        _hook.ExecuteLua($"if GetNumMacros() == 0 then CreateMacro('WB', 1, '{markerA}') else EditMacro(1, 'WB', 1, '{markerA}') end", 500);
+        System.Threading.Thread.Sleep(200);
         _hook.ExecuteLua("local x=1", 100);
         System.Threading.Thread.Sleep(100);
 
-        // Сканируем память
-        byte[] needle = System.Text.Encoding.UTF8.GetBytes(marker);
-        _macroAddr = ScanForString(needle);
+        byte[] needleA = System.Text.Encoding.UTF8.GetBytes(markerA);
+        var candidates = ScanForAllStrings(needleA);
 
-        if (_macroAddr != 0)
+        if (candidates.Count == 0) return false;
+
+        // Проход 2: пишем маркер B
+        string markerB = "WBMB_" + (Environment.TickCount % 100000);
+        _hook.ExecuteLua($"EditMacro(1, 'WB', 1, '{markerB}')", 500);
+        System.Threading.Thread.Sleep(200);
+        _hook.ExecuteLua("local x=1", 100);
+        System.Threading.Thread.Sleep(100);
+
+        // Проверяем какие адреса обновились на маркер B
+        byte[] needleB = System.Text.Encoding.UTF8.GetBytes(markerB);
+        foreach (uint addr in candidates)
         {
-            _initialized = true;
-            return true;
+            string val = _memory.ReadString(addr, markerB.Length + 5);
+            if (val.StartsWith(markerB))
+            {
+                _macroAddr = addr;
+                _initialized = true;
+                return true;
+            }
         }
 
         return false;
@@ -80,9 +95,10 @@ public class LuaReader
         return Execute(lua);
     }
 
-    private uint ScanForString(byte[] needle)
+    private List<uint> ScanForAllStrings(byte[] needle)
     {
-        // Сканируем heap-регионы (безопасно, с try/catch на каждый блок)
+        var results = new List<uint>();
+
         uint[][] regions = {
             new uint[] { 0x01000000, 0x08000000 },
             new uint[] { 0x08000000, 0x20000000 },
@@ -107,13 +123,13 @@ public class LuaReader
                             if (block[i + j] != needle[j]) { match = false; break; }
                         }
                         if (match)
-                            return addr + (uint)i;
+                            results.Add(addr + (uint)i);
                     }
                 }
                 catch { }
             }
         }
 
-        return 0;
+        return results;
     }
 }
