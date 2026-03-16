@@ -94,8 +94,10 @@ public partial class MainWindow : Window
             string specName = "Unknown";
             if (_luaReader.IsInitialized)
             {
-                string? classInfo = _luaReader.Eval("(function() local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) return c..'|'..t1..'|'..t2..'|'..t3 end)()");
-                if (classInfo != null)
+                // Простой Lua — без анонимных функций
+                string lua = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) EditMacro(1,'WB',1,c..'|'..t1..'|'..t2..'|'..t3)";
+                string? classInfo = _luaReader.Execute(lua);
+                if (classInfo != null && classInfo.Contains("|"))
                     specName = DetectSpec(classInfo);
             }
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";

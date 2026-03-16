@@ -53,16 +53,17 @@ public class LuaReader
     {
         if (!_initialized) return null;
 
-        // Очищаем макрос
-        _hook.ExecuteLua("EditMacro(1, 'WB', 1, '')", 300);
-        System.Threading.Thread.Sleep(50);
+        // Очищаем макрос (пишем пустую метку)
+        _memory.WriteString(_macroAddr, "\0");
+        System.Threading.Thread.Sleep(20);
 
         // Выполняем Lua (должен записать результат в макрос)
         _hook.ExecuteLua(luaCode, timeoutMs);
-        System.Threading.Thread.Sleep(100);
+        System.Threading.Thread.Sleep(150);
 
         // Читаем результат
-        return _memory.ReadString(_macroAddr, 255);
+        string result = _memory.ReadString(_macroAddr, 255);
+        return string.IsNullOrEmpty(result) ? null : result;
     }
 
     /// <summary>
@@ -70,17 +71,18 @@ public class LuaReader
     /// </summary>
     public string? Eval(string luaExpression)
     {
-        string lua = $"EditMacro(1, 'WB', 1, tostring({luaExpression}))";
+        // Простой Lua — сначала вычисляем, потом пишем в макрос
+        string lua = $"WB_R = tostring({luaExpression}) EditMacro(1, 'WB', 1, WB_R)";
         return Execute(lua);
     }
 
     private uint ScanForString(byte[] needle)
     {
-        // Сканируем основные heap-регионы
+        // Сканируем heap-регионы (безопасно, с try/catch на каждый блок)
         uint[][] regions = {
-            new uint[] { 0x01000000, 0x04000000 },
-            new uint[] { 0x04000000, 0x10000000 },
-            new uint[] { 0x10000000, 0x30000000 },
+            new uint[] { 0x01000000, 0x08000000 },
+            new uint[] { 0x08000000, 0x20000000 },
+            new uint[] { 0x20000000, 0x30000000 },
         };
 
         foreach (var region in regions)
