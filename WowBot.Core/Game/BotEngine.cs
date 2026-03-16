@@ -15,10 +15,12 @@ public class BotEngine : IDisposable
 
     private bool _followEnabled;
     private bool _rotationEnabled;
+    private bool _autoFace = true;
     private ulong _followGuid;
     private float _followDistance = 8f;
 
     public bool FollowEnabled => _followEnabled;
+    public bool AutoFace { get => _autoFace; set => _autoFace = value; }
     public bool RotationEnabled => _rotationEnabled;
     public ulong FollowGuid => _followGuid;
     public float FollowDistance
@@ -145,7 +147,7 @@ public class BotEngine : IDisposable
             {
                 if (hasTarget)
                 {
-                    _navigation.FaceUnit(player, target!);
+                    if (_autoFace) _navigation.FaceUnit(player, target!);
                     _hook.ExecuteLua(_fullScript, 500);
                 }
                 return;
@@ -175,7 +177,7 @@ public class BotEngine : IDisposable
 
                 if (hasTarget)
                 {
-                    _navigation.FaceUnit(player, target!);
+                    if (_autoFace) _navigation.FaceUnit(player, target!);
                     _hook.ExecuteLua(_fullScript, 500);
                 }
             }

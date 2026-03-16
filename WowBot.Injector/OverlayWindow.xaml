@@ -120,6 +120,12 @@
                             <CheckBox x:Name="ChkDisp" IsChecked="True" Foreground="#8b8d93" Content="Слияние с Тьмой" FontSize="11"/>
                         </Border>
 
+                        <!-- Auto Face -->
+                        <Border Style="{StaticResource SpellRow}">
+                            <CheckBox x:Name="ChkAutoFace" IsChecked="True" Foreground="#8b8d93"
+                                      Content="Автоповорот к таргету" FontSize="11"/>
+                        </Border>
+
                         <!-- Thresholds -->
                         <Border Style="{StaticResource SpellRow}">
                             <StackPanel>

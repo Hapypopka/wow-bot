@@ -21,6 +21,7 @@ public partial class OverlayWindow : Window
     public bool UseMF => ChkMF.IsChecked == true;
     public bool UseSF => ChkSF.IsChecked == true;
     public bool UseDisp => ChkDisp.IsChecked == true;
+    public bool AutoFace => ChkAutoFace.IsChecked == true;
     public int DispManaThreshold => (int)SliderDispMana.Value;
     public int SFManaThreshold => (int)SliderSFMana.Value;
 

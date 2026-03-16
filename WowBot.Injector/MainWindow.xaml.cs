@@ -340,6 +340,10 @@ public partial class MainWindow : Window
         {
             _overlay.UpdateRotation(_botEngine?.RotationEnabled == true);
 
+            // Синхронизируем настройки панели → BotEngine
+            if (_botEngine != null)
+                _botEngine.AutoFace = _overlay.AutoFace;
+
             bool followActive = _botEngine?.FollowEnabled == true;
             string followInfo = "";
             if (followActive && _botEngine != null && _botEngine.FollowGuid != 0)
