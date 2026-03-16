@@ -357,79 +357,75 @@ public partial class MainWindow : Window
         }
     }
 
+    // Spell ID → English name для всех классов
+    private static readonly Dictionary<string, (int id, string eng)[]> ClassSpells = new()
+    {
+        ["DRUID"] = new[] {
+            (48461,"Wrath"), (48465,"Starfire"), (48463,"Moonfire"), (48468,"Insect Swarm"),
+            (53201,"Starfall"), (33831,"Force of Nature"), (770,"Faerie Fire"), (24858,"Moonkin Form"),
+            (29166,"Innervate"), (22812,"Barkskin"), (61384,"Typhoon"), (48518,"Eclipse Lunar buff"),
+            (48517,"Eclipse Solar buff"),
+        },
+        ["PRIEST"] = new[] {
+            (15473,"Shadowform"), (48160,"Vampiric Touch"), (48300,"Devouring Plague"),
+            (48125,"Shadow Word: Pain"), (48127,"Mind Blast"), (48156,"Mind Flay"),
+            (47585,"Dispersion"), (34433,"Shadowfiend"), (48168,"Shadow Word: Death"),
+            (15487,"Silence"), (34914,"Vampiric Embrace"), (48071,"Flash Heal"),
+            (48063,"Greater Heal"), (48068,"Renew"),
+        },
+        ["WARLOCK"] = new[] {
+            (47867,"Curse of Agony"), (47864,"Corruption"), (47843,"Unstable Affliction"),
+            (47836,"Seed of Corruption"), (47811,"Immolate"), (47838,"Incinerate"),
+            (50796,"Chaos Bolt"), (17962,"Conflagrate"), (47855,"Soul Fire"),
+            (59164,"Haunt"), (47241,"Metamorphosis"), (47193,"Demonic Empowerment"),
+            (57946,"Life Tap"), (47809,"Shadow Bolt"), (47815,"Searing Pain"),
+            (48181,"Drain Life"), (47857,"Drain Soul"),
+        },
+        ["MAGE"] = new[] {
+            (42833,"Fireball"), (42897,"Arcane Blast"), (42845,"Arcane Missiles"),
+            (42859,"Frostbolt"), (55360,"Living Bomb"), (42891,"Pyroblast"),
+            (55342,"Mirror Image"), (12042,"Arcane Power"), (12043,"Presence of Mind"),
+            (12051,"Evocation"), (12472,"Icy Veins"), (44457,"Living Bomb r1"),
+            (42931,"Cone of Cold"), (42926,"Flamestrike"),
+        },
+        ["SHAMAN"] = new[] {
+            (49238,"Lightning Bolt"), (49271,"Chain Lightning"), (60043,"Lava Burst"),
+            (49233,"Flame Shock"), (49231,"Earth Shock"), (16166,"Elemental Mastery"),
+            (59159,"Thunderstorm"), (51533,"Feral Spirit"), (49276,"Wind Shear"),
+        },
+    };
+
     private void BtnScanSpells_Click(object sender, RoutedEventArgs e)
     {
-        if (_endSceneHook == null || !_endSceneHook.IsHooked) return;
+        if (_luaReader == null || !_luaReader.IsInitialized) return;
 
-        // Сначала определим класс через LuaReader
-        if (_luaReader?.IsInitialized == true)
+        // Определяем класс
+        string lua = "local _,c=UnitClass('player') EditMacro(1,'WB',1,c)";
+        string? cls = _luaReader.Execute(lua);
+        if (cls == null || !ClassSpells.ContainsKey(cls))
         {
-            string? classInfo = _luaReader.Eval("(function() local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) return c..'|'..t1..'|'..t2..'|'..t3 end)()");
-            if (classInfo != null)
-                TxtStatus.Text = $"Class: {classInfo}";
+            TxtStatus.Text = $"Unknown class: {cls}";
+            return;
         }
 
-        TxtStatus.Text = "Scanning spells...";
+        TxtStatus.Text = $"Scanning {cls} spells...";
+        var spells = ClassSpells[cls];
+        var results = new List<string> { $"=== {cls} Spells ===" };
 
-        // Все важные спеллы Balance Druid + общие друид спеллы (по ID)
-        string lua = @"
-local spells = {
-    {48461, 'Wrath max'},
-    {48465, 'Starfire max'},
-    {48463, 'Moonfire max'},
-    {48468, 'Insect Swarm max'},
-    {53201, 'Starfall max'},
-    {33831, 'Force of Nature'},
-    {770,   'Faerie Fire'},
-    {24858, 'Moonkin Form'},
-    {29166, 'Innervate'},
-    {22812, 'Barkskin'},
-    {61384, 'Typhoon'},
-    {53307, 'Thorns max'},
-    {48470, 'Gift of the Wild max'},
-    {48441, 'Rejuvenation max'},
-    {48443, 'Regrowth max'},
-    {48378, 'Healing Touch max'},
-    {29166, 'Innervate'},
-    {18562, 'Swiftmend'},
-    {48451, 'Lifebloom max'},
-    {53251, 'Wild Growth max'},
-    {48477, 'Rebirth max'},
-    {20484, 'Rebirth r1'},
-    {16857, 'Faerie Fire (Feral)'},
-    {49800, 'Rip max'},
-    {48574, 'Rake max'},
-    {769,   'Swipe'},
-    {33917, 'Mangle'},
-    {50256, 'Maul max'},
-    {2782,  'Remove Curse'},
-    {8946,  'Cure Poison'},
-    {33786, 'Cyclone'},
-    {2637,  'Hibernate'},
-    {16689, 'Natures Grasp'},
-    {53312, 'Natures Grasp max'},
-    {16979, 'Feral Charge'},
-    {49376, 'Feral Charge Cat'},
-    {5229,  'Enrage'},
-    {22842, 'Frenzied Regeneration'},
-    {61336, 'Survival Instincts'},
-    {5215,  'Prowl'},
-    {48518, 'Eclipse (Lunar) buff'},
-    {48517, 'Eclipse (Solar) buff'},
-}
-DEFAULT_CHAT_FRAME:AddMessage('|cff00ff88=== [WB] Spell Scan ===|r')
-for _, s in ipairs(spells) do
-    local id, eng = s[1], s[2]
-    local name = GetSpellInfo(id)
-    if name then
-        DEFAULT_CHAT_FRAME:AddMessage('|cff00ff88[WB]|r ' .. id .. ' = |cffFFFF00' .. name .. '|r  (' .. eng .. ')')
-    end
-end
-DEFAULT_CHAT_FRAME:AddMessage('|cff00ff88=== [WB] Scan Complete ===|r')
-";
+        foreach (var (id, eng) in spells)
+        {
+            string? name = _luaReader.Eval($"GetSpellInfo({id})");
+            results.Add($"{id} = {name ?? "nil"} ({eng})");
+        }
 
-        _endSceneHook.ExecuteLua(lua, 3000);
-        TxtStatus.Text = "Scan done! Check WoW chat.";
+        // Сохраняем в файл
+        var path = System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
+            "spells.txt");
+        System.IO.File.WriteAllLines(path, results);
+
+        LstObjects.ItemsSource = results;
+        TxtStatus.Text = $"Scanned {results.Count - 1} spells → spells.txt";
     }
 
     private void BtnDump_Click(object sender, RoutedEventArgs e)
