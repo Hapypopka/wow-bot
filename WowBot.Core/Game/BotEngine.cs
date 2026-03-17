@@ -64,6 +64,7 @@ public class BotEngine : IDisposable
         }
     }
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
+    public string SpellFlagsLua { get; set; } = "";
 
     // Mana thresholds (из оверлея, в процентах 0-100)
     public int DispManaThreshold { get; set; } = 15;
@@ -217,7 +218,7 @@ public class BotEngine : IDisposable
                 if (hasTarget)
                 {
                     if (_autoFace) _navigation.FaceUnit(player, target!);
-                    string script = GetRotationScript(player);
+                    string script = SpellFlagsLua + GetRotationScript(player);
                     _hook.ExecuteLua(script, 500);
                 }
                 return;
@@ -239,7 +240,7 @@ public class BotEngine : IDisposable
 
                 // Instants на бегу БЕЗ поворота
                 if (hasTarget)
-                    _hook.ExecuteLua(_instantScript, 300);
+                    _hook.ExecuteLua(SpellFlagsLua + _instantScript, 300);
             }
             else
             {
@@ -248,7 +249,7 @@ public class BotEngine : IDisposable
                 if (hasTarget)
                 {
                     if (_autoFace) _navigation.FaceUnit(player, target!);
-                    string script = GetRotationScript(player);
+                    string script = SpellFlagsLua + GetRotationScript(player);
                     _hook.ExecuteLua(script, 500);
                 }
             }
@@ -313,6 +314,7 @@ local function WB_AoE()
     local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
+    if not UnitAffectingCombat('player') then return end
     if not UnitExists('target') or UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player','target') then return end
 

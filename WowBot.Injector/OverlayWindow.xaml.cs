@@ -33,9 +33,9 @@ public partial class OverlayWindow : Window
     public event Action? OnSetFollowTarget;
     public event Action<float>? OnFollowDistanceChanged;
 
-    // Rotation spell toggles (created dynamically)
-    private ToggleButton _chkVT = null!, _chkDP = null!, _chkSWP = null!;
-    private ToggleButton _chkMB = null!, _chkMF = null!, _chkSF = null!, _chkDisp = null!;
+    // Rotation spell toggles (by spell key)
+    private readonly Dictionary<string, ToggleButton> _spellToggles = new();
+    private string _playerClass = "";
 
     // AoE toggles
     private ToggleButton _chkMultiDot = null!, _chkMindSear = null!;
@@ -51,17 +51,57 @@ public partial class OverlayWindow : Window
     private CheckBox _chkAutoFace = null!, _chkAutoTarget = null!;
     private Slider _sliderMaxRange = null!;
 
-    // Properties
-    public bool UseVT => _chkVT?.IsChecked == true;
-    public bool UseDP => _chkDP?.IsChecked == true;
-    public bool UseSWP => _chkSWP?.IsChecked == true;
-    public bool UseMB => _chkMB?.IsChecked == true;
-    public bool UseMF => _chkMF?.IsChecked == true;
-    public bool UseSF => _chkSF?.IsChecked == true;
-    public bool UseDisp => _chkDisp?.IsChecked == true;
+    /// <summary>Проверяет включён ли спелл по ключу</summary>
+    public bool IsSpellEnabled(string key) =>
+        _spellToggles.TryGetValue(key, out var btn) ? btn.IsChecked == true : true;
+
+    /// <summary>Lua-строка с флагами спеллов: WB_S={VT=true,DP=false,...}</summary>
+    public string GetSpellFlagsLua()
+    {
+        if (_spellToggles.Count == 0) return "WB_S={} ";
+        var flags = string.Join(",", _spellToggles.Select(kv =>
+            $"{kv.Key}={(kv.Value.IsChecked == true ? "true" : "false")}"));
+        return "WB_S={" + flags + "} ";
+    }
+
+    // Обратная совместимость
+    public bool UseVT => IsSpellEnabled("VT");
+    public bool UseDP => IsSpellEnabled("DP");
+    public bool UseSWP => IsSpellEnabled("SWP");
+    public bool UseMB => IsSpellEnabled("MB");
+    public bool UseMF => IsSpellEnabled("MF");
+    public bool UseSF => IsSpellEnabled("SF");
+    public bool UseDisp => IsSpellEnabled("Disp");
     public bool AutoFace => _chkAutoFace?.IsChecked == true;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
     public int MaxTargetRange => (int)(_sliderMaxRange?.Value ?? 30);
+
+    // Спеллы по спекам: (key, icon, tooltip, defaultOn)
+    private static readonly Dictionary<string, (string key, string icon, string tooltip, bool on)[]> SpecSpells = new()
+    {
+        ["Shadow Priest"] = new[]
+        {
+            ("VT", "vt.jpg", "Прикосновение вампира", true),
+            ("DP", "dp.jpg", "Всепожирающая чума", true),
+            ("SWP", "swp.jpg", "Слово Тьмы: Боль", true),
+            ("MB", "mb.jpg", "Взрыв разума", true),
+            ("MF", "mf.jpg", "Пытка разума", true),
+            ("SF", "sf.jpg", "Исчадие Тьмы", true),
+            ("Disp", "disp.jpg", "Слияние с Тьмой", true),
+        },
+        ["Balance Druid"] = new[]
+        {
+            ("Moonkin", "moonkin.jpg", "Облик лунного совуха", true),
+            ("Starfall", "starfall.jpg", "Звездопад", true),
+            ("Treants", "treants.jpg", "Сила Природы", true),
+            ("FF", "faerie_fire.jpg", "Волшебный огонь", true),
+            ("IS", "insect_swarm.jpg", "Рой насекомых", true),
+            ("MF_d", "moonfire.jpg", "Лунный огонь", true),
+            ("Starfire", "starfire.jpg", "Звездный огонь", true),
+            ("Wrath", "wrath.jpg", "Гнев", true),
+            ("Innervate", "innervate.jpg", "Озарение", true),
+        },
+    };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
     public bool UseMultiDot => _chkMultiDot?.IsChecked == true;
     public int MaxDotTargets => (int)(_sliderMaxDots?.Value ?? 4);
@@ -97,8 +137,8 @@ public partial class OverlayWindow : Window
         },
         ["DRUID"] = new[]
         {
-            ("Дар дикой природы", "fort.jpg", "Дар дикой природы", true),
-            ("Шипы", "swp.jpg", "Шипы", false),
+            ("Дар дикой природы", "gift_wild.jpg", "Дар дикой природы", true),
+            ("Шипы", "thorns.jpg", "Шипы", false),
         },
         ["MAGE"] = new[]
         {
@@ -196,31 +236,63 @@ public partial class OverlayWindow : Window
     {
         AddLabel("Заклинания");
 
-        var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
-        _chkVT = AddSpellIcon(wrap, "vt.jpg", "Прикосновение вампира", _chkVT?.IsChecked ?? true);
-        _chkDP = AddSpellIcon(wrap, "dp.jpg", "Всепожирающая чума", _chkDP?.IsChecked ?? true);
-        _chkSWP = AddSpellIcon(wrap, "swp.jpg", "Слово Тьмы: Боль", _chkSWP?.IsChecked ?? true);
-        _chkMB = AddSpellIcon(wrap, "mb.jpg", "Взрыв разума", _chkMB?.IsChecked ?? true);
-        _chkMF = AddSpellIcon(wrap, "mf.jpg", "Пытка разума", _chkMF?.IsChecked ?? true);
-        _chkSF = AddSpellIcon(wrap, "sf.jpg", "Исчадие Тьмы", _chkSF?.IsChecked ?? true);
-        _chkDisp = AddSpellIcon(wrap, "disp.jpg", "Слияние с Тьмой", _chkDisp?.IsChecked ?? true);
-        SubContent.Children.Add(wrap);
+        // Определяем спеллы по спеку
+        string specKey = TxtSpec.Text ?? "";
+        if (!SpecSpells.TryGetValue(specKey, out var spells))
+        {
+            // Фоллбэк на SP если спек не определён
+            SpecSpells.TryGetValue("Shadow Priest", out spells);
+        }
 
-        _sliderDispMana = AddSlider("Мана Слияние", _sliderDispMana?.Value ?? 15, 0, 100, 5);
-        _sliderSFMana = AddSlider("Мана Исчадие", _sliderSFMana?.Value ?? 50, 0, 100, 5);
+        if (spells != null)
+        {
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            foreach (var (key, icon, tooltip, defaultOn) in spells)
+            {
+                bool wasChecked = _spellToggles.TryGetValue(key, out var old) ? old.IsChecked == true : defaultOn;
+                _spellToggles[key] = AddSpellIcon(wrap, icon, tooltip, wasChecked);
+            }
+            SubContent.Children.Add(wrap);
+        }
+
+        if (specKey == "Shadow Priest")
+        {
+            _sliderDispMana = AddSlider("Мана Слияние", _sliderDispMana?.Value ?? 15, 0, 100, 5);
+            _sliderSFMana = AddSlider("Мана Исчадие", _sliderSFMana?.Value ?? 50, 0, 100, 5);
+        }
+        else if (specKey == "Balance Druid")
+        {
+            _sliderDispMana = AddSlider("Мана Озарение", _sliderDispMana?.Value ?? 30, 0, 100, 5);
+        }
     }
 
     private void BuildAoeSubmenu()
     {
-        AddLabel("Заклинания");
+        string specKey = TxtSpec.Text ?? "";
 
-        var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
-        _chkMultiDot = AddSpellIcon(wrap, "vt.jpg", "Мультидот VT", _chkMultiDot?.IsChecked ?? true);
-        _chkMindSear = AddSpellIcon(wrap, "ms.jpg", "Иссушение разума", _chkMindSear?.IsChecked ?? true);
-        SubContent.Children.Add(wrap);
+        if (specKey == "Shadow Priest")
+        {
+            AddLabel("Заклинания");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            _chkMultiDot = AddSpellIcon(wrap, "vt.jpg", "Мультидот VT", _chkMultiDot?.IsChecked ?? true);
+            _chkMindSear = AddSpellIcon(wrap, "ms.jpg", "Иссушение разума", _chkMindSear?.IsChecked ?? true);
+            SubContent.Children.Add(wrap);
 
-        _sliderMaxDots = AddSlider("Макс. целей VT", _sliderMaxDots?.Value ?? 4, 1, 10, 1);
-        _sliderMindSear = AddSlider("Целей Mind Sear", _sliderMindSear?.Value ?? 4, 2, 15, 1);
+            _sliderMaxDots = AddSlider("Макс. целей VT", _sliderMaxDots?.Value ?? 4, 1, 10, 1);
+            _sliderMindSear = AddSlider("Целей Mind Sear", _sliderMindSear?.Value ?? 4, 2, 15, 1);
+        }
+        else if (specKey == "Balance Druid")
+        {
+            AddLabel("AoE (в ротации — авто)");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            AddSpellIcon(wrap, "starfall.jpg", "Звездопад (авто)", true);
+            AddSpellIcon(wrap, "hurricane.jpg", "Гроза (в разработке)", false);
+            SubContent.Children.Add(wrap);
+        }
+        else
+        {
+            AddLabel("AoE для этого спека в разработке");
+        }
     }
 
     private void BuildBuffsSubmenu()
@@ -268,7 +340,7 @@ public partial class OverlayWindow : Window
 
     private void BuildTargetSubmenu()
     {
-        _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? true);
+        _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? false);
         _chkAutoTarget = AddCheckBox("Автовыбор таргета", _chkAutoTarget?.IsChecked ?? false);
         _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? 30, 10, 45, 5);
     }
@@ -385,6 +457,8 @@ public partial class OverlayWindow : Window
     // --- Buff setup ---
     public void SetPlayerClass(string playerClass)
     {
+        _playerClass = playerClass;
+        _spellToggles.Clear();
         _buffToggles.Clear();
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
 

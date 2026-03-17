@@ -34,10 +34,12 @@ public partial class MainWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
+        StopUpdateLoop();
         _overlay?.Close();
         _botEngine?.Dispose();
         _endSceneHook?.Dispose();
         _memory.Dispose();
+        Environment.Exit(0);
     }
 
     private void BtnAttach_Click(object sender, RoutedEventArgs e)
@@ -156,8 +158,9 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             TxtStatus.Text = $"Attached (PID: {wow.Id}) — hook failed: {ex.Message}";
-            TxtLuaStatus.Text = $"Hook error: {ex.Message}";
-            // Диагностика сохранена, можно продолжить без хука
+            TxtLuaStatus.Text = ex.Message.Contains("EndScene")
+                ? "Переключите WoW в оконный режим (Alt+Enter) и нажмите Attach снова."
+                : $"Hook error: {ex.Message}";
         }
 
         StartUpdateLoop();
@@ -377,6 +380,7 @@ public partial class MainWindow : Window
                 _botEngine.DispManaThreshold = _overlay.DispManaThreshold;
                 _botEngine.SFManaThreshold = _overlay.SFManaThreshold;
                 _botEngine.BuffsEnabled = _overlay.BuffsEnabled;
+                _botEngine.SpellFlagsLua = _overlay.GetSpellFlagsLua();
                 _botEngine.EnabledBuffs = _overlay.GetEnabledBuffs();
             }
 

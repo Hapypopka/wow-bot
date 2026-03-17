@@ -43,6 +43,7 @@ public static class AllRotations
     local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
+    if not UnitAffectingCombat('player') then return end
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
@@ -57,28 +58,31 @@ local function WB_Run()
     local _,_,t3 = GetTalentTabInfo(3)
 
     if class == 'DRUID' and t1 >= t2 and t1 >= t3 then
-        if not HasBuff('Облик лунного совуха') then CastSpellByName('Облик лунного совуха') return end
-        if MP() < 0.3 and IsReady('Озарение') then CastSpellByName('Озарение') return end
-        if IsReady('Звездопад') then CastSpellByName('Звездопад') return end
-        if IsReady('Сила Природы') then CastSpellByName('Сила Природы') return end
-        if not HasDebuff('target','Волшебный огонь') then CastSpellByName('Волшебный огонь') return end
-        if not HasDebuff('target','Рой насекомых') then CastSpellByName('Рой насекомых') return end
-        if not HasDebuff('target','Лунный огонь') then CastSpellByName('Лунный огонь') return end
+        if not WB_S then WB_S={} end
+        if WB_S.Moonkin~=false and not HasBuff('Облик лунного совуха') then CastSpellByName('Облик лунного совуха') return end
+        if WB_S.Innervate~=false and MP() < 0.3 and IsReady('Озарение') then CastSpellByName('Озарение') return end
+        if WB_S.Starfall~=false and IsReady('Звездопад') then CastSpellByName('Звездопад') return end
+        if WB_S.Treants~=false and IsReady('Сила Природы') then CastSpellByName('Сила Природы') return end
+        if WB_S.FF~=false and not HasDebuff('target','Волшебный огонь') then CastSpellByName('Волшебный огонь') return end
+        if WB_S.IS~=false and not HasDebuff('target','Рой насекомых') then CastSpellByName('Рой насекомых') return end
+        if WB_S.MF_d~=false and not HasDebuff('target','Лунный огонь') then CastSpellByName('Лунный огонь') return end
         if not WB_ECL then WB_ECL=0 end
         if HasBuffById(48518) and WB_ECL~=1 then WB_ECL=1 end
         if HasBuffById(48517) and WB_ECL~=2 then WB_ECL=2 end
-        if WB_ECL==1 then CastSpellByName('Звездный огонь') else CastSpellByName('Гнев') end
+        if WB_ECL==1 and WB_S.Starfire~=false then CastSpellByName('Звездный огонь')
+        elseif WB_S.Wrath~=false then CastSpellByName('Гнев') end
 
     elseif class == 'PRIEST' and t3 >= t1 and t3 >= t2 then
+        if not WB_S then WB_S={} end
         if not HasBuff('Облик Тьмы') then CastSpellByName('Облик Тьмы') return end
-        if MP() < 0.15 and IsReady('Слияние с Тьмой') then CastSpellByName('Слияние с Тьмой') return end
-        if not HasDebuff('target','Прикосновение вампира') then if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') return end end
-        if not HasDebuff('target','Всепожирающая чума') then if not WB_DP or GetTime()-WB_DP>2 then WB_DP=GetTime() CastSpellByName('Всепожирающая чума') return end end
-        if not HasDebuff('target','Слово Тьмы: Боль') then if not WB_SWP or GetTime()-WB_SWP>2 then WB_SWP=GetTime() CastSpellByName('Слово Тьмы: Боль') return end end
+        if WB_S.Disp~=false and MP() < 0.15 and IsReady('Слияние с Тьмой') then CastSpellByName('Слияние с Тьмой') return end
+        if WB_S.VT~=false and not HasDebuff('target','Прикосновение вампира') then if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') return end end
+        if WB_S.DP~=false and not HasDebuff('target','Всепожирающая чума') then if not WB_DP or GetTime()-WB_DP>2 then WB_DP=GetTime() CastSpellByName('Всепожирающая чума') return end end
+        if WB_S.SWP~=false and not HasDebuff('target','Слово Тьмы: Боль') then if not WB_SWP or GetTime()-WB_SWP>2 then WB_SWP=GetTime() CastSpellByName('Слово Тьмы: Боль') return end end
         local _,_,_,_,mbPts = GetTalentInfo(3,8)
-        if mbPts and mbPts > 0 and IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
-        if MP() < 0.5 and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end
-        CastSpellByName('Пытка разума')
+        if WB_S.MB~=false and mbPts and mbPts > 0 and IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
+        if WB_S.SF~=false and MP() < 0.5 and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end
+        if WB_S.MF~=false then CastSpellByName('Пытка разума') end
     end
 end
 WB_Run()
@@ -91,6 +95,7 @@ local function WB_Inst()
     local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
+    if not UnitAffectingCombat('player') then return end
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
