@@ -72,9 +72,9 @@ local function WB_Run()
     elseif class == 'PRIEST' and t3 >= t1 and t3 >= t2 then
         if not HasBuff('Облик Тьмы') then CastSpellByName('Облик Тьмы') return end
         if MP() < 0.15 and IsReady('Слияние с Тьмой') then CastSpellByName('Слияние с Тьмой') return end
-        if not HasDebuff('target','Прикосновение вампира') then CastSpellByName('Прикосновение вампира') return end
-        if not HasDebuff('target','Всепожирающая чума') then CastSpellByName('Всепожирающая чума') return end
-        if not HasDebuff('target','Слово Тьмы: Боль') then CastSpellByName('Слово Тьмы: Боль') return end
+        if not HasDebuff('target','Прикосновение вампира') then if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') return end end
+        if not HasDebuff('target','Всепожирающая чума') then if not WB_DP or GetTime()-WB_DP>2 then WB_DP=GetTime() CastSpellByName('Всепожирающая чума') return end end
+        if not HasDebuff('target','Слово Тьмы: Боль') then if not WB_SWP or GetTime()-WB_SWP>2 then WB_SWP=GetTime() CastSpellByName('Слово Тьмы: Боль') return end end
         local _,_,_,_,mbPts = GetTalentInfo(3,8)
         if mbPts and mbPts > 0 and IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
         if MP() < 0.5 and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end

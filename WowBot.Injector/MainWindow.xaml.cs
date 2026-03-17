@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -11,6 +12,12 @@ namespace WowBot.Injector;
 
 public partial class MainWindow : Window
 {
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     private readonly MemoryReader _memory = new();
     private ObjectManager? _objectManager;
     private EndSceneHook? _endSceneHook;
@@ -276,6 +283,15 @@ public partial class MainWindow : Window
     {
         if (_objectManager == null || !_memory.IsAttached) return;
 
+        // Показывать оверлей только когда WoW активен
+        if (_overlay != null && _memory.Process != null)
+        {
+            var fg = GetForegroundWindow();
+            GetWindowThreadProcessId(fg, out uint fgPid);
+            bool wowActive = fgPid == (uint)_memory.Process.Id;
+            _overlay.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
+        }
+
         try
         {
             if (_memory.Process?.HasExited == true)
@@ -352,6 +368,7 @@ public partial class MainWindow : Window
             {
                 _botEngine.AutoFace = _overlay.AutoFace;
                 _botEngine.AutoSelectTarget = _overlay.AutoSelectTarget;
+                _botEngine.MaxTargetRange = _overlay.MaxTargetRange;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
                 _botEngine.UseMultiDot = _overlay.UseMultiDot;
                 _botEngine.MaxDotTargets = _overlay.MaxDotTargets;

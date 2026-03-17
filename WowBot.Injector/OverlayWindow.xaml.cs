@@ -1,81 +1,117 @@
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace WowBot.Injector;
 
 public partial class OverlayWindow : Window
 {
+    // Не забирать фокус у WoW при клике
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE);
+    }
     public event Action? OnRotationToggle;
     public event Action? OnFollowToggle;
     public event Action? OnSetFollowTarget;
     public event Action<float>? OnFollowDistanceChanged;
 
-    // Настройки ротации — доступны из MainWindow
-    public bool UseVT => ChkVT.IsChecked == true;
-    public bool UseDP => ChkDP.IsChecked == true;
-    public bool UseSWP => ChkSWP.IsChecked == true;
-    public bool UseMB => ChkMB.IsChecked == true;
-    public bool UseMF => ChkMF.IsChecked == true;
-    public bool UseSF => ChkSF.IsChecked == true;
-    public bool UseDisp => ChkDisp.IsChecked == true;
-    public bool AutoFace => ChkAutoFace.IsChecked == true;
-    public bool AutoSelectTarget => ChkAutoTarget.IsChecked == true;
+    // Rotation spell toggles (created dynamically)
+    private ToggleButton _chkVT = null!, _chkDP = null!, _chkSWP = null!;
+    private ToggleButton _chkMB = null!, _chkMF = null!, _chkSF = null!, _chkDisp = null!;
+
+    // AoE toggles
+    private ToggleButton _chkMultiDot = null!, _chkMindSear = null!;
+    private Slider _sliderMaxDots = null!, _sliderMindSear = null!;
+
+    // Mana sliders
+    private Slider _sliderDispMana = null!, _sliderSFMana = null!;
+
+    // Follow slider
+    private Slider _sliderDist = null!;
+
+    // Target checkboxes
+    private CheckBox _chkAutoFace = null!, _chkAutoTarget = null!;
+    private Slider _sliderMaxRange = null!;
+
+    // Properties
+    public bool UseVT => _chkVT?.IsChecked == true;
+    public bool UseDP => _chkDP?.IsChecked == true;
+    public bool UseSWP => _chkSWP?.IsChecked == true;
+    public bool UseMB => _chkMB?.IsChecked == true;
+    public bool UseMF => _chkMF?.IsChecked == true;
+    public bool UseSF => _chkSF?.IsChecked == true;
+    public bool UseDisp => _chkDisp?.IsChecked == true;
+    public bool AutoFace => _chkAutoFace?.IsChecked == true;
+    public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
+    public int MaxTargetRange => (int)(_sliderMaxRange?.Value ?? 30);
     public bool AoeEnabled => BtnAoe.IsChecked == true;
-    public bool UseMultiDot => ChkMultiDot.IsChecked == true;
-    public int MaxDotTargets => (int)SliderMaxDots.Value;
-    public bool UseMindSear => ChkMindSear.IsChecked == true;
-    public int MindSearTargets => (int)SliderMindSear.Value;
-    public int DispManaThreshold => (int)SliderDispMana.Value;
-    public int SFManaThreshold => (int)SliderSFMana.Value;
+    public bool UseMultiDot => _chkMultiDot?.IsChecked == true;
+    public int MaxDotTargets => (int)(_sliderMaxDots?.Value ?? 4);
+    public bool UseMindSear => _chkMindSear?.IsChecked == true;
+    public int MindSearTargets => (int)(_sliderMindSear?.Value ?? 4);
+    public int DispManaThreshold => (int)(_sliderDispMana?.Value ?? 15);
+    public int SFManaThreshold => (int)(_sliderSFMana?.Value ?? 50);
     public bool BuffsEnabled => BtnBuffs.IsChecked == true;
 
-    // Баффы — динамические чекбоксы по классу
-    private readonly Dictionary<string, CheckBox> _buffCheckboxes = new();
+    private readonly Dictionary<string, ToggleButton> _buffToggles = new();
+    private string _activeSubmenu = "";
+    private bool _isDragging;
+    private Point _dragStart;
 
-    /// <summary>Возвращает список включённых баффов (русские названия заклинаний)</summary>
     public List<string> GetEnabledBuffs()
     {
         var result = new List<string>();
-        foreach (var (name, chk) in _buffCheckboxes)
-            if (chk.IsChecked == true) result.Add(name);
+        foreach (var (name, btn) in _buffToggles)
+            if (btn.IsChecked == true) result.Add(name);
         return result;
     }
 
-    // Баффы по классам: (название спелла, описание для UI, включен по умолчанию)
-    private static readonly Dictionary<string, (string spell, string label, bool defaultOn)[]> ClassBuffs = new()
+    private static readonly Dictionary<string, (string spell, string icon, string label, bool defaultOn)[]> ClassBuffs = new()
     {
         ["PRIEST"] = new[]
         {
-            ("Молитва стойкости", "Молитва стойкости", true),
-            ("Молитва духа", "Молитва духа", true),
-            ("Молитва защиты от темной магии", "Защита от темной магии", true),
-            ("Объятия вампира", "Объятия вампира", true),
-            ("Внутренний огонь", "Внутренний огонь", true),
-            ("Защита от страха", "Защита от страха", false),
+            ("Молитва стойкости", "fort.jpg", "Молитва стойкости", true),
+            ("Молитва духа", "spirit.jpg", "Молитва духа", true),
+            ("Молитва защиты от темной магии", "shadow_prot.jpg", "Защита от темной магии", true),
+            ("Объятия вампира", "ve.jpg", "Объятия вампира", true),
+            ("Внутренний огонь", "inner_fire.jpg", "Внутренний огонь", true),
+            ("Защита от страха", "fear_ward.jpg", "Защита от страха", false),
         },
         ["DRUID"] = new[]
         {
-            ("Дар дикой природы", "Дар дикой природы", true),
-            ("Шипы", "Шипы", false),
+            ("Дар дикой природы", "fort.jpg", "Дар дикой природы", true),
+            ("Шипы", "swp.jpg", "Шипы", false),
         },
         ["MAGE"] = new[]
         {
-            ("Чародейская гениальность", "Чародейская гениальность", true),
-            ("Ледяная броня", "Ледяная броня", false),
-            ("Расплавленная броня", "Расплавленная броня", true),
-            ("Чародейская броня", "Чародейская броня", false),
+            ("Чародейская гениальность", "spirit.jpg", "Чародейская гениальность", true),
+            ("Расплавленная броня", "inner_fire.jpg", "Расплавленная броня", true),
+            ("Ледяная броня", "shadow_prot.jpg", "Ледяная броня", false),
+            ("Чародейская броня", "spirit.jpg", "Чародейская броня", false),
         },
-        ["WARLOCK"] = new[]
-        {
-            ("Скверноброня", "Скверноброня", true),
-        },
+        ["WARLOCK"] = new[] { ("Скверноброня", "inner_fire.jpg", "Скверноброня", true), },
         ["SHAMAN"] = new[]
         {
-            ("Щит молний", "Щит молний", true),
-            ("Щит воды", "Щит воды", false),
+            ("Щит молний", "mb.jpg", "Щит молний", true),
+            ("Щит воды", "shadow_prot.jpg", "Щит воды", false),
         },
     };
 
@@ -84,98 +120,285 @@ public partial class OverlayWindow : Window
         InitializeComponent();
     }
 
-    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    // --- Main button: click = menu, drag = move ---
+    private void MainButton_Click(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 1) DragMove();
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            _isDragging = false;
+            _dragStart = e.GetPosition(this);
+            MainButton.CaptureMouse();
+        }
     }
 
-    // --- Rotation ---
-    private void ToggleRotation_Click(object sender, MouseButtonEventArgs e) { }
-
-    private void BtnRotation_Click(object sender, RoutedEventArgs e)
+    private void MainButton_MouseMove(object sender, MouseEventArgs e)
     {
-        OnRotationToggle?.Invoke();
+        if (e.LeftButton != MouseButtonState.Pressed || !MainButton.IsMouseCaptured) return;
+
+        var pos = e.GetPosition(this);
+        if (!_isDragging && (Math.Abs(pos.X - _dragStart.X) > 4 || Math.Abs(pos.Y - _dragStart.Y) > 4))
+        {
+            _isDragging = true;
+            MainButton.ReleaseMouseCapture();
+            DragMove();
+        }
     }
 
-    // --- Follow ---
-    private void ToggleFollow_Click(object sender, MouseButtonEventArgs e) { }
-
-    private void BtnFollow_Click(object sender, RoutedEventArgs e)
+    private void MainButton_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        OnFollowToggle?.Invoke();
+        if (e.ChangedButton == MouseButton.Left && MainButton.IsMouseCaptured)
+        {
+            MainButton.ReleaseMouseCapture();
+            if (!_isDragging)
+            {
+                // Это был клик, не drag → toggle menu
+                bool isOpen = MenuPanel.Visibility == Visibility.Visible;
+                MenuPanel.Visibility = isOpen ? Visibility.Collapsed : Visibility.Visible;
+                if (isOpen) SubPanel.Visibility = Visibility.Collapsed;
+            }
+        }
     }
 
+    // --- Menu item clicks → show submenu ---
+    private void MenuRotation_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Rotation");
+    private void MenuAoe_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Aoe");
+    private void MenuBuffs_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Buffs");
+    private void MenuFollow_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Follow");
+    private void MenuTarget_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Target");
+
+    private void ShowSubmenu(string name)
+    {
+        if (_activeSubmenu == name && SubPanel.Visibility == Visibility.Visible)
+        {
+            SubPanel.Visibility = Visibility.Collapsed;
+            _activeSubmenu = "";
+            return;
+        }
+
+        _activeSubmenu = name;
+        SubContent.Children.Clear();
+
+        switch (name)
+        {
+            case "Rotation": BuildRotationSubmenu(); break;
+            case "Aoe": BuildAoeSubmenu(); break;
+            case "Buffs": BuildBuffsSubmenu(); break;
+            case "Follow": BuildFollowSubmenu(); break;
+            case "Target": BuildTargetSubmenu(); break;
+        }
+
+        SubPanel.Visibility = Visibility.Visible;
+    }
+
+    // --- Build submenus ---
+
+    private void BuildRotationSubmenu()
+    {
+        AddLabel("Заклинания");
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+        _chkVT = AddSpellIcon(wrap, "vt.jpg", "Прикосновение вампира", _chkVT?.IsChecked ?? true);
+        _chkDP = AddSpellIcon(wrap, "dp.jpg", "Всепожирающая чума", _chkDP?.IsChecked ?? true);
+        _chkSWP = AddSpellIcon(wrap, "swp.jpg", "Слово Тьмы: Боль", _chkSWP?.IsChecked ?? true);
+        _chkMB = AddSpellIcon(wrap, "mb.jpg", "Взрыв разума", _chkMB?.IsChecked ?? true);
+        _chkMF = AddSpellIcon(wrap, "mf.jpg", "Пытка разума", _chkMF?.IsChecked ?? true);
+        _chkSF = AddSpellIcon(wrap, "sf.jpg", "Исчадие Тьмы", _chkSF?.IsChecked ?? true);
+        _chkDisp = AddSpellIcon(wrap, "disp.jpg", "Слияние с Тьмой", _chkDisp?.IsChecked ?? true);
+        SubContent.Children.Add(wrap);
+
+        _sliderDispMana = AddSlider("Мана Слияние", _sliderDispMana?.Value ?? 15, 0, 100, 5);
+        _sliderSFMana = AddSlider("Мана Исчадие", _sliderSFMana?.Value ?? 50, 0, 100, 5);
+    }
+
+    private void BuildAoeSubmenu()
+    {
+        AddLabel("Заклинания");
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+        _chkMultiDot = AddSpellIcon(wrap, "vt.jpg", "Мультидот VT", _chkMultiDot?.IsChecked ?? true);
+        _chkMindSear = AddSpellIcon(wrap, "ms.jpg", "Иссушение разума", _chkMindSear?.IsChecked ?? true);
+        SubContent.Children.Add(wrap);
+
+        _sliderMaxDots = AddSlider("Макс. целей VT", _sliderMaxDots?.Value ?? 4, 1, 10, 1);
+        _sliderMindSear = AddSlider("Целей Mind Sear", _sliderMindSear?.Value ?? 4, 2, 15, 1);
+    }
+
+    private void BuildBuffsSubmenu()
+    {
+        if (_buffToggles.Count == 0)
+        {
+            AddLabel("Класс не определен");
+            return;
+        }
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+        foreach (var (spell, oldToggle) in _buffToggles.ToList())
+        {
+            // Preserve state, rebuild icon
+            bool wasChecked = oldToggle.IsChecked == true;
+            string? tooltip = oldToggle.ToolTip?.ToString();
+            string iconFile = oldToggle.Tag?.ToString() ?? "";
+
+            var newToggle = AddSpellIcon(wrap, iconFile, tooltip ?? spell, wasChecked);
+            _buffToggles[spell] = newToggle;
+        }
+        SubContent.Children.Add(wrap);
+    }
+
+    private void BuildFollowSubmenu()
+    {
+        var btn = new Button
+        {
+            Content = "Set Follow Target",
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8b8d93")),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 4, 8, 4),
+            Cursor = Cursors.Hand,
+            FontSize = 11,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 0, 0, 6),
+        };
+        btn.Click += (s, e) => OnSetFollowTarget?.Invoke();
+        SubContent.Children.Add(btn);
+
+        _sliderDist = AddSlider("Дистанция", _sliderDist?.Value ?? 8, 0, 20, 1);
+        _sliderDist.ValueChanged += (s, e) => OnFollowDistanceChanged?.Invoke((float)e.NewValue);
+    }
+
+    private void BuildTargetSubmenu()
+    {
+        _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? true);
+        _chkAutoTarget = AddCheckBox("Автовыбор таргета", _chkAutoTarget?.IsChecked ?? false);
+        _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? 30, 10, 45, 5);
+    }
+
+    // --- Helpers ---
+
+    private ToggleButton AddSpellIcon(WrapPanel wrap, string iconFile, string tooltip, bool isChecked)
+    {
+        var toggle = new ToggleButton
+        {
+            Width = 34, Height = 34,
+            Margin = new Thickness(1),
+            Cursor = Cursors.Hand,
+            IsChecked = isChecked,
+            ToolTip = tooltip,
+            Tag = iconFile,
+            Style = (Style)FindResource("SpellIcon"),
+        };
+
+        var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Icons", iconFile);
+        if (File.Exists(iconPath))
+        {
+            toggle.Content = new Image
+            {
+                Source = new BitmapImage(new Uri(iconPath)),
+                Stretch = Stretch.UniformToFill,
+            };
+        }
+        else
+        {
+            toggle.Content = new TextBlock
+            {
+                Text = tooltip.Length > 3 ? tooltip[..3] : tooltip,
+                Foreground = Brushes.White, FontSize = 8,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+
+        wrap.Children.Add(toggle);
+        return toggle;
+    }
+
+    private Slider AddSlider(string label, double value, double min, double max, double tick)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 2, 0, 2) };
+        var txtValue = new TextBlock
+        {
+            Text = $"{(int)value}",
+            Foreground = (Brush)FindResource("Gold"),
+            FontSize = 10, FontWeight = FontWeights.Bold,
+        };
+
+        var header = new DockPanel();
+        header.Children.Add(new TextBlock
+        {
+            Text = label,
+            Foreground = (Brush)FindResource("TextDim"),
+            FontSize = 10,
+        });
+        txtValue.SetValue(DockPanel.DockProperty, Dock.Right);
+        header.Children.Add(txtValue);
+        panel.Children.Add(header);
+
+        var slider = new Slider
+        {
+            Minimum = min, Maximum = max, Value = value,
+            IsSnapToTickEnabled = true, TickFrequency = tick,
+            Width = 190,
+        };
+        slider.ValueChanged += (s, e) => txtValue.Text = $"{(int)e.NewValue}";
+        panel.Children.Add(slider);
+
+        SubContent.Children.Add(panel);
+        return slider;
+    }
+
+    private CheckBox AddCheckBox(string label, bool isChecked)
+    {
+        var chk = new CheckBox
+        {
+            Content = label,
+            IsChecked = isChecked,
+            Foreground = (Brush)FindResource("TextLight"),
+            FontSize = 11,
+            Margin = new Thickness(0, 3, 0, 3),
+        };
+        SubContent.Children.Add(chk);
+        return chk;
+    }
+
+    private void AddLabel(string text)
+    {
+        SubContent.Children.Add(new TextBlock
+        {
+            Text = text,
+            Foreground = (Brush)FindResource("TextDim"),
+            FontSize = 10, Margin = new Thickness(0, 0, 0, 2),
+        });
+    }
+
+    // --- Toggle clicks ---
+    private void BtnRotation_Click(object sender, RoutedEventArgs e) => OnRotationToggle?.Invoke();
+    private void BtnFollow_Click(object sender, RoutedEventArgs e) => OnFollowToggle?.Invoke();
     private void BtnAoe_Click(object sender, RoutedEventArgs e)
     {
         BtnAoe.Content = BtnAoe.IsChecked == true ? "ON" : "OFF";
     }
-
-    private void SliderMaxDots_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (TxtMaxDots != null) TxtMaxDots.Text = $"{(int)e.NewValue}";
-    }
-
-    private void SliderMindSear_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (TxtMindSearTargets != null) TxtMindSearTargets.Text = $"{(int)e.NewValue}";
-    }
-
-
     private void BtnBuffs_Click(object sender, RoutedEventArgs e)
     {
         BtnBuffs.Content = BtnBuffs.IsChecked == true ? "ON" : "OFF";
     }
 
-    /// <summary>Вызывается при Attach — создаёт чекбоксы баффов по классу</summary>
+    // --- Buff setup ---
     public void SetPlayerClass(string playerClass)
     {
-        PanelBuffs.Children.Clear();
-        _buffCheckboxes.Clear();
+        _buffToggles.Clear();
+        if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
 
-        if (!ClassBuffs.TryGetValue(playerClass, out var buffs))
-            return;
-
-        foreach (var (spell, label, defaultOn) in buffs)
+        // Pre-create toggles with metadata (will be rebuilt in submenu)
+        foreach (var (spell, icon, label, defaultOn) in buffs)
         {
-            var border = new Border
+            var toggle = new ToggleButton
             {
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#16181e")),
-                Padding = new Thickness(8, 4, 8, 4),
-                Margin = new Thickness(0, 1, 0, 0),
-            };
-            var chk = new CheckBox
-            {
-                Content = label,
                 IsChecked = defaultOn,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8b8d93")),
-                FontSize = 11,
+                ToolTip = label,
+                Tag = icon,
             };
-            border.Child = chk;
-            PanelBuffs.Children.Add(border);
-            _buffCheckboxes[spell] = chk;
+            _buffToggles[spell] = toggle;
         }
-    }
-
-    private void BtnSetFollow_Click2(object sender, RoutedEventArgs e)
-    {
-        OnSetFollowTarget?.Invoke();
-    }
-
-    // --- Sliders ---
-    private void SliderDispMana_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (TxtDispMana != null) TxtDispMana.Text = $"{(int)e.NewValue}";
-    }
-
-    private void SliderSFMana_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (TxtSFMana != null) TxtSFMana.Text = $"{(int)e.NewValue}";
-    }
-
-    private void SliderDist2_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (TxtDist != null) TxtDist.Text = $"{(int)e.NewValue}";
-        OnFollowDistanceChanged?.Invoke((float)e.NewValue);
     }
 
     // --- Updates from MainWindow ---
@@ -192,13 +415,6 @@ public partial class OverlayWindow : Window
         TxtFollowInfo.Text = active && !string.IsNullOrEmpty(info) ? $"Follow: {info}" : "";
     }
 
-    public void UpdateInfo(string text)
-    {
-        TxtInfo.Text = text;
-    }
-
-    public void UpdateStatus(string text)
-    {
-        TxtSpec.Text = text;
-    }
+    public void UpdateInfo(string text) => TxtInfo.Text = text;
+    public void UpdateStatus(string text) => TxtSpec.Text = text;
 }

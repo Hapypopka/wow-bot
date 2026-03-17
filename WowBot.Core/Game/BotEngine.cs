@@ -18,6 +18,7 @@ public class BotEngine : IDisposable
     private bool _rotationEnabled;
     private bool _autoFace = true;
     private bool _autoSelectTarget;
+    private float _maxTargetRange = 30f;
     private ulong _followGuid;
     private float _followDistance = 8f;
 
@@ -31,6 +32,7 @@ public class BotEngine : IDisposable
     public bool FollowEnabled => _followEnabled;
     public bool AutoFace { get => _autoFace; set => _autoFace = value; }
     public bool AutoSelectTarget { get => _autoSelectTarget; set => _autoSelectTarget = value; }
+    public float MaxTargetRange { get => _maxTargetRange; set => _maxTargetRange = value; }
     public bool RotationEnabled => _rotationEnabled;
     public ulong FollowGuid => _followGuid;
     public float FollowDistance
@@ -202,7 +204,8 @@ public class BotEngine : IDisposable
             }
 
             // === Автовыбор таргета ===
-            if (!hasTarget && _autoSelectTarget)
+            bool targetTooFar = hasTarget && player.DistanceTo(target!) > _maxTargetRange;
+            if (_autoSelectTarget && (!hasTarget || targetTooFar))
             {
                 _hook.ExecuteLua("TargetNearestEnemy()", 200);
                 return;
@@ -348,10 +351,10 @@ local function WB_AoE()
     -- Shadowfiend (по порогу маны)
     if MP() < " + sfThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture) + @" and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end
 
-    -- Доты на основной таргет
-    if not HasDebuff('target','Прикосновение вампира') then CastSpellByName('Прикосновение вампира') return end
-    if not HasDebuff('target','Всепожирающая чума') then CastSpellByName('Всепожирающая чума') return end
-    if not HasDebuff('target','Слово Тьмы: Боль') then CastSpellByName('Слово Тьмы: Боль') return end
+    -- Доты на основной таргет (защита от double-cast: пропускаем если кастили < 2 сек назад)
+    if not HasDebuff('target','Прикосновение вампира') then if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') return end end
+    if not HasDebuff('target','Всепожирающая чума') then if not WB_DP or GetTime()-WB_DP>2 then WB_DP=GetTime() CastSpellByName('Всепожирающая чума') return end end
+    if not HasDebuff('target','Слово Тьмы: Боль') then if not WB_SWP or GetTime()-WB_SWP>2 then WB_SWP=GetTime() CastSpellByName('Слово Тьмы: Боль') return end end
 
     -- Основной задотан — мультидот VT на других
     local mainGUID=UnitGUID('target')
@@ -359,14 +362,14 @@ local function WB_AoE()
     local mobs={" + luaNames + @"}
     for _,name in ipairs(mobs) do
         TargetUnit(name)
-        if UnitGUID('target')~=mainGUID and not UnitIsDeadOrGhost('target') and not HasDebuff('target','Прикосновение вампира') then
-            CastSpellByName('Прикосновение вампира')
-            casted=true
+        if UnitGUID('target')~=mainGUID and UnitExists('target') and not UnitIsDeadOrGhost('target') and UnitCanAttack('player','target') and not HasDebuff('target','Прикосновение вампира') then
+            if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') casted=true end
         end
-        TargetLastTarget()
+        -- Всегда возвращаем таргет
+        if UnitGUID('target')~=mainGUID then TargetLastTarget() end
         if casted then return end
     end
-    -- Восстанавливаем таргет если потерялся
+    -- Финальная проверка
     if UnitGUID('target')~=mainGUID then TargetLastTarget() end
 
     -- Все задотаны — Mind Blast / Mind Sear / Mind Flay

@@ -4,6 +4,12 @@
     <ProjectReference Include="..\WowBot.Core\WowBot.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Icons\**\*.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
