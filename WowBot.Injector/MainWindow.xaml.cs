@@ -330,7 +330,9 @@ public partial class MainWindow : Window
             .Take(30))
         {
             float dist = player != null ? player.DistanceTo(u) : 0;
-            items.Add($"[Unit] Lvl {u.Level} HP:{u.HealthPercent:F0}% Dist:{dist:F0}yd");
+            string uName = u.Name;
+            string nameTag = !string.IsNullOrEmpty(uName) ? $" \"{uName}\"" : "";
+            items.Add($"[Unit]{nameTag} Lvl {u.Level} HP:{u.HealthPercent:F0}% Dist:{dist:F0}yd");
         }
 
         LstObjects.ItemsSource = items;
@@ -342,7 +344,16 @@ public partial class MainWindow : Window
 
             // Синхронизируем настройки панели → BotEngine
             if (_botEngine != null)
+            {
                 _botEngine.AutoFace = _overlay.AutoFace;
+                _botEngine.AoeEnabled = _overlay.AoeEnabled;
+                _botEngine.UseMultiDot = _overlay.UseMultiDot;
+                _botEngine.MaxDotTargets = _overlay.MaxDotTargets;
+                _botEngine.UseMindSear = _overlay.UseMindSear;
+                _botEngine.MindSearTargets = _overlay.MindSearTargets;
+                _botEngine.DispManaThreshold = _overlay.DispManaThreshold;
+                _botEngine.SFManaThreshold = _overlay.SFManaThreshold;
+            }
 
             bool followActive = _botEngine?.FollowEnabled == true;
             string followInfo = "";

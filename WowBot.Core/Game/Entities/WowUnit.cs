@@ -32,6 +32,23 @@ public class WowUnit : WowObject
     public int ChannelingSpellId => Memory.ReadInt32(BaseAddress + Offsets.CurrentChannelId);
     public bool IsCasting => CastingSpellId != 0 || ChannelingSpellId != 0;
 
+    // --- Имя (NPC/мобы) ---
+    public string Name
+    {
+        get
+        {
+            try
+            {
+                uint ptr1 = Memory.ReadUInt32(BaseAddress + Offsets.UnitNamePtr1);
+                if (ptr1 == 0 || ptr1 > 0x7FFFFFFF) return "";
+                uint ptr2 = Memory.ReadUInt32(ptr1 + Offsets.UnitNamePtr2);
+                if (ptr2 == 0 || ptr2 > 0x7FFFFFFF) return "";
+                return Memory.ReadString(ptr2, 64);
+            }
+            catch { return ""; }
+        }
+    }
+
     // --- Позиция ---
     public float X => Memory.ReadFloat(BaseAddress + Offsets.UnitPositionX);
     public float Y => Memory.ReadFloat(BaseAddress + Offsets.UnitPositionY);

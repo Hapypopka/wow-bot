@@ -59,12 +59,16 @@ public static class Offsets
     public const uint LuaDoString = 0x00819210;
     public const uint LuaGetLocalizedText = 0x007225E0;
 
-    // --- Имена юнитов ---
+    // --- Имена игроков (Name Store / Name Cache) ---
     public const uint NameStoreBase = 0x00C5D938;
     public const uint NameStoreBaseOffset = 0x08;
     public const uint NameStoreMask = 0x24;
     public const uint NameStoreBasePtr = 0x1C;
     public const uint NameStoreString = 0x20;
+
+    // --- Имена NPC/мобов (Creature Name) ---
+    public const uint UnitNamePtr1 = 0x964;
+    public const uint UnitNamePtr2 = 0x05C;
 }
 
 public enum WowObjectType : int
