@@ -436,6 +436,15 @@ WB_AoE()
         sb.Append("if UnitAffectingCombat('player') then return end ");
         sb.Append("local function HasB(unit,name) for i=1,40 do local n=UnitBuff(unit,i) if not n then return false end if n==name then return true end end return false end ");
 
+        // Камень чар (проверка чары на оружии, создание + применение)
+        if (selfBuffs.Remove("WB_SPELLSTONE"))
+        {
+            sb.Append("local hasEnch=GetWeaponEnchantInfo() ");
+            sb.Append("if not hasEnch then ");
+            sb.Append("if GetItemCount('Могучий камень чар')>0 then UseItemByName('Могучий камень чар') PickupInventoryItem(16) return end ");
+            sb.Append("CastSpellByName('Создание камня чар') return end ");
+        }
+
         // Self-баффы
         foreach (var buff in selfBuffs)
         {

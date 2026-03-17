@@ -83,6 +83,34 @@ local function WB_Run()
         if WB_S.MB~=false and mbPts and mbPts > 0 and IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
         if WB_S.SF~=false and MP() < 0.5 and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end
         if WB_S.MF~=false then CastSpellByName('Пытка разума') end
+
+    elseif class == 'WARLOCK' and t2 >= t1 and t2 >= t3 then
+        if not WB_S then WB_S={} end
+        -- Демонология
+        if WB_S.Meta~=false and not HasBuff('Метаморфоза') and IsReady('Метаморфоза') then CastSpellByName('Метаморфоза') return end
+        if WB_S.DemonEmpower~=false and IsReady('Демоническое могущество') then CastSpellByName('Демоническое могущество') return end
+        -- Life Tap: срочно при низкой мане (до дотов, иначе не дойдёт)
+        if WB_S.LifeTap~=false and MP() < 0.15 then CastSpellByName('Жизнеотвод') return end
+        -- Жертвенный костер (Immolation Aura, только в мете и вблизи)
+        if WB_S.ImmoAura~=false and HasBuff('Метаморфоза') and IsReady('Жертвенный костер') and CheckInteractDistance('target',3) then CastSpellByName('Жертвенный костер') return end
+        -- Порча (instant)
+        if WB_S.Corruption~=false and not HasDebuff('target','Порча') then CastSpellByName('Порча') return end
+        -- Жертвенный огонь (Immolate)
+        if WB_S.Immolate~=false and not HasDebuff('target','Жертвенный огонь') then CastSpellByName('Жертвенный огонь') return end
+        -- Проклятие (выбор в панели, только одно)
+        if WB_S.CoA==true and not HasDebuff('target','Проклятие агонии') then CastSpellByName('Проклятие агонии') return end
+        if WB_S.CoD==true and not HasDebuff('target','Проклятие рока') then CastSpellByName('Проклятие рока') return end
+        if WB_S.CoE==true and not HasDebuff('target','Проклятие стихий') then CastSpellByName('Проклятие стихий') return end
+        -- Ожог души при Истреблении (Decimation) — приоритет над филлерами
+        if WB_S.SoulFire~=false and HasBuff('Истребление') and IsReady('Ожог души') then CastSpellByName('Ожог души') return end
+        -- Incinerate при Огненные недра (Molten Core, до 3 стаков)
+        if WB_S.Incinerate~=false and HasBuff('Огненные недра') then CastSpellByName('Испепеление') return end
+        -- Life Tap: поддержание баффа символа (приоритетнее филлера)
+        if WB_S.LTGlyph==true and not HasBuff('Жизнеотвод') then CastSpellByName('Жизнеотвод') return end
+        -- Life Tap при низкой мане
+        if WB_S.LifeTap~=false and MP() < 0.3 then CastSpellByName('Жизнеотвод') return end
+        -- Filler: Shadow Bolt
+        if WB_S.ShadowBolt~=false then CastSpellByName('Стрела Тьмы') end
     end
 end
 WB_Run()
@@ -109,6 +137,8 @@ local function WB_Inst()
     elseif class == 'PRIEST' then
         if not HasDebuff('target','Всепожирающая чума') then CastSpellByName('Всепожирающая чума') return end
         if not HasDebuff('target','Слово Тьмы: Боль') then CastSpellByName('Слово Тьмы: Боль') return end
+    elseif class == 'WARLOCK' then
+        if not HasDebuff('target','Порча') then CastSpellByName('Порча') return end
     end
 end
 WB_Inst()

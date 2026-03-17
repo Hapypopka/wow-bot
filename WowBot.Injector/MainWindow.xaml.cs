@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         StopUpdateLoop();
+        _overlay?.SaveSettings();
         _overlay?.Close();
         _botEngine?.Dispose();
         _endSceneHook?.Dispose();
@@ -151,6 +152,7 @@ public partial class MainWindow : Window
                 if (_botEngine != null)
                     _botEngine.FollowDistance = dist;
             };
+            _overlay.LoadSettings();
             _overlay.UpdateStatus(specName);
             _overlay.SetPlayerClass(playerClass);
             _overlay.Show();

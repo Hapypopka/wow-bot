@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -41,6 +42,16 @@ public partial class OverlayWindow : Window
     private ToggleButton _chkMultiDot = null!, _chkMindSear = null!;
     private Slider _sliderMaxDots = null!, _sliderMindSear = null!;
 
+    // Curse selection (radio-style, only one at a time)
+    private string _selectedCurse = "CoA"; // "CoA", "CoD", "CoE", or "" (none)
+    private readonly Dictionary<string, ToggleButton> _curseToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] CurseOptions =
+    {
+        ("CoA", "curse_agony.jpg", "Проклятие агонии"),
+        ("CoD", "curse_doom.jpg", "Проклятие рока"),
+        ("CoE", "curse_elements.jpg", "Проклятие стихий"),
+    };
+
     // Mana sliders
     private Slider _sliderDispMana = null!, _sliderSFMana = null!;
 
@@ -58,10 +69,14 @@ public partial class OverlayWindow : Window
     /// <summary>Lua-строка с флагами спеллов: WB_S={VT=true,DP=false,...}</summary>
     public string GetSpellFlagsLua()
     {
-        if (_spellToggles.Count == 0) return "WB_S={} ";
-        var flags = string.Join(",", _spellToggles.Select(kv =>
-            $"{kv.Key}={(kv.Value.IsChecked == true ? "true" : "false")}"));
-        return "WB_S={" + flags + "} ";
+        if (_spellToggles.Count == 0 && _curseToggles.Count == 0) return "WB_S={} ";
+        var parts = new List<string>();
+        foreach (var (key, btn) in _spellToggles)
+            parts.Add($"{key}={(btn.IsChecked == true ? "true" : "false")}");
+        // Curse flags: CoA/CoD/CoE — только один true
+        foreach (var (key, _, _) in CurseOptions)
+            parts.Add($"{key}={(_selectedCurse == key ? "true" : "false")}");
+        return "WB_S={" + string.Join(",", parts) + "} ";
     }
 
     // Обратная совместимость
@@ -101,6 +116,19 @@ public partial class OverlayWindow : Window
             ("Wrath", "wrath.jpg", "Гнев", true),
             ("Innervate", "innervate.jpg", "Озарение", true),
         },
+        ["Demonology Lock"] = new[]
+        {
+            ("Meta", "meta.jpg", "Метаморфоза", true),
+            ("DemonEmpower", "demon_empower.jpg", "Усиление демона", true),
+            ("ImmoAura", "immo_aura.jpg", "Жертвенный костер", true),
+            ("Corruption", "corruption.jpg", "Порча", true),
+            ("Immolate", "immolate.jpg", "Жертвенный огонь", true),
+            ("SoulFire", "soul_fire.jpg", "Огонь души", true),
+            ("Incinerate", "incinerate.jpg", "Испепеление", true),
+            ("ShadowBolt", "shadow_bolt.jpg", "Стрела Тьмы", true),
+            ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
+            ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
+        },
     };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
     public bool UseMultiDot => _chkMultiDot?.IsChecked == true;
@@ -115,6 +143,10 @@ public partial class OverlayWindow : Window
     private string _activeSubmenu = "";
     private bool _isDragging;
     private Point _dragStart;
+
+    // --- Persistent settings ---
+    private static readonly string SettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+    private Dictionary<string, JsonElement> _saved = new();
 
     public List<string> GetEnabledBuffs()
     {
@@ -147,7 +179,11 @@ public partial class OverlayWindow : Window
             ("Ледяная броня", "shadow_prot.jpg", "Ледяная броня", false),
             ("Чародейская броня", "spirit.jpg", "Чародейская броня", false),
         },
-        ["WARLOCK"] = new[] { ("Скверноброня", "inner_fire.jpg", "Скверноброня", true), },
+        ["WARLOCK"] = new[]
+        {
+            ("Доспех Скверны", "fel_armor.jpg", "Доспех Скверны", true),
+            ("WB_SPELLSTONE", "spellstone.jpg", "Камень чар", true),
+        },
         ["SHAMAN"] = new[]
         {
             ("Щит молний", "mb.jpg", "Щит молний", true),
@@ -181,6 +217,7 @@ public partial class OverlayWindow : Window
             _isDragging = true;
             MainButton.ReleaseMouseCapture();
             DragMove();
+            SaveSettings();
         }
     }
 
@@ -249,7 +286,9 @@ public partial class OverlayWindow : Window
             var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
             foreach (var (key, icon, tooltip, defaultOn) in spells)
             {
-                bool wasChecked = _spellToggles.TryGetValue(key, out var old) ? old.IsChecked == true : defaultOn;
+                bool wasChecked = _spellToggles.TryGetValue(key, out var old)
+                    ? old.IsChecked == true
+                    : GetSavedBool($"spell_{key}", defaultOn);
                 _spellToggles[key] = AddSpellIcon(wrap, icon, tooltip, wasChecked);
             }
             SubContent.Children.Add(wrap);
@@ -257,12 +296,41 @@ public partial class OverlayWindow : Window
 
         if (specKey == "Shadow Priest")
         {
-            _sliderDispMana = AddSlider("Мана Слияние", _sliderDispMana?.Value ?? 15, 0, 100, 5);
-            _sliderSFMana = AddSlider("Мана Исчадие", _sliderSFMana?.Value ?? 50, 0, 100, 5);
+            _sliderDispMana = AddSlider("Мана Слияние", _sliderDispMana?.Value ?? GetSavedDouble("slider_dispMana", 15), 0, 100, 5);
+            _sliderSFMana = AddSlider("Мана Исчадие", _sliderSFMana?.Value ?? GetSavedDouble("slider_sfMana", 50), 0, 100, 5);
         }
         else if (specKey == "Balance Druid")
         {
-            _sliderDispMana = AddSlider("Мана Озарение", _sliderDispMana?.Value ?? 30, 0, 100, 5);
+            _sliderDispMana = AddSlider("Мана Озарение", _sliderDispMana?.Value ?? GetSavedDouble("slider_dispMana", 30), 0, 100, 5);
+        }
+        else if (specKey == "Demonology Lock")
+        {
+            // Секция выбора проклятия (радио — только одно)
+            AddLabel("Выбор проклятия");
+            var curseWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            foreach (var (key, icon, tooltip) in CurseOptions)
+            {
+                bool isSelected = _selectedCurse == key;
+                var toggle = AddSpellIcon(curseWrap, icon, tooltip, isSelected);
+                _curseToggles[key] = toggle;
+
+                // Radio-поведение: клик — выбрать это, снять остальные
+                var curseKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedCurse = curseKey;
+                    foreach (var (k, btn) in _curseToggles)
+                        if (k != curseKey) btn.IsChecked = false;
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    // Если снимают текущий — разрешаем (без проклятия)
+                    if (_selectedCurse == curseKey) _selectedCurse = "";
+                };
+            }
+            SubContent.Children.Add(curseWrap);
+
+            _sliderDispMana = AddSlider("Мана Life Tap", _sliderDispMana?.Value ?? GetSavedDouble("slider_dispMana", 30), 0, 100, 5);
         }
     }
 
@@ -274,12 +342,12 @@ public partial class OverlayWindow : Window
         {
             AddLabel("Заклинания");
             var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
-            _chkMultiDot = AddSpellIcon(wrap, "vt.jpg", "Мультидот VT", _chkMultiDot?.IsChecked ?? true);
-            _chkMindSear = AddSpellIcon(wrap, "ms.jpg", "Иссушение разума", _chkMindSear?.IsChecked ?? true);
+            _chkMultiDot = AddSpellIcon(wrap, "vt.jpg", "Мультидот VT", _chkMultiDot?.IsChecked ?? GetSavedBool("chk_multiDot", true));
+            _chkMindSear = AddSpellIcon(wrap, "ms.jpg", "Иссушение разума", _chkMindSear?.IsChecked ?? GetSavedBool("chk_mindSear", true));
             SubContent.Children.Add(wrap);
 
-            _sliderMaxDots = AddSlider("Макс. целей VT", _sliderMaxDots?.Value ?? 4, 1, 10, 1);
-            _sliderMindSear = AddSlider("Целей Mind Sear", _sliderMindSear?.Value ?? 4, 2, 15, 1);
+            _sliderMaxDots = AddSlider("Макс. целей VT", _sliderMaxDots?.Value ?? GetSavedDouble("slider_maxDots", 4), 1, 10, 1);
+            _sliderMindSear = AddSlider("Целей Mind Sear", _sliderMindSear?.Value ?? GetSavedDouble("slider_mindSear", 4), 2, 15, 1);
         }
         else if (specKey == "Balance Druid")
         {
@@ -288,6 +356,10 @@ public partial class OverlayWindow : Window
             AddSpellIcon(wrap, "starfall.jpg", "Звездопад (авто)", true);
             AddSpellIcon(wrap, "hurricane.jpg", "Гроза (в разработке)", false);
             SubContent.Children.Add(wrap);
+        }
+        else if (specKey == "Demonology Lock")
+        {
+            AddLabel("AoE в разработке");
         }
         else
         {
@@ -334,15 +406,15 @@ public partial class OverlayWindow : Window
         btn.Click += (s, e) => OnSetFollowTarget?.Invoke();
         SubContent.Children.Add(btn);
 
-        _sliderDist = AddSlider("Дистанция", _sliderDist?.Value ?? 8, 0, 20, 1);
+        _sliderDist = AddSlider("Дистанция", _sliderDist?.Value ?? GetSavedDouble("slider_dist", 8), 0, 20, 1);
         _sliderDist.ValueChanged += (s, e) => OnFollowDistanceChanged?.Invoke((float)e.NewValue);
     }
 
     private void BuildTargetSubmenu()
     {
-        _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? false);
-        _chkAutoTarget = AddCheckBox("Автовыбор таргета", _chkAutoTarget?.IsChecked ?? false);
-        _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? 30, 10, 45, 5);
+        _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? GetSavedBool("chk_autoFace", false));
+        _chkAutoTarget = AddCheckBox("Автовыбор таргета", _chkAutoTarget?.IsChecked ?? GetSavedBool("chk_autoTarget", false));
+        _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? GetSavedDouble("slider_maxRange", 30), 10, 45, 5);
     }
 
     // --- Helpers ---
@@ -359,6 +431,8 @@ public partial class OverlayWindow : Window
             Tag = iconFile,
             Style = (Style)FindResource("SpellIcon"),
         };
+        toggle.Checked += (s, e) => SaveSettings();
+        toggle.Unchecked += (s, e) => SaveSettings();
 
         var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Icons", iconFile);
         if (File.Exists(iconPath))
@@ -411,7 +485,7 @@ public partial class OverlayWindow : Window
             IsSnapToTickEnabled = true, TickFrequency = tick,
             Width = 190,
         };
-        slider.ValueChanged += (s, e) => txtValue.Text = $"{(int)e.NewValue}";
+        slider.ValueChanged += (s, e) => { txtValue.Text = $"{(int)e.NewValue}"; SaveSettings(); };
         panel.Children.Add(slider);
 
         SubContent.Children.Add(panel);
@@ -428,6 +502,8 @@ public partial class OverlayWindow : Window
             FontSize = 11,
             Margin = new Thickness(0, 3, 0, 3),
         };
+        chk.Checked += (s, e) => SaveSettings();
+        chk.Unchecked += (s, e) => SaveSettings();
         SubContent.Children.Add(chk);
         return chk;
     }
@@ -448,10 +524,12 @@ public partial class OverlayWindow : Window
     private void BtnAoe_Click(object sender, RoutedEventArgs e)
     {
         BtnAoe.Content = BtnAoe.IsChecked == true ? "ON" : "OFF";
+        SaveSettings();
     }
     private void BtnBuffs_Click(object sender, RoutedEventArgs e)
     {
         BtnBuffs.Content = BtnBuffs.IsChecked == true ? "ON" : "OFF";
+        SaveSettings();
     }
 
     // --- Buff setup ---
@@ -467,7 +545,7 @@ public partial class OverlayWindow : Window
         {
             var toggle = new ToggleButton
             {
-                IsChecked = defaultOn,
+                IsChecked = GetSavedBool($"buff_{spell}", defaultOn),
                 ToolTip = label,
                 Tag = icon,
             };
@@ -491,4 +569,87 @@ public partial class OverlayWindow : Window
 
     public void UpdateInfo(string text) => TxtInfo.Text = text;
     public void UpdateStatus(string text) => TxtSpec.Text = text;
+
+    // --- Settings persistence ---
+
+    private bool GetSavedBool(string key, bool defaultVal) =>
+        _saved.TryGetValue(key, out var v) ? v.GetBoolean() : defaultVal;
+
+    private double GetSavedDouble(string key, double defaultVal) =>
+        _saved.TryGetValue(key, out var v) ? v.GetDouble() : defaultVal;
+
+    private string GetSavedString(string key, string defaultVal) =>
+        _saved.TryGetValue(key, out var v) ? v.GetString() ?? defaultVal : defaultVal;
+
+    public void LoadSettings()
+    {
+        try
+        {
+            if (!File.Exists(SettingsPath)) return;
+            var json = File.ReadAllText(SettingsPath);
+            _saved = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? new();
+
+            // Window position
+            if (_saved.ContainsKey("pos_x") && _saved.ContainsKey("pos_y"))
+            {
+                Left = GetSavedDouble("pos_x", Left);
+                Top = GetSavedDouble("pos_y", Top);
+            }
+
+            // Curse selection
+            _selectedCurse = GetSavedString("curse", "CoA");
+
+            // Main toggles (AoE, Buffs)
+            BtnAoe.IsChecked = GetSavedBool("aoe", false);
+            BtnAoe.Content = BtnAoe.IsChecked == true ? "ON" : "OFF";
+            BtnBuffs.IsChecked = GetSavedBool("buffs", false);
+            BtnBuffs.Content = BtnBuffs.IsChecked == true ? "ON" : "OFF";
+        }
+        catch { /* corrupted file — ignore, use defaults */ }
+    }
+
+    public void SaveSettings()
+    {
+        try
+        {
+            var data = new Dictionary<string, object>();
+
+            // Window position
+            data["pos_x"] = Left;
+            data["pos_y"] = Top;
+
+            // Curse
+            data["curse"] = _selectedCurse;
+
+            // Main toggles
+            data["aoe"] = BtnAoe.IsChecked == true;
+            data["buffs"] = BtnBuffs.IsChecked == true;
+
+            // Spell toggles
+            foreach (var (key, btn) in _spellToggles)
+                data[$"spell_{key}"] = btn.IsChecked == true;
+
+            // Buff toggles
+            foreach (var (spell, btn) in _buffToggles)
+                data[$"buff_{spell}"] = btn.IsChecked == true;
+
+            // Sliders
+            if (_sliderDispMana != null) data["slider_dispMana"] = _sliderDispMana.Value;
+            if (_sliderSFMana != null) data["slider_sfMana"] = _sliderSFMana.Value;
+            if (_sliderMaxDots != null) data["slider_maxDots"] = _sliderMaxDots.Value;
+            if (_sliderMindSear != null) data["slider_mindSear"] = _sliderMindSear.Value;
+            if (_sliderDist != null) data["slider_dist"] = _sliderDist.Value;
+            if (_sliderMaxRange != null) data["slider_maxRange"] = _sliderMaxRange.Value;
+
+            // Checkboxes
+            if (_chkAutoFace != null) data["chk_autoFace"] = _chkAutoFace.IsChecked == true;
+            if (_chkAutoTarget != null) data["chk_autoTarget"] = _chkAutoTarget.IsChecked == true;
+            if (_chkMultiDot != null) data["chk_multiDot"] = _chkMultiDot.IsChecked == true;
+            if (_chkMindSear != null) data["chk_mindSear"] = _chkMindSear.IsChecked == true;
+
+            var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(SettingsPath, json);
+        }
+        catch { /* ignore write errors */ }
+    }
 }
