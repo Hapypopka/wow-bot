@@ -40,7 +40,7 @@ public static class AllRotations
 
     private const string PreChecks = @"
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
-    local gS,gD = GetSpellCooldown(61304)
+    local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
     if not UnitExists('target') then return end
@@ -88,7 +88,7 @@ WB_Run()
 local function WB_Inst()
 " + Helpers + @"
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
-    local gS,gD = GetSpellCooldown(61304)
+    local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
     if not UnitExists('target') then return end

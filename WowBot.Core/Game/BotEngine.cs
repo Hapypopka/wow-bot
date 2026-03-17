@@ -1,3 +1,4 @@
+using System.Linq;
 using WowBot.Core.Game.Entities;
 
 namespace WowBot.Core.Game;
@@ -16,6 +17,7 @@ public class BotEngine : IDisposable
     private bool _followEnabled;
     private bool _rotationEnabled;
     private bool _autoFace = true;
+    private bool _autoSelectTarget;
     private ulong _followGuid;
     private float _followDistance = 8f;
 
@@ -28,6 +30,7 @@ public class BotEngine : IDisposable
 
     public bool FollowEnabled => _followEnabled;
     public bool AutoFace { get => _autoFace; set => _autoFace = value; }
+    public bool AutoSelectTarget { get => _autoSelectTarget; set => _autoSelectTarget = value; }
     public bool RotationEnabled => _rotationEnabled;
     public ulong FollowGuid => _followGuid;
     public float FollowDistance
@@ -42,6 +45,23 @@ public class BotEngine : IDisposable
     public int MaxDotTargets { get => _maxDotTargets; set => _maxDotTargets = value; }
     public bool UseMindSear { get => _useMindSear; set => _useMindSear = value; }
     public int MindSearTargets { get => _mindSearTargets; set => _mindSearTargets = value; }
+
+    // Buff settings
+    private bool _buffsEnabled;
+    private List<string> _enabledBuffs = new();
+    private int _buffCheckTick;
+
+    public bool BuffsEnabled
+    {
+        get => _buffsEnabled;
+        set
+        {
+            _buffsEnabled = value;
+            if (value) EnsureRunning();
+            else if (!_followEnabled && !_rotationEnabled) StopTimer();
+        }
+    }
+    public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
 
     // Mana thresholds (из оверлея, в процентах 0-100)
     public int DispManaThreshold { get; set; } = 15;
@@ -88,7 +108,7 @@ public class BotEngine : IDisposable
     {
         _followEnabled = !_followEnabled;
         if (_followEnabled) EnsureRunning();
-        else if (!_rotationEnabled) StopTimer();
+        else if (!_rotationEnabled && !_buffsEnabled) StopTimer();
         if (!_followEnabled)
             _hook.ExecuteLua("MoveForwardStop()", 100);
         OnStatusChanged?.Invoke(GetStatusText());
@@ -98,7 +118,7 @@ public class BotEngine : IDisposable
     {
         _rotationEnabled = !_rotationEnabled;
         if (_rotationEnabled) EnsureRunning();
-        else if (!_followEnabled) StopTimer();
+        else if (!_followEnabled && !_buffsEnabled) StopTimer();
         OnStatusChanged?.Invoke(GetStatusText());
     }
 
@@ -135,7 +155,7 @@ public class BotEngine : IDisposable
 
     private void Tick(object? state)
     {
-        if (!_followEnabled && !_rotationEnabled) return;
+        if (!_followEnabled && !_rotationEnabled && !_buffsEnabled) return;
         if (!_hook.IsHooked) return;
 
         try
@@ -143,6 +163,27 @@ public class BotEngine : IDisposable
             _objectManager.Update();
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
+
+            // === БАФФЫ (каждые ~3 сек, вне боя) ===
+            if (_buffsEnabled && _enabledBuffs.Count > 0)
+            {
+                _buffCheckTick++;
+                if (_buffCheckTick >= 20)
+                {
+                    _buffCheckTick = 0;
+                    if (!player.IsCasting)
+                    {
+                        string buffScript = BuildBuffScript();
+                        if (!string.IsNullOrEmpty(buffScript))
+                        {
+                            _hook.ExecuteLua(buffScript, 500);
+                            return; // Не выполняем ротацию на этом тике
+                        }
+                    }
+                }
+            }
+
+            if (!_followEnabled && !_rotationEnabled) return;
 
             var target = _objectManager.GetTarget();
             bool hasTarget = target != null && target.IsAlive;
@@ -157,6 +198,13 @@ public class BotEngine : IDisposable
                 if (needsToMove)
                     _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
                 // Не вызываем Stop — CTM сам остановится когда дойдёт
+                return;
+            }
+
+            // === Автовыбор таргета ===
+            if (!hasTarget && _autoSelectTarget)
+            {
+                _hook.ExecuteLua("TargetNearestEnemy()", 200);
                 return;
             }
 
@@ -259,7 +307,7 @@ public class BotEngine : IDisposable
         return @"
 local function WB_AoE()
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
-    local gS,gD = GetSpellCooldown(61304)
+    local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
     if not UnitExists('target') or UnitIsDeadOrGhost('target') then return end
@@ -329,6 +377,92 @@ local function WB_AoE()
 end
 WB_AoE()
 ";
+    }
+
+    // --- Buff system ---
+
+    // Баффы которые кастуются на группу/рейд (через TargetUnit)
+    private static readonly HashSet<string> RaidBuffs = new()
+    {
+        "Молитва стойкости", "Молитва духа", "Молитва защиты от темной магии",
+        "Дар дикой природы", "Чародейская гениальность",
+    };
+
+    // Баффы-аналоги: рейдовый бафф покрывает одиночный (проверяем оба)
+    private static readonly Dictionary<string, string> BuffAliases = new()
+    {
+        { "Молитва стойкости", "Слово силы: Стойкость" },
+        { "Молитва духа", "Божественный дух" },
+        { "Молитва защиты от темной магии", "Защита от темной магии" },
+        { "Дар дикой природы", "Знак дикой природы" },
+        { "Чародейская гениальность", "Чародейский интеллект" },
+    };
+
+    // Реагенты для рейд-баффов: prayer → (reagent, fallback single-target spell)
+    private static readonly Dictionary<string, (string reagent, string fallback)> BuffReagents = new()
+    {
+        { "Молитва стойкости", ("Свеча благочестия", "Слово силы: Стойкость") },
+        { "Молитва духа", ("Свеча благочестия", "Божественный дух") },
+        { "Молитва защиты от темной магии", ("Свеча благочестия", "Защита от темной магии") },
+        { "Дар дикой природы", ("Дикий шиповник", "Знак дикой природы") },
+        { "Чародейская гениальность", ("Чародейский порошок", "Чародейский интеллект") },
+    };
+
+    private string BuildBuffScript()
+    {
+        if (_enabledBuffs.Count == 0) return "";
+
+        var selfBuffs = new List<string>();
+        var raidBuffs = new List<string>();
+
+        foreach (var buff in _enabledBuffs)
+        {
+            if (RaidBuffs.Contains(buff))
+                raidBuffs.Add(buff);
+            else
+                selfBuffs.Add(buff);
+        }
+
+        // Всё в одну строку — многострочный Lua через AppendLine триггерит taint WeakAuras
+        var sb = new System.Text.StringBuilder();
+        sb.Append("local function WB_Buff() ");
+        sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
+        sb.Append("if UnitIsDeadOrGhost('player') then return end ");
+        sb.Append("if UnitAffectingCombat('player') then return end ");
+        sb.Append("local function HasB(unit,name) for i=1,40 do local n=UnitBuff(unit,i) if not n then return false end if n==name then return true end end return false end ");
+
+        // Self-баффы
+        foreach (var buff in selfBuffs)
+        {
+            var s = buff.Replace("'", "\\'");
+            sb.Append($"if not HasB('player','{s}') then CastSpellByName('{s}') return end ");
+        }
+
+        // Рейд-баффы: если есть реагент → Prayer, иначе → одиночная версия
+        foreach (var buff in raidBuffs)
+        {
+            var s = buff.Replace("'", "\\'");
+            string aliasP = "";
+            if (BuffAliases.TryGetValue(buff, out var alias))
+            {
+                var a = alias.Replace("'", "\\'");
+                aliasP = $" and not HasB('player','{a}')";
+            }
+
+            if (BuffReagents.TryGetValue(buff, out var reagentInfo))
+            {
+                var r = reagentInfo.reagent.Replace("'", "\\'");
+                var fb = reagentInfo.fallback.Replace("'", "\\'");
+                sb.Append($"if not HasB('player','{s}'){aliasP} then if GetItemCount('{r}')>0 then CastSpellByName('{s}') else CastSpellByName('{fb}') end return end ");
+            }
+            else
+            {
+                sb.Append($"if not HasB('player','{s}'){aliasP} then CastSpellByName('{s}') return end ");
+            }
+        }
+
+        sb.Append("end WB_Buff()");
+        return sb.ToString();
     }
 
     public void Dispose()

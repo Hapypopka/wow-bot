@@ -92,13 +92,17 @@ public partial class MainWindow : Window
 
             // Автодетект класса/спека
             string specName = "Unknown";
+            string playerClass = "";
             if (_luaReader.IsInitialized)
             {
                 // Простой Lua — без анонимных функций
                 string lua = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) EditMacro(1,'WB',1,c..'|'..t1..'|'..t2..'|'..t3)";
                 string? classInfo = _luaReader.Execute(lua);
                 if (classInfo != null && classInfo.Contains("|"))
+                {
                     specName = DetectSpec(classInfo);
+                    playerClass = classInfo.Split('|')[0];
+                }
             }
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
 
@@ -139,6 +143,7 @@ public partial class MainWindow : Window
                     _botEngine.FollowDistance = dist;
             };
             _overlay.UpdateStatus(specName);
+            _overlay.SetPlayerClass(playerClass);
             _overlay.Show();
         }
         catch (Exception ex)
@@ -346,6 +351,7 @@ public partial class MainWindow : Window
             if (_botEngine != null)
             {
                 _botEngine.AutoFace = _overlay.AutoFace;
+                _botEngine.AutoSelectTarget = _overlay.AutoSelectTarget;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
                 _botEngine.UseMultiDot = _overlay.UseMultiDot;
                 _botEngine.MaxDotTargets = _overlay.MaxDotTargets;
@@ -353,6 +359,8 @@ public partial class MainWindow : Window
                 _botEngine.MindSearTargets = _overlay.MindSearTargets;
                 _botEngine.DispManaThreshold = _overlay.DispManaThreshold;
                 _botEngine.SFManaThreshold = _overlay.SFManaThreshold;
+                _botEngine.BuffsEnabled = _overlay.BuffsEnabled;
+                _botEngine.EnabledBuffs = _overlay.GetEnabledBuffs();
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;
