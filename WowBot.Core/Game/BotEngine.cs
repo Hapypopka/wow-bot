@@ -65,6 +65,7 @@ public class BotEngine : IDisposable
     }
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
     public string SpellFlagsLua { get; set; } = "";
+    public string SelectedSeal { get; set; } = "SoV";
 
     // Mana thresholds (из оверлея, в процентах 0-100)
     public int DispManaThreshold { get; set; } = 15;
@@ -120,6 +121,7 @@ public class BotEngine : IDisposable
     public void ToggleRotation()
     {
         _rotationEnabled = !_rotationEnabled;
+        Logger.Info($"ToggleRotation: {_rotationEnabled}, follow={_followEnabled}, buffs={_buffsEnabled}");
         if (_rotationEnabled) EnsureRunning();
         else if (!_followEnabled && !_buffsEnabled) StopTimer();
         OnStatusChanged?.Invoke(GetStatusText());
@@ -155,6 +157,7 @@ public class BotEngine : IDisposable
     }
 
     // --- Main tick ---
+    private int _logTick;
 
     private void Tick(object? state)
     {
@@ -166,6 +169,10 @@ public class BotEngine : IDisposable
             _objectManager.Update();
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
+
+            // Лог каждые ~5 сек (33 тиков по 150мс)
+            _logTick++;
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ (каждые ~3 сек, вне боя) ===
             if (_buffsEnabled && _enabledBuffs.Count > 0)
@@ -179,6 +186,7 @@ public class BotEngine : IDisposable
                         string buffScript = BuildBuffScript();
                         if (!string.IsNullOrEmpty(buffScript))
                         {
+                            Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal}");
                             _hook.ExecuteLua(buffScript, 500);
                             return; // Не выполняем ротацию на этом тике
                         }
@@ -219,6 +227,7 @@ public class BotEngine : IDisposable
                 {
                     if (_autoFace) _navigation.FaceUnit(player, target!);
                     string script = SpellFlagsLua + GetRotationScript(player);
+                    if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length}");
                     _hook.ExecuteLua(script, 500);
                 }
                 return;
@@ -254,7 +263,7 @@ public class BotEngine : IDisposable
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Logger.Error("Tick error", ex); }
     }
 
     // --- AoE Multi-dot ---
@@ -436,6 +445,23 @@ WB_AoE()
         sb.Append("if UnitAffectingCombat('player') then return end ");
         sb.Append("local function HasB(unit,name) for i=1,40 do local n=UnitBuff(unit,i) if not n then return false end if n==name then return true end end return false end ");
 
+        // Печать паладина (проверяем наличие любой печати, кастуем выбранную)
+        if (!string.IsNullOrEmpty(SelectedSeal))
+        {
+            string sealSpell = SelectedSeal switch
+            {
+                "SoV" => "Печать мщения",
+                "SoC" => "Печать повиновения",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(sealSpell))
+            {
+                var ss = sealSpell.Replace("'", "\\'");
+                sb.Append($"local hasSeal=false for i=1,40 do local n=UnitBuff('player',i) if not n then break end if n:find('Печать') then hasSeal=true break end end ");
+                sb.Append($"if not hasSeal then CastSpellByName('{ss}') return end ");
+            }
+        }
+
         // Камень чар (проверка чары на оружии, создание + применение)
         if (selfBuffs.Remove("WB_SPELLSTONE"))
         {
@@ -444,6 +470,7 @@ WB_AoE()
             sb.Append("if GetItemCount('Могучий камень чар')>0 then UseItemByName('Могучий камень чар') PickupInventoryItem(16) return end ");
             sb.Append("CastSpellByName('Создание камня чар') return end ");
         }
+
 
         // Self-баффы
         foreach (var buff in selfBuffs)

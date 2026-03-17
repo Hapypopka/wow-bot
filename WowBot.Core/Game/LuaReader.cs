@@ -38,8 +38,9 @@ public class LuaReader
 
         byte[] needleA = System.Text.Encoding.UTF8.GetBytes(markerA);
         var candidates = ScanForAllStrings(needleA);
+        Logger.Info($"LuaReader: markerA='{markerA}' candidates={candidates.Count}");
 
-        if (candidates.Count == 0) return false;
+        if (candidates.Count == 0) { Logger.Error("LuaReader: no candidates for markerA"); return false; }
 
         // Проход 2: пишем маркер B
         string markerB = "WBMB_" + (Environment.TickCount % 100000);
@@ -57,10 +58,12 @@ public class LuaReader
             {
                 _macroAddr = addr;
                 _initialized = true;
+                Logger.Info($"LuaReader: found macro at 0x{addr:X8}");
                 return true;
             }
         }
 
+        Logger.Error($"LuaReader: markerB not found in {candidates.Count} candidates");
         return false;
     }
 

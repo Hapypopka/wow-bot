@@ -23,7 +23,7 @@ public class EndSceneHook : IDisposable
     private bool _isHooked;
 
     private const int CodecaveSize = 512;  // увеличил под два пути
-    private const int LuaBufferSize = 8192; // увеличил для больших скриптов
+    private const int LuaBufferSize = 16384; // увеличил — ротации всех классов ~8KB+
     private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 128;
 
     public bool IsHooked => _isHooked;
@@ -35,13 +35,61 @@ public class EndSceneHook : IDisposable
 
     public uint FindEndScene()
     {
+        // Способ 1: стандартная цепочка указателей WoW
         uint pDevice1 = _memory.ReadUInt32(Offsets.DevicePtr1);
-        if (pDevice1 == 0) return 0;
-        uint pDevice2 = _memory.ReadUInt32(pDevice1 + Offsets.DevicePtr2Offset);
-        if (pDevice2 == 0) return 0;
+        Logger.Info($"FindEndScene: DevicePtr1 [0x{Offsets.DevicePtr1:X8}] = 0x{pDevice1:X8}");
+        if (pDevice1 != 0)
+        {
+            uint pDevice2 = _memory.ReadUInt32(pDevice1 + Offsets.DevicePtr2Offset);
+            Logger.Info($"FindEndScene: DevicePtr2 [+0x{Offsets.DevicePtr2Offset:X}] = 0x{pDevice2:X8}");
+            if (pDevice2 != 0)
+            {
+                uint vTable = _memory.ReadUInt32(pDevice2);
+                Logger.Info($"FindEndScene: VTable = 0x{vTable:X8}");
+                if (vTable != 0)
+                {
+                    uint es = _memory.ReadUInt32(vTable + Offsets.EndSceneOffset);
+                    Logger.Info($"FindEndScene: EndScene [vtable+0x{Offsets.EndSceneOffset:X}] = 0x{es:X8}");
+                    if (es != 0)
+                    {
+                        byte[] hdr = _memory.ReadBytes(es, 16);
+                        Logger.Info($"FindEndScene: first bytes = {FormatBytes(hdr)}");
+                        return es;
+                    }
+                }
+            }
+            Logger.Warn("FindEndScene: default pointer chain broken");
+        }
+
+        // Способ 2: универсальный — через dummy D3D9 device + поиск модуля
+        Logger.Info("Trying D3D9 dummy device method...");
+        if (_memory.Process != null)
+        {
+            uint d3dResult = D3D9Helper.FindEndSceneInProcess(_memory.Process.Id);
+            if (d3dResult != 0)
+            {
+                byte[] hdr = _memory.ReadBytes(d3dResult, 16);
+                Logger.Info($"FindEndScene: D3D9Helper result=0x{d3dResult:X8}, bytes={FormatBytes(hdr)}");
+                return d3dResult;
+            }
+        }
+
+        Logger.Error("EndScene not found by any method");
+        return 0;
+    }
+
+    private uint TryEndSceneAtOffset(uint pDevice1, uint offset)
+    {
+        uint pDevice2 = _memory.ReadUInt32(pDevice1 + offset);
+        if (pDevice2 == 0 || pDevice2 < 0x10000 || pDevice2 > 0x7FFFFFFF) return 0;
         uint vTable = _memory.ReadUInt32(pDevice2);
-        if (vTable == 0) return 0;
-        return _memory.ReadUInt32(vTable + Offsets.EndSceneOffset);
+        if (vTable == 0 || vTable < 0x10000 || vTable > 0x7FFFFFFF) return 0;
+        uint endScene = _memory.ReadUInt32(vTable + Offsets.EndSceneOffset);
+        if (endScene == 0 || endScene < 0x10000 || endScene > 0x7FFFFFFF) return 0;
+        byte[] header = _memory.ReadBytes(endScene, 4);
+        if (header[0] == 0x55 || header[0] == 0x8B || header[0] == 0x6A || header[0] == 0xE9)
+            return endScene;
+        return 0;
     }
 
     public string GetDiagnostics()
@@ -50,8 +98,10 @@ public class EndSceneHook : IDisposable
         uint pDevice1 = _memory.ReadUInt32(Offsets.DevicePtr1);
         sb.AppendLine($"DevicePtr1 [0x{Offsets.DevicePtr1:X8}] = 0x{pDevice1:X8}");
         if (pDevice1 == 0) { sb.AppendLine("ERROR: DevicePtr1 is NULL"); return sb.ToString(); }
+
         uint pDevice2 = _memory.ReadUInt32(pDevice1 + Offsets.DevicePtr2Offset);
-        sb.AppendLine($"DevicePtr2 = 0x{pDevice2:X8}");
+        sb.AppendLine($"DevicePtr2 [+0x{Offsets.DevicePtr2Offset:X}] = 0x{pDevice2:X8}");
+
         if (pDevice2 == 0) { sb.AppendLine("ERROR: DevicePtr2 is NULL"); return sb.ToString(); }
         uint vTable = _memory.ReadUInt32(pDevice2);
         sb.AppendLine($"VTable = 0x{vTable:X8}");
@@ -140,7 +190,25 @@ public class EndSceneHook : IDisposable
         _endSceneAddr = FindEndScene();
         if (_endSceneAddr == 0)
             throw new Exception("EndScene not found!");
+        Logger.Info($"Installing hook: EndScene=0x{_endSceneAddr:X8}");
 
+        InstallCore();
+
+        // Верификация: проверяем что хук работает
+        _memory.WriteString(_luaStringAddr, "local x=1");
+        _memory.WriteUInt32(_flagAddr, 1);
+        if (!WaitForCompletion(1000))
+        {
+            Logger.Warn("Hook verify failed — unhooking");
+            Uninstall();
+            throw new Exception("EndScene hook installed but not responding");
+        }
+        Logger.Info("Hook verified OK");
+        return true;
+    }
+
+    private void InstallCore()
+    {
         byte[] headerBytes = _memory.ReadBytes(_endSceneAddr, 16);
         _stolenByteCount = CalculateStolenBytes(headerBytes);
         if (_stolenByteCount < 5)
@@ -176,7 +244,6 @@ public class EndSceneHook : IDisposable
         _memory.WriteBytes(_endSceneAddr, jmpPatch);
 
         _isHooked = true;
-        return true;
     }
 
     private byte[] BuildCodecave()
@@ -341,6 +408,7 @@ public class EndSceneHook : IDisposable
             if (flag == 0) return false;
             Thread.Sleep(1);
         }
+        Logger.Warn($"ExecuteLua timeout ({timeoutMs}ms)");
         _memory.WriteUInt32(_flagAddr, 0);
         return false;
     }

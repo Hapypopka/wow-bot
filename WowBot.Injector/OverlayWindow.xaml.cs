@@ -52,6 +52,15 @@ public partial class OverlayWindow : Window
         ("CoE", "curse_elements.jpg", "Проклятие стихий"),
     };
 
+    // Seal selection (radio-style, only one at a time)
+    private string _selectedSeal = "SoV"; // "SoV", "SoC", or "" (none)
+    private readonly Dictionary<string, ToggleButton> _sealToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] SealOptions =
+    {
+        ("SoV", "seal_vengeance.jpg", "Печать мщения"),
+        ("SoC", "seal_command.jpg", "Печать повиновения"),
+    };
+
     // Mana sliders
     private Slider _sliderDispMana = null!, _sliderSFMana = null!;
 
@@ -76,6 +85,9 @@ public partial class OverlayWindow : Window
         // Curse flags: CoA/CoD/CoE — только один true
         foreach (var (key, _, _) in CurseOptions)
             parts.Add($"{key}={(_selectedCurse == key ? "true" : "false")}");
+        // Seal flags: SoV/SoC — только один true
+        foreach (var (key, _, _) in SealOptions)
+            parts.Add($"{key}={(_selectedSeal == key ? "true" : "false")}");
         return "WB_S={" + string.Join(",", parts) + "} ";
     }
 
@@ -87,6 +99,7 @@ public partial class OverlayWindow : Window
     public bool UseMF => IsSpellEnabled("MF");
     public bool UseSF => IsSpellEnabled("SF");
     public bool UseDisp => IsSpellEnabled("Disp");
+    public string SelectedSeal => _selectedSeal;
     public bool AutoFace => _chkAutoFace?.IsChecked == true;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
     public int MaxTargetRange => (int)(_sliderMaxRange?.Value ?? 30);
@@ -128,6 +141,16 @@ public partial class OverlayWindow : Window
             ("ShadowBolt", "shadow_bolt.jpg", "Стрела Тьмы", true),
             ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
             ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
+        },
+        ["Ret Paladin"] = new[]
+        {
+            ("Judge", "judgement.jpg", "Правосудие", true),
+            ("CS", "crusader_strike.jpg", "Удар воина Света", true),
+            ("DS", "divine_storm.jpg", "Божественная буря", true),
+            ("Cons", "consecration.jpg", "Освящение", true),
+            ("Exo", "exorcism.jpg", "Экзорцизм", true),
+            ("HoW", "hammer_wrath.jpg", "Молот гнева", true),
+            ("SS", "sacred_shield.jpg", "Священный щит", true),
         },
     };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
@@ -188,6 +211,11 @@ public partial class OverlayWindow : Window
         {
             ("Щит молний", "mb.jpg", "Щит молний", true),
             ("Щит воды", "shadow_prot.jpg", "Щит воды", false),
+        },
+        ["PALADIN"] = new[]
+        {
+            ("Аура воздаяния", "ret_aura.jpg", "Аура воздаяния", true),
+            ("Благословение могущества", "blessing_might.jpg", "Благословение могущества", true),
         },
     };
 
@@ -387,6 +415,32 @@ public partial class OverlayWindow : Window
             _buffToggles[spell] = newToggle;
         }
         SubContent.Children.Add(wrap);
+
+        // Выбор печати для паладина (радио)
+        if (_playerClass == "PALADIN")
+        {
+            AddLabel("Выбор печати");
+            var sealWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            foreach (var (key, icon, tooltip) in SealOptions)
+            {
+                bool isSelected = _selectedSeal == key;
+                var toggle = AddSpellIcon(sealWrap, icon, tooltip, isSelected);
+                _sealToggles[key] = toggle;
+
+                var sealKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedSeal = sealKey;
+                    foreach (var (k, btn) in _sealToggles)
+                        if (k != sealKey) btn.IsChecked = false;
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedSeal == sealKey) _selectedSeal = "";
+                };
+            }
+            SubContent.Children.Add(sealWrap);
+        }
     }
 
     private void BuildFollowSubmenu()
@@ -596,8 +650,9 @@ public partial class OverlayWindow : Window
                 Top = GetSavedDouble("pos_y", Top);
             }
 
-            // Curse selection
+            // Curse/Seal selection
             _selectedCurse = GetSavedString("curse", "CoA");
+            _selectedSeal = GetSavedString("seal", "SoV");
 
             // Main toggles (AoE, Buffs)
             BtnAoe.IsChecked = GetSavedBool("aoe", false);
@@ -620,6 +675,7 @@ public partial class OverlayWindow : Window
 
             // Curse
             data["curse"] = _selectedCurse;
+            data["seal"] = _selectedSeal;
 
             // Main toggles
             data["aoe"] = BtnAoe.IsChecked == true;

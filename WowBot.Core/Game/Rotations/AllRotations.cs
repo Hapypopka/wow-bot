@@ -111,6 +111,25 @@ local function WB_Run()
         if WB_S.LifeTap~=false and MP() < 0.3 then CastSpellByName('Жизнеотвод') return end
         -- Filler: Shadow Bolt
         if WB_S.ShadowBolt~=false then CastSpellByName('Стрела Тьмы') end
+
+    elseif class == 'PALADIN' and t3 >= t1 and t3 >= t2 then
+        if not WB_S then WB_S={} end
+        -- Рет Палладин FCFS
+        -- Молот гнева (execute < 20%)
+        local thp = UnitHealth('target')/UnitHealthMax('target')
+        if WB_S.HoW~=false and thp < 0.2 and IsReady('Молот гнева') then CastSpellByName('Молот гнева') return end
+        -- Правосудие (всегда на КД)
+        if WB_S.Judge~=false and IsReady('Правосудие мудрости') then CastSpellByName('Правосудие мудрости') return end
+        -- Божественная буря
+        if WB_S.DS~=false and IsReady('Божественная буря') then CastSpellByName('Божественная буря') return end
+        -- Удар воина Света
+        if WB_S.CS~=false and IsReady('Удар воина Света') then CastSpellByName('Удар воина Света') return end
+        -- Освящение
+        if WB_S.Cons~=false and IsReady('Освящение') then CastSpellByName('Освящение') return end
+        -- Экзорцизм (только с проком Искусство войны — инстант)
+        if WB_S.Exo~=false and HasBuff('Искусство войны') and IsReady('Экзорцизм') then CastSpellByName('Экзорцизм') return end
+        -- Священный щит (поддерживать на себе)
+        if WB_S.SS~=false and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
     end
 end
 WB_Run()
@@ -139,6 +158,11 @@ local function WB_Inst()
         if not HasDebuff('target','Слово Тьмы: Боль') then CastSpellByName('Слово Тьмы: Боль') return end
     elseif class == 'WARLOCK' then
         if not HasDebuff('target','Порча') then CastSpellByName('Порча') return end
+    elseif class == 'PALADIN' then
+        if IsReady('Молот гнева') then CastSpellByName('Молот гнева') return end
+        if IsReady('Правосудие Мудрости') then CastSpellByName('Правосудие Мудрости') return end
+        if IsReady('Божественная буря') then CastSpellByName('Божественная буря') return end
+        if IsReady('Удар воина Света') then CastSpellByName('Удар воина Света') return end
     end
 end
 WB_Inst()

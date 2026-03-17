@@ -53,6 +53,8 @@ public partial class MainWindow : Window
         }
 
         var wow = wowProcesses[0];
+        WowBot.Core.Logger.Init();
+        WowBot.Core.Logger.Info($"Attaching to WoW PID={wow.Id}");
 
         // Используем PROCESS_ALL_ACCESS для записи в память (хук)
         if (!_memory.AttachForInject(wow))
@@ -75,23 +77,20 @@ public partial class MainWindow : Window
         BtnDetach.IsEnabled = true;
         BtnDump.IsEnabled = true;
 
-        // Сначала диагностика EndScene
         _endSceneHook = new EndSceneHook(_memory);
-        string diag = _endSceneHook.GetDiagnostics();
 
-        // Сохраняем диагностику в файл
-        var diagPath = System.IO.Path.Combine(
-            System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
-            "endscene_diag.txt");
-        System.IO.File.WriteAllText(diagPath, diag);
-
-        // Показываем в списке объектов
-        LstObjects.ItemsSource = diag.Split('\n').ToList();
-
-        // Пробуем установить хук
+        // Пробуем установить хук (FindEndScene с автосканом оффсетов)
         try
         {
             _endSceneHook.Install();
+
+            // Диагностика после Install (чтобы показать найденный оффсет)
+            string diag = _endSceneHook.GetDiagnostics();
+            var diagPath = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
+                "endscene_diag.txt");
+            System.IO.File.WriteAllText(diagPath, diag);
+            LstObjects.ItemsSource = diag.Split('\n').ToList();
             TxtStatus.Text = $"Attached + Hooked (PID: {wow.Id})";
             TxtLuaStatus.Text = "Hook active. Enter Lua and press Run or Enter.";
             BtnExecuteLua.IsEnabled = true;
@@ -115,6 +114,7 @@ public partial class MainWindow : Window
                 }
             }
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
+            WowBot.Core.Logger.Info($"Hooked OK | class={playerClass} spec={specName}");
 
             // Инициализируем BotEngine
             var navigation = new Navigation(_memory, _endSceneHook);
@@ -159,9 +159,18 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            // Диагностика при ошибке
+            string diag = _endSceneHook.GetDiagnostics();
+            var diagPath = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
+                "endscene_diag.txt");
+            System.IO.File.WriteAllText(diagPath, diag);
+            LstObjects.ItemsSource = diag.Split('\n').ToList();
+
+            WowBot.Core.Logger.Error("Hook failed", ex);
             TxtStatus.Text = $"Attached (PID: {wow.Id}) — hook failed: {ex.Message}";
             TxtLuaStatus.Text = ex.Message.Contains("EndScene")
-                ? "Переключите WoW в оконный режим (Alt+Enter) и нажмите Attach снова."
+                ? "Автоскан оффсетов не нашёл EndScene. См. endscene_diag.txt"
                 : $"Hook error: {ex.Message}";
         }
 
@@ -384,6 +393,7 @@ public partial class MainWindow : Window
                 _botEngine.BuffsEnabled = _overlay.BuffsEnabled;
                 _botEngine.SpellFlagsLua = _overlay.GetSpellFlagsLua();
                 _botEngine.EnabledBuffs = _overlay.GetEnabledBuffs();
+                _botEngine.SelectedSeal = _overlay.SelectedSeal;
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;
@@ -578,6 +588,8 @@ public partial class MainWindow : Window
                       t2 >= t1 && t2 >= t3 ? "Fire Mage" : "Frost Mage",
             "SHAMAN" => t1 >= t2 && t1 >= t3 ? "Elemental Shaman" :
                         t2 >= t1 && t2 >= t3 ? "Enhancement Shaman" : "Resto Shaman",
+            "PALADIN" => t1 >= t2 && t1 >= t3 ? "Holy Paladin" :
+                         t2 >= t1 && t2 >= t3 ? "Prot Paladin" : "Ret Paladin",
             _ => $"{cls} ({t1}/{t2}/{t3})"
         };
     }
