@@ -291,7 +291,14 @@ end
                 _followAttack = false;
                 _wantRotation = false;
                 _botEngine?.StopFollow();
+                // Множественные стопы — CTM + Lua + повторный стоп через 200мс
                 _ctm.Stop();
+                _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop()", 100);
+                Task.Run(async () => {
+                    await Task.Delay(200);
+                    _ctm.Stop();
+                    _hook.ExecuteLua("MoveForwardStop()", 100);
+                });
                 OnCommandReceived?.Invoke(cmd, "");
                 Logger.Info("Hivemind: SLAVE stop");
                 break;
