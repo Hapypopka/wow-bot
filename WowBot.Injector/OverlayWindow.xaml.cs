@@ -37,13 +37,48 @@ public partial class OverlayWindow : Window
     // Rotation spell toggles (by spell key)
     private readonly Dictionary<string, ToggleButton> _spellToggles = new();
     private string _playerClass = "";
+    private string _playerSpec = "";
+
+    private static readonly Dictionary<string, string> SpecDisplayNames = new()
+    {
+        ["Arms Warrior"] = "Армс Воин",
+        ["Fury Warrior"] = "Фури Воин",
+        ["Prot Warrior"] = "Прот Воин",
+        ["Holy Paladin"] = "Холи Паладин",
+        ["Prot Paladin"] = "Прот Паладин",
+        ["Ret Paladin"] = "Ретри Паладин",
+        ["BM Hunter"] = "БМ Охотник",
+        ["MM Hunter"] = "ММ Охотник",
+        ["Survival Hunter"] = "Сурв Охотник",
+        ["Assassination Rogue"] = "Мутилейт Разбойник",
+        ["Combat Rogue"] = "Комбат Разбойник",
+        ["Subtlety Rogue"] = "Сабтл Разбойник",
+        ["Disc Priest"] = "Диск Прист",
+        ["Holy Priest"] = "Холи Прист",
+        ["Shadow Priest"] = "Шадоу Прист",
+        ["Blood DK"] = "Блад ДК",
+        ["Frost DK"] = "Фрост ДК",
+        ["Unholy DK"] = "Анхоли ДК",
+        ["Elemental Shaman"] = "Элем Шаман",
+        ["Enhancement Shaman"] = "Энханс Шаман",
+        ["Resto Shaman"] = "Ресто Шаман",
+        ["Arcane Mage"] = "Аркан Маг",
+        ["Fire Mage"] = "Фаер Маг",
+        ["Frost Mage"] = "Фрост Маг",
+        ["Affliction Lock"] = "Аффли Варлок",
+        ["Demonology Lock"] = "Демо Варлок",
+        ["Destruction Lock"] = "Дестро Варлок",
+        ["Balance Druid"] = "Баланс Друид",
+        ["Feral Druid"] = "Ферал Друид",
+        ["Resto Druid"] = "Ресто Друид",
+    };
 
     // AoE toggles
     private ToggleButton _chkMultiDot = null!, _chkMindSear = null!;
     private Slider _sliderMaxDots = null!, _sliderMindSear = null!;
 
     // Curse selection (radio-style, only one at a time)
-    private string _selectedCurse = "CoA"; // "CoA", "CoD", "CoE", or "" (none)
+    private string _selectedCurse = ""; // "CoA", "CoD", "CoE", or "" (none)
     private readonly Dictionary<string, ToggleButton> _curseToggles = new();
     private static readonly (string key, string icon, string tooltip)[] CurseOptions =
     {
@@ -53,12 +88,51 @@ public partial class OverlayWindow : Window
     };
 
     // Seal selection (radio-style, only one at a time)
-    private string _selectedSeal = "SoV"; // "SoV", "SoC", or "" (none)
+    private string _selectedSeal = ""; // Только для PALADIN
     private readonly Dictionary<string, ToggleButton> _sealToggles = new();
-    private static readonly (string key, string icon, string tooltip)[] SealOptions =
+    private static readonly (string key, string icon, string tooltip)[] SealOptionsRet =
     {
         ("SoV", "seal_vengeance.jpg", "Печать мщения"),
         ("SoC", "seal_command.jpg", "Печать повиновения"),
+    };
+    private static readonly (string key, string icon, string tooltip)[] SealOptionsHoly =
+    {
+        ("SoW", "seal_wisdom.jpg", "Печать мудрости"),
+        ("SoL", "seal_light.jpg", "Печать Света"),
+    };
+    private (string key, string icon, string tooltip)[] SealOptions =>
+        _playerSpec == "Holy Paladin" ? SealOptionsHoly : SealOptionsRet;
+
+    // Judgement selection for Holy Paladin (radio-style)
+    private string _selectedJudgement = ""; // Только для Holy Paladin
+    private readonly Dictionary<string, ToggleButton> _judgementToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] JudgementOptionsHoly =
+    {
+        ("JoW", "judgement_wisdom.jpg", "Правосудие мудрости"),
+        ("JoL", "judgement_light.jpg", "Правосудие света"),
+    };
+
+    // Blessing selection (radio-style, only one at a time)
+    private string _selectedBlessing = ""; // Только для PALADIN
+    private readonly Dictionary<string, ToggleButton> _blessingToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] BlessingOptions =
+    {
+        ("BoM", "blessing_might.jpg", "Благословение могущества"),
+        ("BoK", "blessing_kings.jpg", "Благословение королей"),
+        ("BoW", "blessing_wisdom.jpg", "Благословение мудрости"),
+    };
+
+    // Aura selection for Paladin (radio-style)
+    private string _selectedAura = ""; // Только для PALADIN
+    private readonly Dictionary<string, ToggleButton> _auraToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] AuraOptions =
+    {
+        ("AuRet", "aura_retribution.jpg", "Аура воздаяния"),
+        ("AuDev", "aura_devotion.jpg", "Аура воина Света"),
+        ("AuFrost", "aura_frost.jpg", "Аура защиты от магии льда"),
+        ("AuFire", "aura_fire.jpg", "Аура защиты от огня"),
+        ("AuShadow", "aura_shadow.jpg", "Аура защиты от темной магии"),
+        ("AuConc", "aura_concentration.jpg", "Аура сосредоточенности"),
     };
 
     // Mana sliders
@@ -82,12 +156,20 @@ public partial class OverlayWindow : Window
         var parts = new List<string>();
         foreach (var (key, btn) in _spellToggles)
             parts.Add($"{key}={(btn.IsChecked == true ? "true" : "false")}");
-        // Curse flags: CoA/CoD/CoE — только один true
-        foreach (var (key, _, _) in CurseOptions)
-            parts.Add($"{key}={(_selectedCurse == key ? "true" : "false")}");
-        // Seal flags: SoV/SoC — только один true
-        foreach (var (key, _, _) in SealOptions)
-            parts.Add($"{key}={(_selectedSeal == key ? "true" : "false")}");
+        // Curse flags: только для варлока
+        if (_playerClass == "WARLOCK")
+            foreach (var (key, _, _) in CurseOptions)
+                parts.Add($"{key}={(_selectedCurse == key ? "true" : "false")}");
+        // Seal/Judgement/Blessing flags: только для паладина
+        if (_playerClass == "PALADIN")
+        {
+            foreach (var (key, _, _) in SealOptions)
+                parts.Add($"{key}={(_selectedSeal == key ? "true" : "false")}");
+            foreach (var (key, _, _) in JudgementOptionsHoly)
+                parts.Add($"{key}={(_selectedJudgement == key ? "true" : "false")}");
+            foreach (var (key, _, _) in BlessingOptions)
+                parts.Add($"{key}={(_selectedBlessing == key ? "true" : "false")}");
+        }
         return "WB_S={" + string.Join(",", parts) + "} ";
     }
 
@@ -100,6 +182,8 @@ public partial class OverlayWindow : Window
     public bool UseSF => IsSpellEnabled("SF");
     public bool UseDisp => IsSpellEnabled("Disp");
     public string SelectedSeal => _selectedSeal;
+    public string SelectedBlessing => _selectedBlessing;
+    public string SelectedAura => _selectedAura;
     public bool AutoFace => _chkAutoFace?.IsChecked == true;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
     public int MaxTargetRange => (int)(_sliderMaxRange?.Value ?? 30);
@@ -107,6 +191,126 @@ public partial class OverlayWindow : Window
     // Спеллы по спекам: (key, icon, tooltip, defaultOn)
     private static readonly Dictionary<string, (string key, string icon, string tooltip, bool on)[]> SpecSpells = new()
     {
+        // ==================== WARRIOR ====================
+        ["Arms Warrior"] = new[]
+        {
+            ("Reck", "recklessness.jpg", "Безрассудство", true),
+            ("MS", "mortal_strike.jpg", "Смертельный удар", true),
+            ("Rend", "rend.jpg", "Кровопускание", true),
+            ("OP", "overpower.jpg", "Превосходство", true),
+            ("Execute", "execute.jpg", "Казнь", true),
+            ("Slam", "slam.jpg", "Мощный удар", true),
+            ("Cleave", "cleave.jpg", "Рассекающий удар", true),
+        },
+        ["Fury Warrior"] = new[]
+        {
+            ("Reck", "recklessness.jpg", "Безрассудство", true),
+            ("BT", "bloodthirst.jpg", "Кровожадность", true),
+            ("WW", "whirlwind.jpg", "Вихрь", true),
+            ("Execute", "execute.jpg", "Казнь", true),
+            ("Slam", "slam.jpg", "Мощный удар", true),
+        },
+        ["Prot Warrior"] = new[]
+        {
+            ("ShieldSlam", "shield_slam.jpg", "Мощный удар щитом", true),
+            ("Revenge", "revenge.jpg", "Реванш", true),
+            ("Devastate", "devastate.jpg", "Сокрушение", true),
+            ("TC", "thunder_clap.jpg", "Удар грома", true),
+            ("ShockW", "shockwave.jpg", "Ударная волна", true),
+        },
+        // ==================== PALADIN ====================
+        ["Ret Paladin"] = new[]
+        {
+            ("AW", "avenging_wrath.jpg", "Гнев карателя", true),
+            ("Judge", "judgement.jpg", "Правосудие", true),
+            ("CS", "crusader_strike.jpg", "Удар воина Света", true),
+            ("DS", "divine_storm.jpg", "Божественная буря", true),
+            ("Cons", "consecration.jpg", "Освящение", true),
+            ("Exo", "exorcism.jpg", "Экзорцизм", true),
+            ("HoW", "hammer_wrath.jpg", "Молот гнева", true),
+            ("SS", "sacred_shield.jpg", "Священный щит", true),
+        },
+        ["Prot Paladin"] = new[]
+        {
+            ("AW", "avenging_wrath.jpg", "Гнев карателя", true),
+            ("HoR", "hammer_righteous.jpg", "Молот праведника", true),
+            ("ShoR", "shield_righteousness.jpg", "Щит праведности", true),
+            ("HolyShield", "holy_shield.jpg", "Щит небес", true),
+            ("Judge", "judgement.jpg", "Правосудие", true),
+            ("Cons", "consecration.jpg", "Освящение", true),
+            ("HW", "holy_wrath.jpg", "Гнев небес", true),
+            ("AS", "avengers_shield.jpg", "Щит мстителя", true),
+        },
+        ["Holy Paladin"] = new[]
+        {
+            ("HL", "holy_light.jpg", "Свет небес", true),
+            ("FL", "flash_light.jpg", "Вспышка Света", false),
+            ("HS", "holy_shock.jpg", "Шок небес", true),
+            ("Beacon", "beacon.jpg", "Частица Света", true),
+            ("SS", "sacred_shield.jpg", "Священный щит", true),
+            ("Plea", "divine_plea.jpg", "Святая клятва", true),
+            ("DF", "divine_favor.jpg", "Божественное одобрение", true),
+            ("LoH", "lay_on_hands.jpg", "Возложение рук", false),
+        },
+        // ==================== HUNTER ====================
+        ["BM Hunter"] = new[]
+        {
+            ("Mark", "hunters_mark.jpg", "Метка охотника", true),
+            ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
+            ("BW", "beast_within.jpg", "Повелитель зверей", true),
+            ("Bestial", "bestial_wrath.jpg", "Звериный гнев", true),
+            ("Kill2", "kill_command.jpg", "Команда Взять", true),
+            ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
+            ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
+            ("Arcane", "arcane_shot.jpg", "Чародейский выстрел", true),
+            ("Steady", "steady_shot.jpg", "Верный выстрел", true),
+        },
+        ["MM Hunter"] = new[]
+        {
+            ("Mark", "hunters_mark.jpg", "Метка охотника", true),
+            ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
+            ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", true),
+            ("Chimera", "chimera_shot.jpg", "Выстрел химеры", true),
+            ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
+            ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
+            ("Silence", "silencing_shot.jpg", "Глушащий выстрел", true),
+            ("Steady", "steady_shot.jpg", "Верный выстрел", true),
+        },
+        ["Survival Hunter"] = new[]
+        {
+            ("Mark", "hunters_mark.jpg", "Метка охотника", true),
+            ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
+            ("Explosive", "explosive_shot.jpg", "Разрывной выстрел", true),
+            ("Black", "black_arrow.jpg", "Черная стрела", true),
+            ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
+            ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
+            ("Arcane", "arcane_shot.jpg", "Чародейский выстрел", true),
+            ("Steady", "steady_shot.jpg", "Верный выстрел", true),
+        },
+        // ==================== ROGUE ====================
+        ["Assassination Rogue"] = new[]
+        {
+            ("HFB", "hunger_blood.jpg", "Жажда убийства", true),
+            ("Envenom", "envenom.jpg", "Расправа", true),
+            ("Rupture", "rupture.jpg", "Рваная рана", true),
+            ("Mutilate", "mutilate.jpg", "Увечье", true),
+        },
+        ["Combat Rogue"] = new[]
+        {
+            ("KS", "killing_spree.jpg", "Череда убийств", true),
+            ("SnD", "slice_dice.jpg", "Потрошение", true),
+            ("Rupture", "rupture.jpg", "Рваная рана", true),
+            ("Evis", "eviscerate.jpg", "Потрошение", true),
+            ("SS", "sinister_strike.jpg", "Коварный удар", true),
+        },
+        ["Subtlety Rogue"] = new[]
+        {
+            ("Hemo", "hemorrhage.jpg", "Кровоизлияние", true),
+            ("Rupture", "rupture.jpg", "Рваная рана", true),
+            ("Evis", "eviscerate.jpg", "Потрошение", true),
+            ("BS", "backstab.jpg", "Удар в спину", true),
+        },
+        // ==================== PRIEST ====================
         ["Shadow Priest"] = new[]
         {
             ("VT", "vt.jpg", "Прикосновение вампира", true),
@@ -117,6 +321,152 @@ public partial class OverlayWindow : Window
             ("SF", "sf.jpg", "Исчадие Тьмы", true),
             ("Disp", "disp.jpg", "Слияние с Тьмой", true),
         },
+        ["Disc Priest"] = new[]
+        {
+            ("PW", "pw_shield.jpg", "Слово силы: Щит", true),
+            ("Penance", "penance.jpg", "Исповедь", true),
+            ("PS", "pain_suppression.jpg", "Подавление боли", true),
+            ("Flash", "flash_heal.jpg", "Быстрое исцеление", true),
+            ("PoM", "prayer_mending.jpg", "Молитва восстановления", true),
+            ("Renew", "renew.jpg", "Обновление", true),
+        },
+        ["Holy Priest"] = new[]
+        {
+            ("CoH", "circle_healing.jpg", "Круг исцеления", true),
+            ("Guardian", "guardian_spirit.jpg", "Оберегающий дух", true),
+            ("PoM", "prayer_mending.jpg", "Молитва восстановления", true),
+            ("Renew", "renew.jpg", "Обновление", true),
+            ("Flash", "flash_heal.jpg", "Быстрое исцеление", true),
+            ("GHeal", "greater_heal.jpg", "Великое исцеление", true),
+            ("Binding", "binding_heal.jpg", "Связующее исцеление", true),
+        },
+        // ==================== DEATH KNIGHT ====================
+        ["Blood DK"] = new[]
+        {
+            ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
+            ("PS", "plague_strike.jpg", "Удар чумы", true),
+            ("Pest", "pestilence.jpg", "Мор", true),
+            ("DS", "death_strike.jpg", "Удар смерти", true),
+            ("HS", "heart_strike.jpg", "Удар в сердце", true),
+            ("BS", "blood_strike.jpg", "Кровавый удар", true),
+            ("RS", "rune_strike.jpg", "Рунический удар", true),
+            ("VB", "vampiric_blood.jpg", "Кровь вампира", true),
+        },
+        ["Frost DK"] = new[]
+        {
+            ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
+            ("PS", "plague_strike.jpg", "Удар чумы", true),
+            ("Pest", "pestilence.jpg", "Мор", true),
+            ("UA", "unbreakable_armor.jpg", "Несокрушимая броня", true),
+            ("HB", "howling_blast.jpg", "Ледяной удар (прок)", true),
+            ("Oblit", "obliterate.jpg", "Уничтожение", true),
+            ("BS", "blood_strike.jpg", "Кровавый удар", true),
+            ("FS", "frost_strike.jpg", "Лик смерти", true),
+            ("HB2", "howling_blast.jpg", "Ледяной удар", true),
+        },
+        ["Unholy DK"] = new[]
+        {
+            ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
+            ("PS", "plague_strike.jpg", "Удар чумы", true),
+            ("Pest", "pestilence.jpg", "Мор", true),
+            ("Gargoyle", "gargoyle.jpg", "Призыв горгульи", true),
+            ("UB", "unholy_blight.jpg", "Нечестивая порча", true),
+            ("DnD", "death_decay.jpg", "Смерть и разложение", true),
+            ("SS", "scourge_strike.jpg", "Удар Плети", true),
+            ("BS", "blood_strike.jpg", "Кровавый удар", true),
+            ("DC", "death_coil.jpg", "Лик смерти", true),
+        },
+        // ==================== SHAMAN ====================
+        ["Elemental Shaman"] = new[]
+        {
+            ("FS", "flame_shock.jpg", "Огненный шок", true),
+            ("LvB", "lava_burst.jpg", "Вскипание лавы", true),
+            ("TnL", "thunderstorm.jpg", "Гром и молния", true),
+            ("CL", "chain_lightning.jpg", "Цепная молния", true),
+            ("LB", "lightning_bolt.jpg", "Молния", true),
+        },
+        ["Enhancement Shaman"] = new[]
+        {
+            ("LS", "lightning_shield.jpg", "Щит молний", true),
+            ("Wolves", "feral_spirit.jpg", "Дух дикого волка", true),
+            ("SR", "shamanistic_rage.jpg", "Ярость шамана", true),
+            ("SS", "stormstrike.jpg", "Удар бури", true),
+            ("FS", "flame_shock.jpg", "Огненный шок", true),
+            ("ES", "earth_shock.jpg", "Земной шок", true),
+            ("LvB", "lava_burst.jpg", "Вскипание лавы", true),
+            ("LB_MW", "lightning_bolt.jpg", "Молния (Водоворот)", true),
+        },
+        ["Resto Shaman"] = new[]
+        {
+            ("RT", "riptide.jpg", "Быстрина", true),
+            ("NS", "natures_swift.jpg", "Природная стремительность", true),
+            ("CH", "chain_heal.jpg", "Цепное исцеление", true),
+            ("LHW", "lesser_hw.jpg", "Малая волна исцеления", true),
+            ("HW", "healing_wave.jpg", "Волна исцеления", true),
+            ("ES", "earth_shield.jpg", "Щит земли", true),
+        },
+        // ==================== MAGE ====================
+        ["Arcane Mage"] = new[]
+        {
+            ("AP", "arcane_power.jpg", "Мощь тайной магии", true),
+            ("Mirror", "mirror_image.jpg", "Зеркальное изображение", true),
+            ("Barrage", "arcane_missiles.jpg", "Чародейские стрелы", true),
+            ("Evoc", "evocation.jpg", "Прилив сил", true),
+            ("AB", "arcane_blast.jpg", "Чародейская вспышка", true),
+        },
+        ["Fire Mage"] = new[]
+        {
+            ("Mirror", "mirror_image.jpg", "Зеркальное изображение", true),
+            ("Combust", "combustion.jpg", "Возгорание", true),
+            ("LB", "living_bomb.jpg", "Живая бомба", true),
+            ("Pyro", "pyroblast.jpg", "Огненная глыба", true),
+            ("Scorch", "scorch.jpg", "Ожог", true),
+            ("FB", "fireball.jpg", "Огненный шар", true),
+        },
+        ["Frost Mage"] = new[]
+        {
+            ("Mirror", "mirror_image.jpg", "Зеркальное изображение", true),
+            ("DF", "deep_freeze.jpg", "Глубокая заморозка", true),
+            ("IL", "ice_lance.jpg", "Ледяное копье", true),
+            ("FFB", "frostfire_bolt.jpg", "Стрела ледяного огня", true),
+            ("FBolt", "frostbolt.jpg", "Ледяная стрела", true),
+        },
+        // ==================== WARLOCK ====================
+        ["Affliction Lock"] = new[]
+        {
+            ("Haunt", "haunt.jpg", "Блуждающий дух", true),
+            ("UA", "unstable_aff.jpg", "Нестабильное колдовство", true),
+            ("Corruption", "corruption.jpg", "Порча", true),
+            ("Immolate", "immolate.jpg", "Жертвенный огонь", true),
+            ("DF", "shadow_bolt.jpg", "Неистовство Тьмы", true),
+            ("ShadowBolt", "shadow_bolt.jpg", "Стрела Тьмы", true),
+            ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
+            ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
+        },
+        ["Demonology Lock"] = new[]
+        {
+            ("Meta", "meta.jpg", "Метаморфоза", true),
+            ("DemonEmpower", "demon_empower.jpg", "Демоническое могущество", true),
+            ("ImmoAura", "immo_aura.jpg", "Жертвенный костер", true),
+            ("Corruption", "corruption.jpg", "Порча", true),
+            ("Immolate", "immolate.jpg", "Жертвенный огонь", true),
+            ("SoulFire", "soul_fire.jpg", "Ожог души", true),
+            ("Incinerate", "incinerate.jpg", "Испепеление", true),
+            ("ShadowBolt", "shadow_bolt.jpg", "Стрела Тьмы", true),
+            ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
+            ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
+        },
+        ["Destruction Lock"] = new[]
+        {
+            ("Chaos", "chaos_bolt.jpg", "Стрела Хаоса", true),
+            ("Conflag", "conflagrate.jpg", "Поджигание", true),
+            ("Immolate", "immolate.jpg", "Жертвенный огонь", true),
+            ("Corruption", "corruption.jpg", "Порча", true),
+            ("Incinerate", "incinerate.jpg", "Испепеление", true),
+            ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
+            ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
+        },
+        // ==================== DRUID ====================
         ["Balance Druid"] = new[]
         {
             ("Moonkin", "moonkin.jpg", "Облик лунного совуха", true),
@@ -129,28 +479,33 @@ public partial class OverlayWindow : Window
             ("Wrath", "wrath.jpg", "Гнев", true),
             ("Innervate", "innervate.jpg", "Озарение", true),
         },
-        ["Demonology Lock"] = new[]
+        ["Feral Druid"] = new[]
         {
-            ("Meta", "meta.jpg", "Метаморфоза", true),
-            ("DemonEmpower", "demon_empower.jpg", "Усиление демона", true),
-            ("ImmoAura", "immo_aura.jpg", "Жертвенный костер", true),
-            ("Corruption", "corruption.jpg", "Порча", true),
-            ("Immolate", "immolate.jpg", "Жертвенный огонь", true),
-            ("SoulFire", "soul_fire.jpg", "Огонь души", true),
-            ("Incinerate", "incinerate.jpg", "Испепеление", true),
-            ("ShadowBolt", "shadow_bolt.jpg", "Стрела Тьмы", true),
-            ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
-            ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
+            ("Bear", "bear_form.jpg", "Режим медведя", false),
+            ("Berserk", "berserk.jpg", "Берсерк", true),
+            ("TF", "tigers_fury.jpg", "Тигриное неистовство", true),
+            ("Roar", "savage_roar.jpg", "Дикий рев", true),
+            ("Mangle", "mangle_cat.jpg", "Увечье (кошка)", true),
+            ("Rake", "faerie_fire.jpg", "Растерзать", true),
+            ("Rip", "rip.jpg", "Разорвать", true),
+            ("FB", "ferocious_bite.jpg", "Свирепый укус", true),
+            ("Shred", "shred.jpg", "Полоснуть", true),
+            ("FF_bear", "faerie_fire.jpg", "Волшебный огонь (зверь)", true),
+            ("Mangle_b", "mangle_bear.jpg", "Увечье (медведь)", true),
+            ("Lacerate", "lacerate.jpg", "Растерзать", true),
+            ("Swipe", "swipe_bear.jpg", "Размах (медведь)", true),
+            ("Maul", "maul.jpg", "Трепка", true),
         },
-        ["Ret Paladin"] = new[]
+        ["Resto Druid"] = new[]
         {
-            ("Judge", "judgement.jpg", "Правосудие", true),
-            ("CS", "crusader_strike.jpg", "Удар воина Света", true),
-            ("DS", "divine_storm.jpg", "Божественная буря", true),
-            ("Cons", "consecration.jpg", "Освящение", true),
-            ("Exo", "exorcism.jpg", "Экзорцизм", true),
-            ("HoW", "hammer_wrath.jpg", "Молот гнева", true),
-            ("SS", "sacred_shield.jpg", "Священный щит", true),
+            ("ToL", "tree_life.jpg", "Древо Жизни", true),
+            ("WG", "wild_growth.jpg", "Буйный рост", true),
+            ("NS", "natures_swift.jpg", "Природная стремительность", true),
+            ("SM", "swiftmend.jpg", "Быстрое восстановление", true),
+            ("Rejuv", "rejuvenation.jpg", "Омоложение", true),
+            ("LB", "lifebloom.jpg", "Жизнецвет", true),
+            ("Regrowth", "regrowth.jpg", "Восстановление", true),
+            ("Nourish", "nourish.jpg", "Целительное прикосновение", true),
         },
     };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
@@ -197,10 +552,10 @@ public partial class OverlayWindow : Window
         },
         ["MAGE"] = new[]
         {
-            ("Чародейская гениальность", "spirit.jpg", "Чародейская гениальность", true),
-            ("Расплавленная броня", "inner_fire.jpg", "Расплавленная броня", true),
-            ("Ледяная броня", "shadow_prot.jpg", "Ледяная броня", false),
-            ("Чародейская броня", "spirit.jpg", "Чародейская броня", false),
+            ("Чародейская гениальность", "arcane_brilliance.jpg", "Чародейская гениальность", true),
+            ("Раскаленный доспех", "molten_armor.jpg", "Раскаленный доспех", true),
+            ("Ледяной доспех", "frost_armor.jpg", "Ледяной доспех", false),
+            ("Магический доспех", "mage_armor.jpg", "Магический доспех", false),
         },
         ["WARLOCK"] = new[]
         {
@@ -209,14 +564,27 @@ public partial class OverlayWindow : Window
         },
         ["SHAMAN"] = new[]
         {
-            ("Щит молний", "mb.jpg", "Щит молний", true),
-            ("Щит воды", "shadow_prot.jpg", "Щит воды", false),
+            ("Щит молний", "lightning_shield.jpg", "Щит молний", true),
+            ("Водный щит", "water_shield.jpg", "Водный щит", false),
         },
-        ["PALADIN"] = new[]
+        ["WARRIOR"] = new[]
         {
-            ("Аура воздаяния", "ret_aura.jpg", "Аура воздаяния", true),
-            ("Благословение могущества", "blessing_might.jpg", "Благословение могущества", true),
+            ("Боевой крик", "heroic_strike.jpg", "Боевой крик", true),
+            ("Командирский крик", "heroic_strike.jpg", "Командирский крик", false),
         },
+        ["HUNTER"] = new[]
+        {
+            ("Дух ястреба", "aimed_shot.jpg", "Дух ястреба", true),
+            ("Дух гадюки", "serpent_sting.jpg", "Дух гадюки", false),
+        },
+        ["ROGUE"] = Array.Empty<(string, string, string, bool)>(),
+        ["DEATHKNIGHT"] = new[]
+        {
+            ("Власть крови", "blood_strike.jpg", "Власть крови", false),
+            ("Власть льда", "icy_touch.jpg", "Власть льда", false),
+            ("Власть нечестивости", "unholy_blight.jpg", "Власть нечестивости", false),
+        },
+        ["PALADIN"] = Array.Empty<(string, string, string, bool)>(),
     };
 
     public OverlayWindow()
@@ -302,7 +670,7 @@ public partial class OverlayWindow : Window
         AddLabel("Заклинания");
 
         // Определяем спеллы по спеку
-        string specKey = TxtSpec.Text ?? "";
+        string specKey = _playerSpec ?? "";
         if (!SpecSpells.TryGetValue(specKey, out var spells))
         {
             // Фоллбэк на SP если спек не определён
@@ -364,7 +732,7 @@ public partial class OverlayWindow : Window
 
     private void BuildAoeSubmenu()
     {
-        string specKey = TxtSpec.Text ?? "";
+        string specKey = _playerSpec ?? "";
 
         if (specKey == "Shadow Priest")
         {
@@ -397,7 +765,7 @@ public partial class OverlayWindow : Window
 
     private void BuildBuffsSubmenu()
     {
-        if (_buffToggles.Count == 0)
+        if (_buffToggles.Count == 0 && _playerClass != "PALADIN")
         {
             AddLabel("Класс не определен");
             return;
@@ -415,6 +783,34 @@ public partial class OverlayWindow : Window
             _buffToggles[spell] = newToggle;
         }
         SubContent.Children.Add(wrap);
+
+        // Выбор ауры для паладина (радио)
+        if (_playerClass == "PALADIN")
+        {
+            AddLabel("Выбор ауры");
+            var auraWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _auraToggles.Clear();
+            foreach (var (key, icon, tooltip) in AuraOptions)
+            {
+                bool isSelected = _selectedAura == key;
+                var toggle = AddSpellIcon(auraWrap, icon, tooltip, isSelected);
+                _auraToggles[key] = toggle;
+
+                var aKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedAura = aKey;
+                    foreach (var (k, btn) in _auraToggles)
+                        if (k != aKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedAura == aKey) _selectedAura = "";
+                };
+            }
+            SubContent.Children.Add(auraWrap);
+        }
 
         // Выбор печати для паладина (радио)
         if (_playerClass == "PALADIN")
@@ -440,6 +836,56 @@ public partial class OverlayWindow : Window
                 };
             }
             SubContent.Children.Add(sealWrap);
+
+            // Выбор правосудия для хпала (радио)
+            if (_playerSpec == "Holy Paladin")
+            {
+                AddLabel("Выбор правосудия");
+                var judgeWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+                foreach (var (key, icon, tooltip) in JudgementOptionsHoly)
+                {
+                    bool isSelected = _selectedJudgement == key;
+                    var toggle = AddSpellIcon(judgeWrap, icon, tooltip, isSelected);
+                    _judgementToggles[key] = toggle;
+
+                    var jKey = key;
+                    toggle.Checked += (s, e) =>
+                    {
+                        _selectedJudgement = jKey;
+                        foreach (var (k, btn) in _judgementToggles)
+                            if (k != jKey) btn.IsChecked = false;
+                        SaveSettings();
+                    };
+                    toggle.Unchecked += (s, e) =>
+                    {
+                        if (_selectedJudgement == jKey) _selectedJudgement = "";
+                    };
+                }
+                SubContent.Children.Add(judgeWrap);
+            }
+
+            // Выбор благословения (радио)
+            AddLabel("Выбор благословения");
+            var blessWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            foreach (var (key, icon, tooltip) in BlessingOptions)
+            {
+                bool isSelected = _selectedBlessing == key;
+                var toggle = AddSpellIcon(blessWrap, icon, tooltip, isSelected);
+                _blessingToggles[key] = toggle;
+
+                var blessKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedBlessing = blessKey;
+                    foreach (var (k, btn) in _blessingToggles)
+                        if (k != blessKey) btn.IsChecked = false;
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedBlessing == blessKey) _selectedBlessing = "";
+                };
+            }
+            SubContent.Children.Add(blessWrap);
         }
     }
 
@@ -447,7 +893,7 @@ public partial class OverlayWindow : Window
     {
         var btn = new Button
         {
-            Content = "Set Follow Target",
+            Content = "Цель следования",
             Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
             Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8b8d93")),
             BorderThickness = new Thickness(0),
@@ -489,15 +935,21 @@ public partial class OverlayWindow : Window
         toggle.Unchecked += (s, e) => SaveSettings();
 
         var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Icons", iconFile);
+        bool iconLoaded = false;
         if (File.Exists(iconPath))
         {
-            toggle.Content = new Image
+            try
             {
-                Source = new BitmapImage(new Uri(iconPath)),
-                Stretch = Stretch.UniformToFill,
-            };
+                toggle.Content = new Image
+                {
+                    Source = new BitmapImage(new Uri(iconPath)),
+                    Stretch = Stretch.UniformToFill,
+                };
+                iconLoaded = true;
+            }
+            catch { /* битый файл — покажем текст */ }
         }
-        else
+        if (!iconLoaded)
         {
             toggle.Content = new TextBlock
             {
@@ -587,11 +1039,31 @@ public partial class OverlayWindow : Window
     }
 
     // --- Buff setup ---
-    public void SetPlayerClass(string playerClass)
+    public void SetPlayerClass(string playerClass, string specName = "")
     {
         _playerClass = playerClass;
+        _playerSpec = specName;
         _spellToggles.Clear();
         _buffToggles.Clear();
+
+        // Устанавливаем дефолты ТОЛЬКО для нужного класса
+        if (playerClass == "PALADIN")
+        {
+            _selectedAura = GetSavedString("aura", "AuRet");
+            _selectedBlessing = GetSavedString("blessing", "BoM");
+            _selectedSeal = _playerSpec == "Holy Paladin"
+                ? GetSavedString("seal", "SoW")
+                : GetSavedString("seal", "SoV");
+            _selectedJudgement = GetSavedString("judgement", "JoW");
+        }
+        else
+        {
+            _selectedAura = "";
+            _selectedBlessing = "";
+            _selectedSeal = "";
+            _selectedJudgement = "";
+        }
+        _selectedCurse = playerClass == "WARLOCK" ? GetSavedString("curse", "CoA") : "";
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
 
         // Pre-create toggles with metadata (will be rebuilt in submenu)
@@ -622,7 +1094,8 @@ public partial class OverlayWindow : Window
     }
 
     public void UpdateInfo(string text) => TxtInfo.Text = text;
-    public void UpdateStatus(string text) => TxtSpec.Text = text;
+    public void UpdateStatus(string text) =>
+        TxtSpec.Text = SpecDisplayNames.TryGetValue(text, out var ru) ? ru : text;
 
     // --- Settings persistence ---
 
@@ -650,9 +1123,7 @@ public partial class OverlayWindow : Window
                 Top = GetSavedDouble("pos_y", Top);
             }
 
-            // Curse/Seal selection
-            _selectedCurse = GetSavedString("curse", "CoA");
-            _selectedSeal = GetSavedString("seal", "SoV");
+            // Curse/Seal/Judgement — НЕ грузим здесь, грузим в SetPlayerClass по классу
 
             // Main toggles (AoE, Buffs)
             BtnAoe.IsChecked = GetSavedBool("aoe", false);
@@ -676,6 +1147,9 @@ public partial class OverlayWindow : Window
             // Curse
             data["curse"] = _selectedCurse;
             data["seal"] = _selectedSeal;
+            data["blessing"] = _selectedBlessing;
+            data["judgement"] = _selectedJudgement;
+            data["aura"] = _selectedAura;
 
             // Main toggles
             data["aoe"] = BtnAoe.IsChecked == true;

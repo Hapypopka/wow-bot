@@ -66,6 +66,10 @@ public class BotEngine : IDisposable
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
     public string SpellFlagsLua { get; set; } = "";
     public string SelectedSeal { get; set; } = "SoV";
+    public string SelectedBlessing { get; set; } = "BoM";
+    public string SelectedAura { get; set; } = "AuRet";
+    public bool IsHealer { get; set; }
+    public string PlayerClass { get; set; } = "";
 
     // Mana thresholds (из оверлея, в процентах 0-100)
     public int DispManaThreshold { get; set; } = 15;
@@ -175,7 +179,7 @@ public class BotEngine : IDisposable
             if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ (каждые ~3 сек, вне боя) ===
-            if (_buffsEnabled && _enabledBuffs.Count > 0)
+            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura)))
             {
                 _buffCheckTick++;
                 if (_buffCheckTick >= 20)
@@ -223,11 +227,11 @@ public class BotEngine : IDisposable
             // === ТОЛЬКО ROTATION ===
             if (!_followEnabled && _rotationEnabled)
             {
-                if (hasTarget)
+                if (hasTarget || IsHealer)
                 {
-                    if (_autoFace) _navigation.FaceUnit(player, target!);
+                    if (hasTarget && _autoFace && !IsHealer) _navigation.FaceUnit(player, target!);
                     string script = SpellFlagsLua + GetRotationScript(player);
-                    if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length}");
+                    if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
                     _hook.ExecuteLua(script, 500);
                 }
                 return;
@@ -320,6 +324,7 @@ public class BotEngine : IDisposable
         return @"
 local function WB_AoE()
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
+    -- GCD check (SP-only AoE script, VT всегда в спеллбуке)
     local gS,gD = GetSpellCooldown('Прикосновение вампира')
     if gS and gS > 0 and gD and gD <= 1.5 then return end
     if UnitIsDeadOrGhost('player') then return end
@@ -424,7 +429,8 @@ WB_AoE()
 
     private string BuildBuffScript()
     {
-        if (_enabledBuffs.Count == 0) return "";
+        // Аура/печать/благословение кастуются даже если нет обычных баффов
+        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura)) return "";
 
         var selfBuffs = new List<string>();
         var raidBuffs = new List<string>();
@@ -442,23 +448,61 @@ WB_AoE()
         sb.Append("local function WB_Buff() ");
         sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
         sb.Append("if UnitIsDeadOrGhost('player') then return end ");
-        sb.Append("if UnitAffectingCombat('player') then return end ");
         sb.Append("local function HasB(unit,name) for i=1,40 do local n=UnitBuff(unit,i) if not n then return false end if n==name then return true end end return false end ");
 
-        // Печать паладина (проверяем наличие любой печати, кастуем выбранную)
-        if (!string.IsNullOrEmpty(SelectedSeal))
+        // Аура паладина (только для PALADIN)
+        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedAura))
+        {
+            string auraSpell = SelectedAura switch
+            {
+                "AuRet" => "Аура воздаяния",
+                "AuDev" => "Аура воина Света",
+                "AuFrost" => "Аура защиты от магии льда",
+                "AuFire" => "Аура защиты от огня",
+                "AuShadow" => "Аура защиты от темной магии",
+                "AuConc" => "Аура сосредоточенности",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(auraSpell))
+            {
+                var au = auraSpell.Replace("'", "\\'");
+                sb.Append($"if not HasB('player','{au}') then CastSpellByName('{au}') return end ");
+            }
+        }
+
+        // Печать паладина (только для PALADIN)
+        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedSeal))
         {
             string sealSpell = SelectedSeal switch
             {
                 "SoV" => "Печать мщения",
                 "SoC" => "Печать повиновения",
+                "SoW" => "Печать мудрости",
+                "SoL" => "Печать Света",
                 _ => ""
             };
             if (!string.IsNullOrEmpty(sealSpell))
             {
                 var ss = sealSpell.Replace("'", "\\'");
-                sb.Append($"local hasSeal=false for i=1,40 do local n=UnitBuff('player',i) if not n then break end if n:find('Печать') then hasSeal=true break end end ");
-                sb.Append($"if not hasSeal then CastSpellByName('{ss}') return end ");
+                sb.Append($"if not HasB('player','{ss}') then CastSpellByName('{ss}') return end ");
+            }
+        }
+
+        // Благословение паладина (только для PALADIN)
+        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedBlessing))
+        {
+            var (blessSpell, greatSpell) = SelectedBlessing switch
+            {
+                "BoM" => ("Благословение могущества", "Великое благословение могущества"),
+                "BoK" => ("Благословение королей", "Великое благословение королей"),
+                "BoW" => ("Благословение мудрости", "Великое благословение мудрости"),
+                _ => ("", "")
+            };
+            if (!string.IsNullOrEmpty(blessSpell))
+            {
+                var bs = blessSpell.Replace("'", "\\'");
+                var gs = greatSpell.Replace("'", "\\'");
+                sb.Append($"if not HasB('player','{bs}') and not HasB('player','{gs}') then if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end return end ");
             }
         }
 

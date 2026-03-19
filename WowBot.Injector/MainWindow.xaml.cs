@@ -114,13 +114,20 @@ public partial class MainWindow : Window
                 }
             }
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
-            WowBot.Core.Logger.Info($"Hooked OK | class={playerClass} spec={specName}");
+            bool isHealer = specName.Contains("Holy") || specName.Contains("Disc") || specName.Contains("Resto");
+            WowBot.Core.Logger.Info($"Hooked OK | class={playerClass} spec={specName} healer={isHealer}");
 
             // Инициализируем BotEngine
+            WowBot.Core.Logger.Info("Creating BotEngine...");
             var navigation = new Navigation(_memory, _endSceneHook);
             var ctm = new ClickToMove(_memory);
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
-            _botEngine.LoadRotation(AllRotations.GetInstantScript(), AllRotations.GetFullScript());
+            _botEngine.IsHealer = isHealer;
+            _botEngine.PlayerClass = playerClass;
+            var fullScript = AllRotations.GetFullScript(playerClass);
+            var instantScript = AllRotations.GetInstantScript(playerClass);
+            WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
+            _botEngine.LoadRotation(instantScript, fullScript);
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
             BtnRotationToggle.IsEnabled = true;
@@ -129,6 +136,7 @@ public partial class MainWindow : Window
             BtnScanSpells.IsEnabled = true;
 
             // Открываем оверлей
+            WowBot.Core.Logger.Info("Creating overlay...");
             _overlay = new OverlayWindow();
             _overlay.OnRotationToggle += () =>
             {
@@ -152,10 +160,13 @@ public partial class MainWindow : Window
                 if (_botEngine != null)
                     _botEngine.FollowDistance = dist;
             };
+            WowBot.Core.Logger.Info("Loading overlay settings...");
             _overlay.LoadSettings();
             _overlay.UpdateStatus(specName);
-            _overlay.SetPlayerClass(playerClass);
+            _overlay.SetPlayerClass(playerClass, specName);
+            WowBot.Core.Logger.Info("Showing overlay...");
             _overlay.Show();
+            WowBot.Core.Logger.Info("Overlay shown OK");
         }
         catch (Exception ex)
         {
@@ -167,7 +178,7 @@ public partial class MainWindow : Window
             System.IO.File.WriteAllText(diagPath, diag);
             LstObjects.ItemsSource = diag.Split('\n').ToList();
 
-            WowBot.Core.Logger.Error("Hook failed", ex);
+            WowBot.Core.Logger.Error($"Hook/Init failed: {ex.Message}\n{ex.StackTrace}", ex);
             TxtStatus.Text = $"Attached (PID: {wow.Id}) — hook failed: {ex.Message}";
             TxtLuaStatus.Text = ex.Message.Contains("EndScene")
                 ? "Автоскан оффсетов не нашёл EndScene. См. endscene_diag.txt"
@@ -295,19 +306,19 @@ public partial class MainWindow : Window
 
     private void UpdateTick(object? sender, EventArgs e)
     {
-        if (_objectManager == null || !_memory.IsAttached) return;
-
-        // Показывать оверлей только когда WoW активен
-        if (_overlay != null && _memory.Process != null)
-        {
-            var fg = GetForegroundWindow();
-            GetWindowThreadProcessId(fg, out uint fgPid);
-            bool wowActive = fgPid == (uint)_memory.Process.Id;
-            _overlay.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
-        }
-
         try
         {
+            if (_objectManager == null || !_memory.IsAttached) return;
+
+            // Показывать оверлей только когда WoW активен
+            if (_overlay != null && _memory.Process != null)
+            {
+                var fg = GetForegroundWindow();
+                GetWindowThreadProcessId(fg, out uint fgPid);
+                bool wowActive = fgPid == (uint)_memory.Process.Id;
+                _overlay.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
+            }
+
             if (_memory.Process?.HasExited == true)
             {
                 BtnDetach_Click(this, new RoutedEventArgs());
@@ -320,6 +331,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            WowBot.Core.Logger.Error($"UpdateTick error: {ex.Message}\n{ex.StackTrace}");
             TxtStatus.Text = $"Error: {ex.Message}";
         }
     }
@@ -359,7 +371,7 @@ public partial class MainWindow : Window
             items.Add($"[Player] Lvl {p.Level} HP:{p.HealthPercent:F0}%{marker}");
         }
 
-        foreach (var u in _objectManager.Units
+        foreach (var u in _objectManager.Units.ToList()
             .Where(u => u.IsAlive && player != null && player.DistanceTo(u) < 100)
             .OrderBy(u => player != null ? player.DistanceTo(u) : 0)
             .Take(30))
@@ -393,7 +405,12 @@ public partial class MainWindow : Window
                 _botEngine.BuffsEnabled = _overlay.BuffsEnabled;
                 _botEngine.SpellFlagsLua = _overlay.GetSpellFlagsLua();
                 _botEngine.EnabledBuffs = _overlay.GetEnabledBuffs();
-                _botEngine.SelectedSeal = _overlay.SelectedSeal;
+                if (_botEngine.PlayerClass == "PALADIN")
+                {
+                    _botEngine.SelectedSeal = _overlay.SelectedSeal;
+                    _botEngine.SelectedBlessing = _overlay.SelectedBlessing;
+                    _botEngine.SelectedAura = _overlay.SelectedAura;
+                }
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;
@@ -578,18 +595,26 @@ public partial class MainWindow : Window
 
         return cls switch
         {
-            "DRUID" => t1 >= t2 && t1 >= t3 ? "Balance Druid" :
-                       t2 >= t1 && t2 >= t3 ? "Feral Druid" : "Resto Druid",
-            "PRIEST" => t3 >= t1 && t3 >= t2 ? "Shadow Priest" :
-                        t1 >= t2 ? "Disc Priest" : "Holy Priest",
-            "WARLOCK" => t1 >= t2 && t1 >= t3 ? "Affliction Lock" :
-                         t2 >= t1 && t2 >= t3 ? "Demonology Lock" : "Destruction Lock",
-            "MAGE" => t1 >= t2 && t1 >= t3 ? "Arcane Mage" :
-                      t2 >= t1 && t2 >= t3 ? "Fire Mage" : "Frost Mage",
-            "SHAMAN" => t1 >= t2 && t1 >= t3 ? "Elemental Shaman" :
-                        t2 >= t1 && t2 >= t3 ? "Enhancement Shaman" : "Resto Shaman",
+            "WARRIOR" => t1 >= t2 && t1 >= t3 ? "Arms Warrior" :
+                         t2 >= t1 && t2 >= t3 ? "Fury Warrior" : "Prot Warrior",
             "PALADIN" => t1 >= t2 && t1 >= t3 ? "Holy Paladin" :
                          t2 >= t1 && t2 >= t3 ? "Prot Paladin" : "Ret Paladin",
+            "HUNTER" => t1 >= t2 && t1 >= t3 ? "BM Hunter" :
+                        t2 >= t1 && t2 >= t3 ? "MM Hunter" : "Survival Hunter",
+            "ROGUE" => t1 >= t2 && t1 >= t3 ? "Assassination Rogue" :
+                       t2 >= t1 && t2 >= t3 ? "Combat Rogue" : "Subtlety Rogue",
+            "PRIEST" => t3 >= t1 && t3 >= t2 ? "Shadow Priest" :
+                        t1 >= t2 ? "Disc Priest" : "Holy Priest",
+            "DEATHKNIGHT" => t1 >= t2 && t1 >= t3 ? "Blood DK" :
+                             t2 >= t1 && t2 >= t3 ? "Frost DK" : "Unholy DK",
+            "SHAMAN" => t1 >= t2 && t1 >= t3 ? "Elemental Shaman" :
+                        t2 >= t1 && t2 >= t3 ? "Enhancement Shaman" : "Resto Shaman",
+            "MAGE" => t1 >= t2 && t1 >= t3 ? "Arcane Mage" :
+                      t2 >= t1 && t2 >= t3 ? "Fire Mage" : "Frost Mage",
+            "WARLOCK" => t1 >= t2 && t1 >= t3 ? "Affliction Lock" :
+                         t2 >= t1 && t2 >= t3 ? "Demonology Lock" : "Destruction Lock",
+            "DRUID" => t1 >= t2 && t1 >= t3 ? "Balance Druid" :
+                       t2 >= t1 && t2 >= t3 ? "Feral Druid" : "Resto Druid",
             _ => $"{cls} ({t1}/{t2}/{t3})"
         };
     }

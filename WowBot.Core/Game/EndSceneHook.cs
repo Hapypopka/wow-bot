@@ -23,7 +23,7 @@ public class EndSceneHook : IDisposable
     private bool _isHooked;
 
     private const int CodecaveSize = 512;  // увеличил под два пути
-    private const int LuaBufferSize = 16384; // увеличил — ротации всех классов ~8KB+
+    private const int LuaBufferSize = 16384; // 16KB — per-class скрипты ~5KB
     private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 128;
 
     public bool IsHooked => _isHooked;
