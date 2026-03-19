@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using WowBot.Core.Game;
 using WowBot.Core.Game.Entities;
@@ -52,7 +54,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        var wow = wowProcesses[0];
+        Process wow;
+        if (wowProcesses.Length == 1)
+        {
+            wow = wowProcesses[0];
+        }
+        else
+        {
+            // Несколько WoW — показываем выбор с именами персонажей
+            wow = ShowProcessPicker(wowProcesses);
+            if (wow == null) return;
+        }
         WowBot.Core.Logger.Init();
         WowBot.Core.Logger.Info($"Attaching to WoW PID={wow.Id}");
 
@@ -124,6 +136,7 @@ public partial class MainWindow : Window
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
             _botEngine.PlayerClass = playerClass;
+            _botEngine.LuaReader = _luaReader;
             var fullScript = AllRotations.GetFullScript(playerClass);
             var instantScript = AllRotations.GetInstantScript(playerClass);
             WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
@@ -171,6 +184,8 @@ public partial class MainWindow : Window
                         break;
                     case "role:slave":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Slave;
+                        hive.ResetSlaveState();
+                        _botEngine.EnsureRunning();
                         break;
                     case "role:none":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.None;
@@ -604,6 +619,66 @@ public partial class MainWindow : Window
                 BtnDump.IsEnabled = true;
             });
         });
+    }
+
+    private Process? ShowProcessPicker(Process[] processes)
+    {
+        // Читаем имя персонажа для каждого процесса
+        var items = new List<(Process proc, string name)>();
+        foreach (var proc in processes)
+        {
+            string charName = "???";
+            try
+            {
+                var tmpMem = new MemoryReader();
+                if (tmpMem.Attach(proc))
+                {
+                    charName = tmpMem.ReadString(WowBot.Core.Game.Offsets.PlayerName, 20);
+                    if (string.IsNullOrEmpty(charName)) charName = "???";
+                    tmpMem.Detach();
+                }
+            }
+            catch { }
+            items.Add((proc, charName));
+        }
+
+        // Показываем диалог выбора
+        var dialog = new Window
+        {
+            Title = "Выбери персонажа",
+            Width = 300, Height = 50 + items.Count * 45,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Background = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#1a1a2e")),
+            WindowStyle = WindowStyle.ToolWindow,
+            ResizeMode = ResizeMode.NoResize,
+        };
+
+        Process? selected = null;
+        var stack = new StackPanel { Margin = new Thickness(10) };
+
+        foreach (var (proc, name) in items)
+        {
+            var btn = new Button
+            {
+                Content = $"{name}  (PID {proc.Id})",
+                Height = 35,
+                Margin = new Thickness(0, 3, 0, 3),
+                FontSize = 14,
+                Background = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("#252830")),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+            };
+            var p = proc;
+            btn.Click += (s, e) => { selected = p; dialog.Close(); };
+            stack.Children.Add(btn);
+        }
+
+        dialog.Content = stack;
+        dialog.ShowDialog();
+        return selected;
     }
 
     private string DetectSpec(string classInfo)

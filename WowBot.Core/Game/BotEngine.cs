@@ -79,8 +79,8 @@ public class BotEngine : IDisposable
 
     // Hivemind (мультибоксинг)
     public Hivemind Hivemind { get; private set; }
-    private double _lastHiveCheck;
-    private bool _slaveListenerInstalled;
+    public double LastHiveCheck { get; set; }
+    // _slaveListenerInstalled хранится в Hivemind
 
     public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
     {
@@ -89,7 +89,10 @@ public class BotEngine : IDisposable
         _navigation = navigation;
         _ctm = ctm;
         Hivemind = new Hivemind(hook, objectManager, navigation, ctm);
+        Hivemind.SetBotEngine(this);
     }
+
+    public LuaReader? LuaReader { get; set; }
 
     public void LoadRotation(string instantScript, string fullScript)
     {
@@ -114,6 +117,22 @@ public class BotEngine : IDisposable
     {
         _followGuid = 0;
         OnStatusChanged?.Invoke("Follow target cleared");
+    }
+
+    /// <summary>Установить follow по GUID напрямую (для Hivemind)</summary>
+    public void SetFollowGuid(ulong guid)
+    {
+        _followGuid = guid;
+        _followEnabled = true;
+        EnsureRunning();
+    }
+
+    /// <summary>Выключить follow (для Hivemind stop)</summary>
+    public void StopFollow()
+    {
+        _followEnabled = false;
+        _followGuid = 0;
+        _hook.ExecuteLua("MoveForwardStop()", 100);
     }
 
     // --- Toggle ---
@@ -146,7 +165,7 @@ public class BotEngine : IDisposable
         OnStatusChanged?.Invoke("Stopped");
     }
 
-    private void EnsureRunning()
+    public void EnsureRunning()
     {
         if (_timer != null) return;
         _timer = new Timer(Tick, null, 0, 150);
@@ -168,6 +187,7 @@ public class BotEngine : IDisposable
 
     // --- Main tick ---
     private int _logTick;
+    private int _hiveCheckTick;
 
     private void Tick(object? state)
     {
@@ -184,21 +204,37 @@ public class BotEngine : IDisposable
             if (Hivemind.CurrentRole == Hivemind.Role.Slave)
             {
                 // Устанавливаем слушатель (один раз)
-                if (!_slaveListenerInstalled)
+                if (!Hivemind._slaveListenerInstalled)
                 {
                     _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
-                    _slaveListenerInstalled = true;
+                    Hivemind._slaveListenerInstalled = true;
                     Logger.Info("Hivemind: slave listener installed");
                 }
 
-                // Проверяем новые команды каждые 300мс
-                _buffCheckTick++; // переиспользуем счётчик
-                if (_buffCheckTick >= 2)
+                // Проверяем новые команды каждые 500мс
+                _hiveCheckTick++;
+                if (_hiveCheckTick >= 3 && LuaReader != null && LuaReader.IsInitialized)
                 {
-                    _buffCheckTick = 0;
-                    string checkLua = "EditMacro(1,'WB',1,(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0'))";
-                    // Читаем через LuaReader если доступен
+                    _hiveCheckTick = 0;
+                    string checkLua = Hivemind.GetSlaveReadScript();
+                    string? response = LuaReader.Execute(checkLua);
+                    if (response != null)
+                    {
+                        var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
+                        if (cmd != null && time > LastHiveCheck)
+                        {
+                            LastHiveCheck = time;
+                            Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg}");
+                            Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
+                        }
+                    }
                 }
+            }
+
+            // === HIVEMIND: постоянный follow за мастером ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.IsFollowing)
+            {
+                Hivemind.SlaveTickFollow();
             }
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
@@ -223,6 +259,19 @@ public class BotEngine : IDisposable
                         }
                     }
                 }
+            }
+
+            // Слейв в режиме атаки — выполняем ротацию
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.WantRotation)
+            {
+                var slaveTarget = _objectManager.GetTarget();
+                if (slaveTarget != null && slaveTarget.IsAlive)
+                {
+                    if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
+                    string script = SpellFlagsLua + _fullScript;
+                    _hook.ExecuteLua(script, 500);
+                }
+                return; // Слейв в атаке — не нужен обычный follow/rotation
             }
 
             if (!_followEnabled && !_rotationEnabled) return;

@@ -11,15 +11,39 @@ public class Hivemind
     private readonly ObjectManager _objectManager;
     private readonly Navigation _navigation;
     private readonly ClickToMove _ctm;
+    private BotEngine? _botEngine;
 
     private const string CHANNEL = "WBHIVE";
+
+    public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
     public enum Command { Follow, Attack, Stop, Scatter, Stack, Focus, Loot, Ping }
 
-    public Role CurrentRole { get; set; } = Role.None;
+    private Role _currentRole = Role.None;
+    public Role CurrentRole
+    {
+        get => _currentRole;
+        set
+        {
+            _currentRole = value;
+            // Сброс состояния при смене роли
+            _followMaster = false;
+            _followAttack = false;
+            MasterName = "";
+            LastCommand = null;
+            LastCommandArg = "";
+        }
+    }
     public bool IsActive => CurrentRole != Role.None;
     public string MasterName { get; private set; } = "";
+
+    // Слейв: состояние follow/attack
+    private bool _followMaster;
+    private bool _followAttack;
+    private bool _wantRotation;
+    public bool IsFollowing => _followMaster;
+    public bool WantRotation => _wantRotation;
 
     // Слейв: последняя полученная команда
     public Command? LastCommand { get; private set; }
@@ -82,6 +106,87 @@ public class Hivemind
 
     /// <summary>Мастер: пинг (проверка связи)</summary>
     public void CmdPing() => SendCommand(Command.Ping);
+
+    // ==================== СЛЕЙВ: ПОСТОЯННЫЙ FOLLOW ====================
+
+    /// <summary>Сбросить Lua глобалы при включении слейва</summary>
+    public void ResetSlaveState()
+    {
+        _followMaster = false;
+        _followAttack = false;
+        _wantRotation = false;
+        // Сбрасываем Lua глобалы И listener
+        _hook.ExecuteLua("WB_HIVE_CMD='' WB_HIVE_ARG='' WB_HIVE_TIME=0 WB_HIVE_REGISTERED=nil", 200);
+        _slaveListenerInstalled = false;
+        if (_botEngine != null) _botEngine.LastHiveCheck = 0; // Сброс
+        Logger.Info("Hivemind: slave state reset");
+    }
+
+    // Флаг для BotEngine
+    internal bool _slaveListenerInstalled;
+
+    private int _retargetTick;
+
+    /// <summary>
+    /// Вызывать каждый тик (150мс) из BotEngine.
+    /// Follow — CTM к мастеру (как "Следование").
+    /// Attack — ретаргетим таргет мастера каждые 2 сек.
+    /// </summary>
+    public void SlaveTickFollow()
+    {
+        if (!_followMaster || string.IsNullOrEmpty(MasterName)) return;
+
+        var master = FindPlayerByName(MasterName);
+        if (master == null) return;
+
+        var player = _objectManager.LocalPlayer;
+        if (player == null) return;
+
+        float dist = player.DistanceTo(master);
+
+        if (_followAttack)
+        {
+            // Режим атаки: ретаргетим + бежим если далеко
+            _retargetTick++;
+            if (_retargetTick >= 13)
+            {
+                _retargetTick = 0;
+                _hook.ExecuteLua($"AssistUnit('{MasterName}')", 200);
+            }
+            if (dist > 20f)
+                _ctm.MoveTo(master.X, master.Y, master.Z, 0.5f);
+        }
+        else
+        {
+            // Режим follow: бежим за мастером через CTM (работает на любой дистанции)
+            if (dist > 5f)
+                _ctm.MoveTo(master.X, master.Y, master.Z, 0.5f);
+        }
+    }
+
+    private Entities.WowUnit? FindPlayerByName(string name)
+    {
+        // Ищем по GUID пати-мемберов через Lua — ненадёжно
+        // Лучше: ищем ближайшего игрока (не себя) — в пати из 2 это мастер
+        // TODO: когда будет больше 2 игроков — искать по имени через память
+        var player = _objectManager.LocalPlayer;
+        if (player == null) return null;
+
+        Entities.WowUnit? closest = null;
+        float closestDist = float.MaxValue;
+
+        foreach (var p in _objectManager.Players)
+        {
+            if (p.Guid == _objectManager.LocalPlayerGuid) continue;
+            float d = player.DistanceTo(p);
+            if (d < closestDist)
+            {
+                closestDist = d;
+                closest = p;
+            }
+        }
+        return closest;
+    }
 
     // ==================== СЛЕЙВ ====================
 
@@ -156,47 +261,48 @@ end
         switch (cmd)
         {
             case Command.Follow:
-                // Ассистим мастера (берём его таргет) + follow
-                _hook.ExecuteLua($"AssistUnit('{arg}')", 200);
+            case Command.Stack:
+                // Включаем штатный follow BotEngine (CTM, работает на любой дистанции)
                 MasterName = arg;
+                _followMaster = true;
+                _followAttack = false;
+                _wantRotation = false;
+                // Находим мастера и ставим как follow target
+                var masterUnit = FindPlayerByName(arg);
+                if (masterUnit != null && _botEngine != null)
+                    _botEngine.SetFollowGuid(masterUnit.Guid);
                 OnCommandReceived?.Invoke(cmd, arg);
-                Logger.Info($"Hivemind: SLAVE follow {arg}");
+                Logger.Info($"Hivemind: SLAVE follow {arg} via BotEngine");
                 break;
 
             case Command.Attack:
-                // Берём таргет мастера и атакуем
+                // Берём таргет мастера + включаем авто-атаку
+                MasterName = arg;
+                _followMaster = true;
+                _followAttack = true;
+                _wantRotation = true;
                 _hook.ExecuteLua($"AssistUnit('{arg}')", 200);
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE attack target of {arg}");
                 break;
 
             case Command.Stop:
-                _hook.ExecuteLua("SpellStopCasting() PetPassiveMode()", 200);
+                _followMaster = false;
+                _followAttack = false;
+                _wantRotation = false;
+                _botEngine?.StopFollow();
                 _ctm.Stop();
                 OnCommandReceived?.Invoke(cmd, "");
                 Logger.Info("Hivemind: SLAVE stop");
                 break;
 
-            case Command.Stack:
-                // Бежим к мастеру
-                _hook.ExecuteLua($"FollowUnit('{arg}')", 200);
-                OnCommandReceived?.Invoke(cmd, arg);
-                Logger.Info($"Hivemind: SLAVE stack on {arg}");
-                break;
-
             case Command.Scatter:
-                // Отбежать — рандомное направление
-                var player = _objectManager.LocalPlayer;
-                if (player != null)
-                {
-                    float dist = 10f;
-                    float.TryParse(arg, out dist);
-                    var rng = new Random();
-                    float angle = (float)(rng.NextDouble() * Math.PI * 2);
-                    float x = player.X + dist * (float)Math.Cos(angle);
-                    float y = player.Y + dist * (float)Math.Sin(angle);
-                    _ctm.MoveTo(x, y, player.Z, 1f);
-                }
+                // Отбежать — отменяем follow, бежим назад 1.5 сек
+                _followMaster = false;
+                _followAttack = false;
+                _wantRotation = false;
+                _hook.ExecuteLua("MoveForwardStart() MoveForwardStop() MoveBackwardStart()", 200);
+                Task.Run(async () => { await Task.Delay(1500); _hook.ExecuteLua("MoveBackwardStop()", 100); });
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE scatter {arg}m");
                 break;
