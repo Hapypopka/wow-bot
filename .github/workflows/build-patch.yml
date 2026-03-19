@@ -40,17 +40,14 @@ jobs:
           echo "version=$NEW_VER" >> $GITHUB_OUTPUT
 
       - name: Create patch.zip
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p _patch
-          cp publish/WowBot.Core.dll _patch/
-          cp publish/WowBot.Injector.dll _patch/
-          cp publish/version.txt _patch/
-          if [ -d "publish/Icons" ]; then
-            mkdir -p _patch/Icons
-            cp publish/Icons/*.jpg _patch/Icons/ 2>/dev/null || true
-          fi
-          cd _patch && zip -r ../patch.zip . && cd ..
+          New-Item -ItemType Directory -Force -Path _patch, _patch/Icons
+          Copy-Item publish/WowBot.Core.dll _patch/
+          Copy-Item publish/WowBot.Injector.dll _patch/
+          Copy-Item publish/version.txt _patch/
+          if (Test-Path publish/Icons/*.jpg) { Copy-Item publish/Icons/*.jpg _patch/Icons/ }
+          Compress-Archive -Path _patch/* -DestinationPath patch.zip -Force
 
       - name: Deploy to VPS
         uses: appleboy/scp-action@v0.1.7
