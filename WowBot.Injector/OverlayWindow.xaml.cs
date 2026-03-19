@@ -46,7 +46,7 @@ public partial class OverlayWindow : Window
         ["Prot Warrior"] = "Прот Воин",
         ["Holy Paladin"] = "Холи Паладин",
         ["Prot Paladin"] = "Прот Паладин",
-        ["Ret Paladin"] = "гейский Ретрик",
+        ["Ret Paladin"] = "мужественный ретрик",
         ["BM Hunter"] = "БМ Охотник",
         ["MM Hunter"] = "ММ Охотник",
         ["Survival Hunter"] = "Сурв Охотник",
