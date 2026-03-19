@@ -6,6 +6,7 @@ on:
     paths:
       - 'WowBot.Core/**'
       - 'WowBot.Injector/**'
+      - '.github/workflows/**'
 
 permissions:
   contents: write
