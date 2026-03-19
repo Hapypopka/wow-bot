@@ -29,7 +29,7 @@ public static class AllRotations
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
-    if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+    if not UnitAffectingCombat('target') then return end
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
@@ -104,7 +104,7 @@ public static class AllRotations
 
     if t3>=t1 and t3>=t2 then
         -- RET
-        if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if WB_S.AW~=false and IsReady('Гнев карателя') then CastSpellByName('Гнев карателя') return end
         if WB_S.HoW~=false and THP()<0.2 and IsReady('Молот гнева') then CastSpellByName('Молот гнева') return end
@@ -116,7 +116,7 @@ public static class AllRotations
         if WB_S.SS~=false and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
     elseif t2>=t1 and t2>=t3 then
         -- PROT
-        if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if WB_S.AW~=false and IsReady('Гнев карателя') then CastSpellByName('Гнев карателя') return end
         if WB_S.HoR~=false and IsReady('Молот праведника') then CastSpellByName('Молот праведника') return end
@@ -220,7 +220,7 @@ public static class AllRotations
     local _,_,t3 = GetTalentTabInfo(3)
     if t3>=t1 and t3>=t2 then
         -- SHADOW
-        if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if not HasBuff('Облик Тьмы') then CastSpellByName('Облик Тьмы') return end
         if WB_S.Disp~=false and MP()<0.15 and IsReady('Слияние с Тьмой') then CastSpellByName('Слияние с Тьмой') return end
@@ -317,7 +317,7 @@ public static class AllRotations
             if not hasES then TargetUnit('focus') CastSpellByName('Щит земли') TargetLastTarget() return end
         end
     else
-        if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if t1>=t2 and t1>=t3 then
             -- ELEMENTAL
@@ -427,7 +427,7 @@ public static class AllRotations
 
     if t1>=t2 and t1>=t3 then
         -- BALANCE
-        if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if WB_S.Moonkin~=false and not HasBuff('Облик лунного совуха') then CastSpellByName('Облик лунного совуха') return end
         if WB_S.Innervate~=false and MP()<0.3 and IsReady('Озарение') then CastSpellByName('Озарение') return end
@@ -443,7 +443,7 @@ public static class AllRotations
         elseif WB_S.Wrath~=false then CastSpellByName('Гнев') end
     elseif t2>=t1 and t2>=t3 then
         -- FERAL (Cat/Bear по форме)
-        if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         local inCat = HasBuffById(768)
         local inBear = HasBuffById(9634) or HasBuffById(5487)
@@ -506,7 +506,7 @@ local function WB_Inst()
 " + Helpers + @"
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
-    if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
+    if not UnitAffectingCombat('target') then return end
     if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
 " + (playerClass switch
     {
