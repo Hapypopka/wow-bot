@@ -21,21 +21,14 @@ jobs:
       - name: Publish WowBot
         run: dotnet publish WowBot.Injector -c Release -r win-x86 --self-contained -o publish
 
-      - name: Read version
+      - name: Create version
         id: version
         shell: bash
         run: |
-          # Increment version
-          if [ -f publish/version.txt ]; then
-            OLD_VER=$(cat publish/version.txt)
-          else
-            OLD_VER="1.0"
-          fi
-          # Extract major.minor, increment minor
+          if [ -f publish/version.txt ]; then OLD_VER=$(cat publish/version.txt); else OLD_VER="1.0"; fi
           MAJOR=$(echo $OLD_VER | cut -d. -f1)
           MINOR=$(echo $OLD_VER | cut -d. -f2)
-          NEW_MINOR=$((MINOR + 1))
-          NEW_VER="$MAJOR.$NEW_MINOR"
+          NEW_VER="$MAJOR.$((MINOR + 1))"
           echo "$NEW_VER" > publish/version.txt
           echo "version=$NEW_VER" >> $GITHUB_OUTPUT
 
@@ -49,39 +42,20 @@ jobs:
           if (Test-Path publish/Icons/*.jpg) { Copy-Item publish/Icons/*.jpg _patch/Icons/ }
           Compress-Archive -Path _patch/* -DestinationPath patch.zip -Force
 
-      - name: Deploy to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: 45.131.187.128
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "patch.zip"
-          target: "/var/www/wowbot/"
-
-      - name: Update version on VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: 45.131.187.128
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd /var/www/wowbot
-            # Backup previous
-            [ -f patch.zip.bak ] && rm patch.zip.bak
-            [ -f previous_patch.zip ] && mv previous_patch.zip patch.zip.bak
-            [ -f patch.zip.old ] && mv patch.zip.old previous_patch.zip
-            # Move new
-            mv patch.zip patch.zip.new || true
-            [ -f patch.zip ] && mv patch.zip patch.zip.old
-            mv patch.zip.new patch.zip || true
-            echo "${{ steps.version.outputs.version }}" > version.txt
-
-      - name: Notify via Telegram
-        uses: appleboy/telegram-action@v1.0.0
-        with:
-          to: ${{ secrets.TG_CHAT_IDS }}
-          token: 8188885083:AAHdEfFSf6snAJUoC4nbz1oFf8HzwLq4Y6U
-          message: |
-            🔔 WowBot обновление v${{ steps.version.outputs.version }}!
-            Запусти update.exe
-        continue-on-error: true
+      - name: Deploy patch to VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          # Записываем ключ
+          mkdir -p ~/.ssh
+          echo "$VPS_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -H 45.131.187.128 >> ~/.ssh/known_hosts 2>/dev/null
+          # Бэкап старого патча + копируем новый
+          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=no root@45.131.187.128 \
+            "cd /var/www/wowbot && [ -f patch.zip ] && mv patch.zip previous_patch.zip || true"
+          scp -i ~/.ssh/vps_key -o StrictHostKeyChecking=no patch.zip root@45.131.187.128:/var/www/wowbot/
+          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=no root@45.131.187.128 \
+            "echo '${{ steps.version.outputs.version }}' > /var/www/wowbot/version.txt"
+          echo "Deployed v${{ steps.version.outputs.version }}"
