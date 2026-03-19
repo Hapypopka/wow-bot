@@ -31,12 +31,15 @@ jobs:
         id: version
         shell: bash
         run: |
-          if [ -f publish/version.txt ]; then OLD_VER=$(cat publish/version.txt); else OLD_VER="1.0"; fi
-          MAJOR=$(echo $OLD_VER | cut -d. -f1)
-          MINOR=$(echo $OLD_VER | cut -d. -f2)
+          # Берём последний тег из GitHub, инкрементим
+          LATEST=$(git tag --sort=-v:refname | head -1 | tr -d 'v')
+          if [ -z "$LATEST" ]; then LATEST="1.0"; fi
+          MAJOR=$(echo $LATEST | cut -d. -f1)
+          MINOR=$(echo $LATEST | cut -d. -f2)
           NEW_VER="$MAJOR.$((MINOR + 1))"
           echo "$NEW_VER" > publish/version.txt
           echo "version=$NEW_VER" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VER (was $LATEST)"
 
       - name: Create patch.zip
         shell: pwsh
