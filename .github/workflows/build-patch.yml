@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,12 +44,42 @@ jobs:
           if (Test-Path publish/Icons/*.jpg) { Copy-Item publish/Icons/*.jpg _patch/Icons/ }
           Compress-Archive -Path _patch/* -DestinationPath patch.zip -Force
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch
+          path: patch.zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: patch
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.build.outputs.version }}
+          name: v${{ needs.build.outputs.version }}
           files: patch.zip
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$VPS_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -H 45.131.187.128 >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=no root@45.131.187.128 \
+            "cd /var/www/wowbot && [ -f patch.zip ] && mv patch.zip previous_patch.zip || true"
+          scp -i ~/.ssh/vps_key -o StrictHostKeyChecking=no patch.zip root@45.131.187.128:/var/www/wowbot/
+          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=no root@45.131.187.128 \
+            "echo '${{ needs.build.outputs.version }}' > /var/www/wowbot/version.txt"
+          echo "Deployed v${{ needs.build.outputs.version }}"
