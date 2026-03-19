@@ -7,6 +7,9 @@ on:
       - 'WowBot.Core/**'
       - 'WowBot.Injector/**'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
