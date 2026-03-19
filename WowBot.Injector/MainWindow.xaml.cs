@@ -160,6 +160,29 @@ public partial class MainWindow : Window
                 if (_botEngine != null)
                     _botEngine.FollowDistance = dist;
             };
+            _overlay.OnHivemindCommand += (cmd) =>
+            {
+                if (_botEngine == null) return;
+                var hive = _botEngine.Hivemind;
+                switch (cmd)
+                {
+                    case "role:master":
+                        hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Master;
+                        break;
+                    case "role:slave":
+                        hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Slave;
+                        break;
+                    case "role:none":
+                        hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.None;
+                        break;
+                    case "attack": hive.CmdAttack(); break;
+                    case "follow": hive.CmdFollow(); break;
+                    case "stop": hive.CmdStop(); break;
+                    case "scatter": hive.CmdScatter(); break;
+                    case "stack": hive.CmdStack(); break;
+                    case "ping": hive.CmdPing(); break;
+                }
+            };
             WowBot.Core.Logger.Info("Loading overlay settings...");
             _overlay.LoadSettings();
             _overlay.UpdateStatus(specName);

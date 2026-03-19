@@ -638,6 +638,7 @@ public partial class OverlayWindow : Window
     private void MenuBuffs_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Buffs");
     private void MenuFollow_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Follow");
     private void MenuTarget_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Target");
+    private void MenuHivemind_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Hivemind");
 
     private void ShowSubmenu(string name)
     {
@@ -658,6 +659,7 @@ public partial class OverlayWindow : Window
             case "Buffs": BuildBuffsSubmenu(); break;
             case "Follow": BuildFollowSubmenu(); break;
             case "Target": BuildTargetSubmenu(); break;
+            case "Hivemind": BuildHivemindSubmenu(); break;
         }
 
         SubPanel.Visibility = Visibility.Visible;
@@ -915,6 +917,92 @@ public partial class OverlayWindow : Window
         _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? GetSavedBool("chk_autoFace", false));
         _chkAutoTarget = AddCheckBox("Автовыбор таргета", _chkAutoTarget?.IsChecked ?? GetSavedBool("chk_autoTarget", false));
         _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? GetSavedDouble("slider_maxRange", 30), 10, 45, 5);
+    }
+
+    // --- Hivemind ---
+    public event Action<string>? OnHivemindCommand;
+    private string _hivemindRole = "none"; // "none", "master", "slave"
+
+    private void BuildHivemindSubmenu()
+    {
+        AddLabel("Режим");
+
+        // Кнопки выбора роли
+        var rolePanel = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+
+        var btnMaster = new Button
+        {
+            Content = "Мастер", Width = 90, Margin = new Thickness(2),
+            Background = _hivemindRole == "master"
+                ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"))
+                : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
+            Foreground = Brushes.White, BorderThickness = new Thickness(0),
+            FontSize = 11, Cursor = Cursors.Hand,
+        };
+        btnMaster.Click += (s, e) => { _hivemindRole = "master"; OnHivemindCommand?.Invoke("role:master"); ShowSubmenu("Hivemind"); };
+
+        var btnSlave = new Button
+        {
+            Content = "Слейв", Width = 90, Margin = new Thickness(2),
+            Background = _hivemindRole == "slave"
+                ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"))
+                : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
+            Foreground = Brushes.White, BorderThickness = new Thickness(0),
+            FontSize = 11, Cursor = Cursors.Hand,
+        };
+        btnSlave.Click += (s, e) => { _hivemindRole = "slave"; OnHivemindCommand?.Invoke("role:slave"); ShowSubmenu("Hivemind"); };
+
+        var btnOff = new Button
+        {
+            Content = "Выкл", Width = 60, Margin = new Thickness(2),
+            Background = _hivemindRole == "none"
+                ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6b3a3a"))
+                : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
+            Foreground = Brushes.White, BorderThickness = new Thickness(0),
+            FontSize = 11, Cursor = Cursors.Hand,
+        };
+        btnOff.Click += (s, e) => { _hivemindRole = "none"; OnHivemindCommand?.Invoke("role:none"); ShowSubmenu("Hivemind"); };
+
+        rolePanel.Children.Add(btnMaster);
+        rolePanel.Children.Add(btnSlave);
+        rolePanel.Children.Add(btnOff);
+        SubContent.Children.Add(rolePanel);
+
+        // Команды мастера
+        if (_hivemindRole == "master")
+        {
+            AddLabel("Команды");
+
+            AddHiveButton("⚔ Бейте таргет", "attack");
+            AddHiveButton("🏃 Ко мне", "follow");
+            AddHiveButton("🛑 Стоп", "stop");
+            AddHiveButton("↔ Рассыпьтесь", "scatter");
+            AddHiveButton("📌 Стакайтесь", "stack");
+            AddHiveButton("📡 Пинг", "ping");
+        }
+        else if (_hivemindRole == "slave")
+        {
+            AddLabel("Слейв-режим активен");
+            AddLabel("Жду команды мастера...");
+        }
+    }
+
+    private void AddHiveButton(string label, string command)
+    {
+        var btn = new Button
+        {
+            Content = label,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c0c0c0")),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 5, 8, 5),
+            Cursor = Cursors.Hand,
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 1, 0, 1),
+        };
+        btn.Click += (s, e) => OnHivemindCommand?.Invoke(command);
+        SubContent.Children.Add(btn);
     }
 
     // --- Helpers ---

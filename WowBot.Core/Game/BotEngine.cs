@@ -77,12 +77,18 @@ public class BotEngine : IDisposable
 
     public event Action<string>? OnStatusChanged;
 
+    // Hivemind (мультибоксинг)
+    public Hivemind Hivemind { get; private set; }
+    private double _lastHiveCheck;
+    private bool _slaveListenerInstalled;
+
     public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
     {
         _hook = hook;
         _objectManager = objectManager;
         _navigation = navigation;
         _ctm = ctm;
+        Hivemind = new Hivemind(hook, objectManager, navigation, ctm);
     }
 
     public void LoadRotation(string instantScript, string fullScript)
@@ -165,7 +171,7 @@ public class BotEngine : IDisposable
 
     private void Tick(object? state)
     {
-        if (!_followEnabled && !_rotationEnabled && !_buffsEnabled) return;
+        if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) return;
         if (!_hook.IsHooked) return;
 
         try
@@ -173,6 +179,27 @@ public class BotEngine : IDisposable
             _objectManager.Update();
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
+
+            // === HIVEMIND SLAVE: слушаем команды мастера ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave)
+            {
+                // Устанавливаем слушатель (один раз)
+                if (!_slaveListenerInstalled)
+                {
+                    _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
+                    _slaveListenerInstalled = true;
+                    Logger.Info("Hivemind: slave listener installed");
+                }
+
+                // Проверяем новые команды каждые 300мс
+                _buffCheckTick++; // переиспользуем счётчик
+                if (_buffCheckTick >= 2)
+                {
+                    _buffCheckTick = 0;
+                    string checkLua = "EditMacro(1,'WB',1,(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0'))";
+                    // Читаем через LuaReader если доступен
+                }
+            }
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;

@@ -160,6 +160,14 @@
                     </DockPanel>
                 </Border>
 
+                <Border Style="{StaticResource MenuItem}" MouseLeftButtonDown="MenuHivemind_Click">
+                    <DockPanel>
+                        <TextBlock Text="Hivemind" Foreground="#c8aa6e" FontSize="11" FontWeight="SemiBold"/>
+                        <TextBlock Text="&#x25B6;" Foreground="#5a5d65" FontSize="9" DockPanel.Dock="Right"
+                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    </DockPanel>
+                </Border>
+
                 <!-- Info -->
                 <Border Background="#16181e" Padding="8,4" Margin="0,2,0,0" CornerRadius="3">
                     <StackPanel>
