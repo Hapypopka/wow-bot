@@ -113,7 +113,7 @@ public static class AllRotations
         if WB_S.CS~=false and IsReady('Удар воина Света') then CastSpellByName('Удар воина Света') return end
         if WB_S.Cons~=false and IsReady('Освящение') then CastSpellByName('Освящение') return end
         if WB_S.Exo~=false and HasBuff('Искусство войны') and IsReady('Экзорцизм') then CastSpellByName('Экзорцизм') return end
-        if WB_S.SS~=false and hp<85 and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
+        if WB_S.SS~=false and hp<83 and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
     elseif t2>=t1 and t2>=t3 then
         -- PROT
         if not UnitAffectingCombat('player') and not UnitAffectingCombat('target') then return end
