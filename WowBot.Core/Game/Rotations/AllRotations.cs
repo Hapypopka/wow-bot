@@ -128,9 +128,9 @@ local function WB_Run()
         if WB_S.Cons~=false and IsReady('Освящение') then CastSpellByName('Освящение') return end
         -- Экзорцизм (только с проком Искусство войны — инстант)
         if WB_S.Exo~=false and HasBuff('Искусство войны') and IsReady('Экзорцизм') then CastSpellByName('Экзорцизм') return end
-        -- Священный щит (только при HP < 81%)
+        -- Священный щит (только при HP < 79%)
         local php = UnitHealth('player')/UnitHealthMax('player')
-        if WB_S.SS~=false and php < 0.81 and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
+        if WB_S.SS~=false and php < 0.79 and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
     end
 end
 WB_Run()
