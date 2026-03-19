@@ -179,32 +179,63 @@ def git_push() -> tuple[bool, str]:
         return False, str(e)
 
 
-async def wait_for_github_actions(timeout: int = 300) -> tuple[bool, str]:
-    """Ждём завершения GitHub Actions"""
+async def wait_for_release_and_download(timeout: int = 600) -> tuple[bool, str]:
+    """Ждём GitHub Release + скачиваем patch.zip на VPS"""
     import urllib.request
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github+json"}
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/runs?per_page=1&branch=master"
 
-    await asyncio.sleep(10)  # Даём GitHub время создать run
+    # Запоминаем текущий latest release ID
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+    old_id = None
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        old_data = json.loads(urllib.request.urlopen(req, timeout=10).read())
+        old_id = old_data.get("id")
+    except Exception:
+        pass
 
-    for _ in range(timeout // 15):
+    await asyncio.sleep(30)  # Даём GitHub время
+
+    for _ in range(timeout // 20):
         try:
             req = urllib.request.Request(url, headers=headers)
-            resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
-            runs = resp.get("workflow_runs", [])
-            if runs:
-                run = runs[0]
-                status = run.get("status")
-                conclusion = run.get("conclusion")
-                if status == "completed":
-                    if conclusion == "success":
-                        return True, f"v{run.get('run_number', '?')}"
-                    else:
-                        return False, f"Actions failed: {conclusion}"
-        except Exception as e:
-            logger.error(f"GitHub API error: {e}")
+            data = json.loads(urllib.request.urlopen(req, timeout=10).read())
+            new_id = data.get("id")
+            tag = data.get("tag_name", "?")
 
-        await asyncio.sleep(15)
+            if new_id and new_id != old_id:
+                # Новый release! Скачиваем patch.zip
+                assets = data.get("assets", [])
+                for asset in assets:
+                    if asset["name"] == "patch.zip":
+                        download_url = asset["browser_download_url"]
+                        # Скачиваем на VPS
+                        result = subprocess.run(
+                            ["sudo", "-u", "claude", "bash", "-c",
+                             f"cd /var/www/wowbot && [ -f patch.zip ] && mv patch.zip previous_patch.zip; "
+                             f"curl -sL '{download_url}' -o patch.zip && "
+                             f"echo '{tag.replace('v','')}' > version.txt"],
+                            capture_output=True, text=True, timeout=60
+                        )
+                        if result.returncode == 0:
+                            return True, tag
+                        else:
+                            return False, f"Download failed: {result.stderr[:200]}"
+                return False, f"Release {tag} без patch.zip"
+        except Exception as e:
+            logger.error(f"Release check error: {e}")
+
+        await asyncio.sleep(20)
+
+    # Проверим может Actions упал
+    try:
+        actions_url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/runs?per_page=1"
+        req = urllib.request.Request(actions_url, headers=headers)
+        runs = json.loads(urllib.request.urlopen(req, timeout=10).read()).get("workflow_runs", [])
+        if runs and runs[0].get("conclusion") == "failure":
+            return False, "Actions failed: failure"
+    except Exception:
+        pass
 
     return False, "Таймаут ожидания сборки"
 
@@ -366,8 +397,8 @@ async def _do_full_fix(bot, chat_id, user, username, description, log_path):
 
         await bot.send_message(chat_id, "📦 Код отправлен. Собирается на GitHub...")
 
-        # 4. Ждём GitHub Actions
-        success, info = await wait_for_github_actions(timeout=300)
+        # 4. Ждём GitHub Release + скачиваем patch.zip
+        success, info = await wait_for_release_and_download(timeout=600)
 
         if success:
             save_bug(user, description, fix_result)

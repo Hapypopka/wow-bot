@@ -42,20 +42,12 @@ jobs:
           if (Test-Path publish/Icons/*.jpg) { Copy-Item publish/Icons/*.jpg _patch/Icons/ }
           Compress-Archive -Path _patch/* -DestinationPath patch.zip -Force
 
-      - name: Deploy patch to VPS
-        shell: bash
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: patch.zip
+          make_latest: true
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          # Записываем ключ
-          mkdir -p ~/.ssh
-          echo "$VPS_KEY" > ~/.ssh/vps_key
-          chmod 600 ~/.ssh/vps_key
-          ssh-keyscan -H 45.131.187.128 >> ~/.ssh/known_hosts 2>/dev/null
-          # Бэкап старого патча + копируем новый
-          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=no root@45.131.187.128 \
-            "cd /var/www/wowbot && [ -f patch.zip ] && mv patch.zip previous_patch.zip || true"
-          scp -i ~/.ssh/vps_key -o StrictHostKeyChecking=no patch.zip root@45.131.187.128:/var/www/wowbot/
-          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=no root@45.131.187.128 \
-            "echo '${{ steps.version.outputs.version }}' > /var/www/wowbot/version.txt"
-          echo "Deployed v${{ steps.version.outputs.version }}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
