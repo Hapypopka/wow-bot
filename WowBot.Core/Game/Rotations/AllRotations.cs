@@ -195,6 +195,7 @@ public static class AllRotations
         if WB_S.Rapid~=false and IsReady('Быстрая стрельба') then CastSpellByName('Быстрая стрельба') return end
         if WB_S.Serpent~=false and not HasDebuff('target','Укус змеи') then CastSpellByName('Укус змеи') return end
         if WB_S.Chimera~=false and IsReady('Выстрел химеры') then CastSpellByName('Выстрел химеры') return end
+        if WB_S.Volley~=false and (WB_NE or 0)>1 and IsReady('Залп') then CastSpellByName('Залп') return end
         if WB_S.Aimed~=false and IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') return end
         if WB_S.Silence~=false and IsReady('Глушащий выстрел') then CastSpellByName('Глушащий выстрел') return end
         if WB_S.Steady~=false then local chCD=(WB_S.Chimera~=false) and CDLeft('Выстрел химеры') or 99 local aiCD=(WB_S.Aimed~=false) and CDLeft('Прицельный выстрел') or 99 if chCD>2 and aiCD>2 then CastSpellByName('Верный выстрел') end end

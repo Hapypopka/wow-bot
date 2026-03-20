@@ -278,6 +278,7 @@ public partial class OverlayWindow : Window
             ("CotW", "call_wild.jpg", "Зов дикой природы (боссы)", true),
             ("Chimera", "chimera_shot.jpg", "Выстрел химеры", true),
             ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
+            ("Volley", "aimed_shot.jpg", "Залп (AoE, если >1 цели)", true),
             ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
             ("Silence", "silencing_shot.jpg", "Глушащий выстрел", true),
             ("Steady", "steady_shot.jpg", "Верный выстрел", true),

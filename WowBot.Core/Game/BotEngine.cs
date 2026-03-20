@@ -65,6 +65,19 @@ public class BotEngine : IDisposable
     }
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
     public string SpellFlagsLua { get; set; } = "";
+
+    /// Считает живых мобов рядом с игроком (для AoE ротаций, напр. Залп охотника)
+    private int CountNearbyEnemies(WowPlayer player, float range = 30f)
+    {
+        int count = 0;
+        foreach (var unit in _objectManager.Units)
+        {
+            if (!unit.IsAlive) continue;
+            if (player.DistanceTo(unit) > range) continue;
+            count++;
+        }
+        return count;
+    }
     public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
     public string SelectedAura { get; set; } = "AuRet";
@@ -200,6 +213,10 @@ public class BotEngine : IDisposable
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
 
+            // Считаем мобов рядом для AoE (Залп охотника и т.п.)
+            int nearbyEnemies = CountNearbyEnemies(player);
+            string enemyCountLua = $"WB_NE={nearbyEnemies} ";
+
             // === HIVEMIND SLAVE: слушаем команды мастера ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave)
             {
@@ -268,7 +285,7 @@ public class BotEngine : IDisposable
                 if (slaveTarget != null && slaveTarget.IsAlive)
                 {
                     if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
-                    string script = SpellFlagsLua + _fullScript;
+                    string script = enemyCountLua + SpellFlagsLua + _fullScript;
                     _hook.ExecuteLua(script, 500);
                 }
                 return; // Слейв в атаке — не нужен обычный follow/rotation
@@ -306,7 +323,7 @@ public class BotEngine : IDisposable
                 if (hasTarget || IsHealer)
                 {
                     if (hasTarget && _autoFace && !IsHealer) _navigation.FaceUnit(player, target!);
-                    string script = SpellFlagsLua + GetRotationScript(player);
+                    string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
                     if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
                     _hook.ExecuteLua(script, 500);
                 }
@@ -329,7 +346,7 @@ public class BotEngine : IDisposable
 
                 // Instants на бегу БЕЗ поворота
                 if (hasTarget)
-                    _hook.ExecuteLua(SpellFlagsLua + _instantScript, 300);
+                    _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
             }
             else
             {
@@ -338,7 +355,7 @@ public class BotEngine : IDisposable
                 if (hasTarget)
                 {
                     if (_autoFace) _navigation.FaceUnit(player, target!);
-                    string script = SpellFlagsLua + GetRotationScript(player);
+                    string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
                     _hook.ExecuteLua(script, 500);
                 }
             }
