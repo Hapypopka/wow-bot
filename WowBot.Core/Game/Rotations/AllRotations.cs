@@ -157,7 +157,19 @@ public static class AllRotations
     end
 ");
 
-    private static string Hunter() => WrapDPS(@"
+    private static string Hunter() => Wrap(@"
+    if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
+    if UnitIsDeadOrGhost('player') then return end
+    if not WB_S then WB_S={} end
+    if WB_S.Pet~=false then
+        if not UnitExists('pet') then CastSpellByName('Призыв питомца') return end
+        if UnitIsDead('pet') then CastSpellByName('Воскрешение питомца') return end
+        if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') and UnitAffectingCombat('player') then PetAttack() end
+    end
+    if not UnitAffectingCombat('target') then return end
+    if not UnitExists('target') then return end
+    if UnitIsDeadOrGhost('target') then return end
+    if not UnitCanAttack('player', 'target') then return end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
