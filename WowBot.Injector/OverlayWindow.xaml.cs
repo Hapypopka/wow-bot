@@ -271,6 +271,7 @@ public partial class OverlayWindow : Window
         {
             ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
             ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
+            ("Dragonhawk", "aimed_shot.jpg", "Дух дракондора (в бою)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
             ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", true),
