@@ -126,27 +126,63 @@ public class Hivemind
     internal bool _slaveListenerInstalled;
 
     private int _retargetTick;
+    private bool _hasTarget; // Слейв уже взял таргет от мастера
+
+    /// <summary>Автосвич: если таргет умер — берёт новый от мастера</summary>
+    public bool AutoSwitch { get; set; } = true;
+
+    /// <summary>Всегда ассистить мастера (ретаргет каждые 2 сек). По дефолту OFF.</summary>
+    public bool AlwaysAssist { get; set; } = false;
 
     /// <summary>
     /// Вызывать каждый тик (150мс) из BotEngine.
-    /// Follow — CTM к мастеру (как "Следование").
-    /// Attack — ретаргетим таргет мастера каждые 2 сек.
+    /// Attack — проверяем жив ли таргет, автосвич если умер.
     /// </summary>
     public void SlaveTickFollow()
     {
         if (!_followMaster || string.IsNullOrEmpty(MasterName)) return;
 
         // Follow без атаки — полностью через штатный BotEngine follow (SetFollowGuid)
-        // SlaveTickFollow нужен ТОЛЬКО для режима атаки (ретаргет)
         if (!_followAttack) return;
 
-        // Режим атаки: ретаргетим таргет мастера каждые 2 сек
+        // Проверяем таргет каждые ~1 сек
         _retargetTick++;
-        if (_retargetTick >= 13)
+        if (_retargetTick < 7) return;
+        _retargetTick = 0;
+
+        // AlwaysAssist — всегда бьём таргет мастера
+        if (AlwaysAssist)
         {
-            _retargetTick = 0;
-            _hook.ExecuteLua($"AssistUnit('{MasterName}')", 200);
+            _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
+            _hasTarget = true;
+            return;
         }
+
+        // Если у слейва уже есть живой таргет — не трогаем
+        if (_hasTarget)
+        {
+            // Проверяем жив ли наш таргет через Lua
+            _hook.ExecuteLua(
+                "if not UnitExists('target') or UnitIsDead('target') then WB_TARGET_DEAD=1 else WB_TARGET_DEAD=0 end", 100);
+            // Читаем результат на следующем тике (упрощённо: проверяем через ObjectManager)
+            var target = _objectManager.GetTarget();
+            if (target == null || !target.IsAlive)
+            {
+                _hasTarget = false;
+                if (AutoSwitch)
+                {
+                    // Таргет умер — берём новый от мастера
+                    _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
+                    _hasTarget = true;
+                    Logger.Info("Hivemind: SLAVE auto-switch target (old died)");
+                }
+            }
+            return;
+        }
+
+        // Нет таргета — берём от мастера
+        _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
+        _hasTarget = true;
     }
 
     private Entities.WowUnit? FindPlayerByName(string name)
@@ -267,8 +303,10 @@ end
                 _followMaster = true;
                 _followAttack = true;
                 _wantRotation = true;
+                _hasTarget = false; // Сброс — возьмёт новый таргет на следующем тике
                 // Ассистим таргет мастера + автоатака
                 _hook.ExecuteLua($"AssistUnit('{arg}') StartAttack()", 200);
+                _hasTarget = true;
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE attack target of {arg}");
                 break;

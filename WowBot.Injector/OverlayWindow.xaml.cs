@@ -936,6 +936,8 @@ public partial class OverlayWindow : Window
     // --- Hivemind ---
     public event Action<string>? OnHivemindCommand;
     private string _hivemindRole = "none"; // "none", "master", "slave"
+    private bool _autoSwitch = true;
+    private bool _alwaysAssist = false;
 
     private void BuildHivemindSubmenu()
     {
@@ -998,6 +1000,31 @@ public partial class OverlayWindow : Window
         {
             AddLabel("Слейв-режим активен");
             AddLabel("Жду команды мастера...");
+
+            // Тоглы
+            var chkAutoSwitch = new System.Windows.Controls.CheckBox
+            {
+                Content = "Автосвич (свич цели если умерла)",
+                IsChecked = _autoSwitch,
+                Foreground = new SolidColorBrush(Colors.LightGray),
+                Margin = new Thickness(5, 5, 0, 0),
+                FontSize = 11,
+            };
+            chkAutoSwitch.Checked += (s, e) => { _autoSwitch = true; OnHivemindCommand?.Invoke("autoswitch:on"); };
+            chkAutoSwitch.Unchecked += (s, e) => { _autoSwitch = false; OnHivemindCommand?.Invoke("autoswitch:off"); };
+            SubContent.Children.Add(chkAutoSwitch);
+
+            var chkAlwaysAssist = new System.Windows.Controls.CheckBox
+            {
+                Content = "Всегда бить цель мастера",
+                IsChecked = _alwaysAssist,
+                Foreground = new SolidColorBrush(Colors.LightGray),
+                Margin = new Thickness(5, 3, 0, 0),
+                FontSize = 11,
+            };
+            chkAlwaysAssist.Checked += (s, e) => { _alwaysAssist = true; OnHivemindCommand?.Invoke("alwaysassist:on"); };
+            chkAlwaysAssist.Unchecked += (s, e) => { _alwaysAssist = false; OnHivemindCommand?.Invoke("alwaysassist:off"); };
+            SubContent.Children.Add(chkAlwaysAssist);
         }
     }
 
