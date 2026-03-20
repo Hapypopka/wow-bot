@@ -280,6 +280,8 @@ public partial class OverlayWindow : Window
             ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
             ("Volley", "aimed_shot.jpg", "Залп (AoE, если >1 цели)", true),
             ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
+            ("Trap", "explosive_shot.jpg", "Взрывная ловушка (по КД)", true),
+            ("Readiness", "rapid_fire.jpg", "Готовность (сброс КД)", true),
             ("Silence", "silencing_shot.jpg", "Глушащий выстрел", true),
             ("Steady", "steady_shot.jpg", "Верный выстрел", true),
         },
