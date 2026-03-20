@@ -159,12 +159,15 @@ public static class AllRotations
 
     private static string Hunter() => Wrap(@"
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
-    if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
+    if WB_S.Pet~=false and UnitExists('pet') and not UnitIsDead('pet') then
+        if HasBuff('Притвориться мертвым') or UnitIsDeadOrGhost('player') then PetPassive() PetFollow() return end
+    end
+    if UnitIsDeadOrGhost('player') then return end
     if WB_S.Pet~=false then
         if not UnitExists('pet') then CastSpellByName('Призыв питомца') return end
         if UnitIsDead('pet') then CastSpellByName('Воскрешение питомца') return end
-        if HasBuff('Притвориться мертвым') or not UnitAffectingCombat('player') then PetPassive() PetFollow() return end
+        if not UnitAffectingCombat('player') then PetPassive() PetFollow() return end
         if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') then PetAttack() end
     end
     if not UnitAffectingCombat('player') then return end
