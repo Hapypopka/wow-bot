@@ -589,10 +589,16 @@ WB_AoE()
             bool hasViper = selfBuffs.Remove("Дух гадюки");
             if (hasDragon && hasViper)
             {
-                // Гадюка при мане <30%, дракондор при мане >80% (гистерезис от перещёлкивания)
+                // Вне боя: гадюка если мана <100%, дракондор если мана полная
+                // В бою: гадюка при мане <30%, дракондор при мане >80% (гистерезис)
                 sb.Append("local m=UnitMana('player')/UnitManaMax('player') ");
+                sb.Append("if not UnitAffectingCombat('player') then ");
+                sb.Append("if m<1 and not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
+                sb.Append("if m>=1 and not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
+                sb.Append("else ");
                 sb.Append("if m<0.3 and not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
                 sb.Append("if m>0.8 and not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
+                sb.Append("end ");
                 sb.Append("if not HasB('player','Дух дракондора') and not HasB('player','Дух гадюки') then CastSpellByName('Дух дракондора') return end ");
             }
             else if (hasDragon)
