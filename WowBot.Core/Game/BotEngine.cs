@@ -13,6 +13,7 @@ public class BotEngine : IDisposable
 
     private string _instantScript = "";
     private string _fullScript = "";
+    private string _fullScriptNoCombatCheck = "";
 
     private bool _followEnabled;
     private bool _rotationEnabled;
@@ -83,6 +84,10 @@ public class BotEngine : IDisposable
     public string SelectedAura { get; set; } = "AuRet";
     public bool IsHealer { get; set; }
     public string PlayerClass { get; set; } = "";
+    private bool _isApproaching;
+    private float _lastApproachX, _lastApproachY;
+    private string? _specName;
+    public string? SpecName { get => _specName; set => _specName = value; }
 
     // Mana thresholds (из оверлея, в процентах 0-100)
     public int DispManaThreshold { get; set; } = 15;
@@ -111,6 +116,11 @@ public class BotEngine : IDisposable
     {
         _instantScript = instantScript;
         _fullScript = fullScript;
+        // Версия без проверки комбата — для слейва Hivemind
+        _fullScriptNoCombatCheck = fullScript
+            .Replace("not UnitAffectingCombat('player') and not UnitAffectingCombat('target')", "false")
+            .Replace("not UnitAffectingCombat('target')", "false")
+            .Replace("not UnitAffectingCombat('player')", "false");
     }
 
     // --- Follow target ---
@@ -284,11 +294,56 @@ public class BotEngine : IDisposable
                 var slaveTarget = _objectManager.GetTarget();
                 if (slaveTarget != null && slaveTarget.IsAlive)
                 {
-                    if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
-                    string script = enemyCountLua + SpellFlagsLua + _fullScript;
-                    _hook.ExecuteLua(script, 500);
+                    float distToTarget = player.DistanceTo2D(slaveTarget); // 2D — WoW проверяет спеллы без учёта высоты
+                    // Дистанция каста: мили ~5 ярдов, рейндж ~30 ярдов
+                    bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
+                                   PlayerClass == "DEATHKNIGHT" ||
+                                   (PlayerClass == "PALADIN" && !IsHealer) ||
+                                   (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
+                                   (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
+                    float castRange = isMelee ? 5f : 30f;
+
+                    float stopDist = isMelee ? 4f : 23f; // На каком расстоянии от таргета остановиться
+
+                    if (distToTarget > stopDist + 3f)
+                    {
+                        // Далеко — повернуться и дать CTM один раз
+                        if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
+                        // Даём CTM только если ещё не бежим (или таргет сильно сдвинулся)
+                        float dx = slaveTarget.X - _lastApproachX;
+                        float dy = slaveTarget.Y - _lastApproachY;
+                        float targetMoved = MathF.Sqrt(dx * dx + dy * dy);
+                        if (!_isApproaching || targetMoved > 8f)
+                        {
+                            // Рассчитываем точку на расстоянии stopDist от таргета в нашу сторону
+                            float dirX = player.X - slaveTarget.X;
+                            float dirY = player.Y - slaveTarget.Y;
+                            float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
+                            if (dirLen > 0.1f)
+                            {
+                                dirX /= dirLen;
+                                dirY /= dirLen;
+                            }
+                            float goalX = slaveTarget.X + dirX * stopDist;
+                            float goalY = slaveTarget.Y + dirY * stopDist;
+                            float goalZ = slaveTarget.Z;
+                            _ctm.MoveTo(goalX, goalY, goalZ, 1.5f);
+                            _lastApproachX = slaveTarget.X;
+                            _lastApproachY = slaveTarget.Y;
+                            _isApproaching = true;
+                        }
+                    }
+                    else
+                    {
+                        // В дистанции — бьём без проверки комбата
+                        _isApproaching = false;
+                        if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
+                        // Слейв: пропускаем PreChecks (комбат-проверку) — кастуем сразу
+                        string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+                        _hook.ExecuteLua(script, 500);
+                    }
                 }
-                return; // Слейв в атаке — не нужен обычный follow/rotation
+                return;
             }
 
             if (!_followEnabled && !_rotationEnabled) return;

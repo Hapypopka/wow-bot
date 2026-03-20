@@ -63,6 +63,14 @@ public class WowUnit : WowObject
         return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    /// <summary>2D дистанция (без учёта высоты) — WoW использует для проверки дальности спеллов</summary>
+    public float DistanceTo2D(WowUnit other)
+    {
+        float dx = X - other.X;
+        float dy = Y - other.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
     // --- Ауры (баффы/дебаффы) ---
     public List<int> GetAuraSpellIds()
     {

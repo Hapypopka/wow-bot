@@ -20,6 +20,43 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
+    private static readonly string PidLockFile = System.IO.Path.Combine(
+        System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
+        "attached_pids.txt");
+    private int _attachedPid;
+
+    private static HashSet<int> GetLockedPids()
+    {
+        var pids = new HashSet<int>();
+        try
+        {
+            if (System.IO.File.Exists(PidLockFile))
+            {
+                foreach (var line in System.IO.File.ReadAllLines(PidLockFile))
+                    if (int.TryParse(line.Trim(), out int pid)) pids.Add(pid);
+                // Убираем мёртвые процессы
+                pids.RemoveWhere(p => { try { Process.GetProcessById(p); return false; } catch { return true; } });
+                System.IO.File.WriteAllLines(PidLockFile, pids.Select(p => p.ToString()));
+            }
+        }
+        catch { }
+        return pids;
+    }
+
+    private static void LockPid(int pid)
+    {
+        var pids = GetLockedPids();
+        pids.Add(pid);
+        try { System.IO.File.WriteAllLines(PidLockFile, pids.Select(p => p.ToString())); } catch { }
+    }
+
+    private static void UnlockPid(int pid)
+    {
+        var pids = GetLockedPids();
+        pids.Remove(pid);
+        try { System.IO.File.WriteAllLines(PidLockFile, pids.Select(p => p.ToString())); } catch { }
+    }
+
     private readonly MemoryReader _memory = new();
     private ObjectManager? _objectManager;
     private EndSceneHook? _endSceneHook;
@@ -63,6 +100,7 @@ public partial class MainWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
+        if (_attachedPid != 0) UnlockPid(_attachedPid);
         StopUpdateLoop();
         _overlay?.SaveSettings();
         _overlay?.Close();
@@ -130,6 +168,8 @@ public partial class MainWindow : Window
 
         BtnAttach.Visibility = Visibility.Collapsed;
         BtnDetach.Visibility = Visibility.Visible;
+        _attachedPid = wow.Id;
+        LockPid(wow.Id);
 
         _endSceneHook = new EndSceneHook(_memory);
 
@@ -184,6 +224,7 @@ public partial class MainWindow : Window
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
             _botEngine.PlayerClass = playerClass;
+            _botEngine.SpecName = specName;
             _botEngine.LuaReader = _luaReader;
             var fullScript = AllRotations.GetFullScript(playerClass);
             var instantScript = AllRotations.GetInstantScript(playerClass);
@@ -276,6 +317,7 @@ public partial class MainWindow : Window
 
     private void BtnDetach_Click(object sender, RoutedEventArgs e)
     {
+        if (_attachedPid != 0) { UnlockPid(_attachedPid); _attachedPid = 0; }
         StopUpdateLoop();
 
         // Останавливаем бот и снимаем хук
@@ -693,25 +735,30 @@ public partial class MainWindow : Window
         };
         stack.Children.Add(header);
 
+        var lockedPids = GetLockedPids();
+
         foreach (var (proc, name) in items)
         {
+            bool isLocked = lockedPids.Contains(proc.Id);
+
             var btnBorder = new Border
             {
                 CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12121a")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1e1e2e")),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isLocked ? "#0a0a0e" : "#12121a")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isLocked ? "#151518" : "#1e1e2e")),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(16, 12, 16, 12),
                 Margin = new Thickness(0, 3, 0, 3),
-                Cursor = Cursors.Hand,
+                Cursor = isLocked ? Cursors.Arrow : Cursors.Hand,
+                Opacity = isLocked ? 0.4 : 1.0,
             };
 
             var btnStack = new StackPanel();
             btnStack.Children.Add(new TextBlock
             {
-                Text = name,
+                Text = isLocked ? $"{name}  (занят)" : name,
                 FontSize = 15, FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e8e6e3")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isLocked ? "#555" : "#e8e6e3")),
             });
             btnStack.Children.Add(new TextBlock
             {
@@ -721,20 +768,28 @@ public partial class MainWindow : Window
                 Margin = new Thickness(0, 2, 0, 0),
             });
 
-            var btn = new Button { Cursor = Cursors.Hand, Padding = new Thickness(0), BorderThickness = new Thickness(0) };
-            btn.Template = new ControlTemplate(typeof(Button))
-            {
-                VisualTree = new FrameworkElementFactory(typeof(ContentPresenter))
-            };
             btnBorder.Child = btnStack;
-            btn.Content = btnBorder;
-            var p = proc;
-            btn.Click += (s, e) => { selected = p; dialog.Close(); };
-            btnBorder.MouseEnter += (s, e) =>
-                btnBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28"));
-            btnBorder.MouseLeave += (s, e) =>
-                btnBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12121a"));
-            stack.Children.Add(btn);
+
+            if (!isLocked)
+            {
+                var btn = new Button { Cursor = Cursors.Hand, Padding = new Thickness(0), BorderThickness = new Thickness(0) };
+                btn.Template = new ControlTemplate(typeof(Button))
+                {
+                    VisualTree = new FrameworkElementFactory(typeof(ContentPresenter))
+                };
+                btn.Content = btnBorder;
+                var p = proc;
+                btn.Click += (s, e) => { selected = p; dialog.Close(); };
+                btnBorder.MouseEnter += (s, e) =>
+                    btnBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28"));
+                btnBorder.MouseLeave += (s, e) =>
+                    btnBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12121a"));
+                stack.Children.Add(btn);
+            }
+            else
+            {
+                stack.Children.Add(btnBorder);
+            }
         }
 
         outerBorder.Child = stack;

@@ -43,7 +43,8 @@ public class Navigation
     /// </summary>
     public void FaceUnit(WowUnit player, WowUnit target)
     {
-        if (IsFacing(player, target, 0.3f))
+        // Широкий tolerance — не дёргать если примерно смотрим на таргет
+        if (IsFacing(player, target, 0.8f))
         {
             if (_isTurning)
             {
@@ -52,6 +53,9 @@ public class Navigation
             }
             return;
         }
+
+        // Не поворачиваем если кастуем (прервёт каст)
+        if (player.IsCasting) return;
 
         float needed = GetAngleTo(player, target);
         float current = player.Facing;
