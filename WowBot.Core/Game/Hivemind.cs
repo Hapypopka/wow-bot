@@ -261,12 +261,14 @@ end
                 break;
 
             case Command.Attack:
-                // Берём таргет мастера + включаем авто-атаку
+                // Сбрасываем follow, берём таргет мастера + включаем ротацию
+                _botEngine?.StopFollow();
                 MasterName = arg;
                 _followMaster = true;
                 _followAttack = true;
                 _wantRotation = true;
-                _hook.ExecuteLua($"AssistUnit('{arg}')", 200);
+                // Ассистим таргет мастера + автоатака
+                _hook.ExecuteLua($"AssistUnit('{arg}') StartAttack()", 200);
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE attack target of {arg}");
                 break;

@@ -36,14 +36,40 @@ public class Navigation
         return diff < tolerance;
     }
 
+    private bool _isTurning;
+
     /// <summary>
-    /// Поворачивает к юниту (только запись в память)
+    /// Поворачивает к юниту — серверно через TurnLeft/RightStart + запись facing + Stop
     /// </summary>
     public void FaceUnit(WowUnit player, WowUnit target)
     {
-        if (IsFacing(player, target, 0.5f)) return;
-        float angle = GetAngleTo(player, target);
-        _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, angle);
+        if (IsFacing(player, target, 0.3f))
+        {
+            if (_isTurning)
+            {
+                _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 50);
+                _isTurning = false;
+            }
+            return;
+        }
+
+        float needed = GetAngleTo(player, target);
+        float current = player.Facing;
+
+        // Определяем направление поворота (кратчайший путь)
+        float diff = needed - current;
+        while (diff > MathF.PI) diff -= MathF.PI * 2;
+        while (diff < -MathF.PI) diff += MathF.PI * 2;
+
+        // Записываем нужный facing в память (мгновенный локальный поворот)
+        _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
+
+        // Запускаем серверный поворот (TurnStart) и сразу стопим — сервер видит новый facing
+        if (diff > 0)
+            _hook.ExecuteLua("TurnRightStop() TurnLeftStart()", 30);
+        else
+            _hook.ExecuteLua("TurnLeftStop() TurnRightStart()", 30);
+        _isTurning = true;
     }
 
     /// <summary>
