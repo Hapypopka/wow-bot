@@ -200,7 +200,7 @@ public static class AllRotations
         if WB_S.Aimed~=false and IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') return end
         if WB_S.Silence~=false and IsReady('Глушащий выстрел') then CastSpellByName('Глушащий выстрел') return end
         if WB_S.Readiness~=false then local chCD=(WB_S.Chimera~=false) and CDLeft('Выстрел химеры') or 0 local rpCD=(WB_S.Rapid~=false) and CDLeft('Быстрая стрельба') or 0 if chCD>5 and rpCD>5 and IsReady('Готовность') then CastSpellByName('Готовность') return end end
-        if WB_S.Steady~=false then local chCD=(WB_S.Chimera~=false) and CDLeft('Выстрел химеры') or 99 local aiCD=(WB_S.Aimed~=false) and CDLeft('Прицельный выстрел') or 99 if chCD>2 and aiCD>2 then CastSpellByName('Верный выстрел') end end
+        if WB_S.Steady~=false then local chCD=(WB_S.Chimera~=false) and CDLeft('Выстрел химеры') or 99 local aiCD=(WB_S.Aimed~=false) and CDLeft('Прицельный выстрел') or 99 local ksCD=(WB_S.Kill~=false and THP()<0.2) and CDLeft('Убийственный выстрел') or 99 if chCD>2 and aiCD>2 and ksCD>2 then CastSpellByName('Верный выстрел') end end
     else
         if WB_S.Explosive~=false and IsReady('Разрывной выстрел') then CastSpellByName('Разрывной выстрел') return end
         if WB_S.Black~=false and not HasDebuff('target','Черная стрела') and IsReady('Черная стрела') then CastSpellByName('Черная стрела') return end
