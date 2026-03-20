@@ -164,9 +164,10 @@ public static class AllRotations
     if WB_S.Pet~=false then
         if not UnitExists('pet') then CastSpellByName('Призыв питомца') return end
         if UnitIsDead('pet') then CastSpellByName('Воскрешение питомца') return end
-        if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') and UnitAffectingCombat('player') then PetAttack() end
+        if HasBuff('Притвориться мертвым') or not UnitAffectingCombat('player') then PetPassive() PetFollow() return end
+        if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') then PetAttack() end
     end
-    if not UnitAffectingCombat('target') then return end
+    if not UnitAffectingCombat('player') then return end
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
