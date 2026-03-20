@@ -443,12 +443,9 @@ public partial class MainWindow : Window
                 _botEngine.BuffsEnabled = _overlay.BuffsEnabled;
                 _botEngine.SpellFlagsLua = _overlay.GetSpellFlagsLua();
                 _botEngine.EnabledBuffs = _overlay.GetEnabledBuffs();
-                if (_botEngine.PlayerClass == "PALADIN")
-                {
-                    _botEngine.SelectedSeal = _overlay.SelectedSeal;
-                    _botEngine.SelectedBlessing = _overlay.SelectedBlessing;
-                    _botEngine.SelectedAura = _overlay.SelectedAura;
-                }
+                _botEngine.SelectedSeal = _overlay.SelectedSeal;
+                _botEngine.SelectedBlessing = _overlay.SelectedBlessing;
+                _botEngine.SelectedAura = _overlay.SelectedAura;
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;

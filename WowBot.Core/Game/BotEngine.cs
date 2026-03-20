@@ -65,7 +65,7 @@ public class BotEngine : IDisposable
     }
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
     public string SpellFlagsLua { get; set; } = "";
-    public string SelectedSeal { get; set; } = "SoV";
+    public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
     public string SelectedAura { get; set; } = "AuRet";
     public bool IsHealer { get; set; }
@@ -587,8 +587,9 @@ WB_AoE()
         {
             bool hasDragon = selfBuffs.Remove("Дух дракондора");
             bool hasViper = selfBuffs.Remove("Дух гадюки");
-            if (hasDragon && hasViper)
+            if (hasDragon)
             {
+                // Дракондор включён → авто-переключение на гадюку для реген маны
                 // Вне боя: гадюка если мана <100%, дракондор если мана полная
                 // В бою: гадюка при мане <30%, дракондор при мане >80% (гистерезис)
                 sb.Append("local m=UnitMana('player')/UnitManaMax('player') ");
@@ -600,10 +601,6 @@ WB_AoE()
                 sb.Append("if m>0.8 and not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
                 sb.Append("end ");
                 sb.Append("if not HasB('player','Дух дракондора') and not HasB('player','Дух гадюки') then CastSpellByName('Дух дракондора') return end ");
-            }
-            else if (hasDragon)
-            {
-                sb.Append("if not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
             }
             else if (hasViper)
             {
