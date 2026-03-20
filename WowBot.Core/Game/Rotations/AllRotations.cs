@@ -23,6 +23,7 @@ public static class AllRotations
     local function THP() local h,hm=UnitHealth('target'),UnitHealthMax('target') if hm==0 then return 1 end return h/hm end
     local function PHP() local h,hm=UnitHealth('player'),UnitHealthMax('player') if hm==0 then return 1 end return h/hm end
     local function CP() return GetComboPoints('player','target') or 0 end
+    local function CDLeft(name) local s,d=GetSpellCooldown(name) if not s or s==0 then return 0 end return s+d-GetTime() end
 ";
 
     private const string PreChecksDPS = @"
@@ -195,7 +196,7 @@ public static class AllRotations
         if WB_S.Chimera~=false and IsReady('Выстрел химеры') then CastSpellByName('Выстрел химеры') return end
         if WB_S.Aimed~=false and IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') return end
         if WB_S.Silence~=false and IsReady('Глушащий выстрел') then CastSpellByName('Глушащий выстрел') return end
-        if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end
+        if WB_S.Steady~=false then local chCD=(WB_S.Chimera~=false) and CDLeft('Выстрел химеры') or 99 local aiCD=(WB_S.Aimed~=false) and CDLeft('Прицельный выстрел') or 99 if chCD>2 and aiCD>2 then CastSpellByName('Верный выстрел') end end
     else
         if WB_S.Explosive~=false and IsReady('Разрывной выстрел') then CastSpellByName('Разрывной выстрел') return end
         if WB_S.Black~=false and not HasDebuff('target','Черная стрела') and IsReady('Черная стрела') then CastSpellByName('Черная стрела') return end
