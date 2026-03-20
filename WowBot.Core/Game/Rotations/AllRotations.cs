@@ -161,7 +161,8 @@ public static class AllRotations
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if not WB_S then WB_S={} end
     if WB_S.Pet~=false and UnitExists('pet') and not UnitIsDead('pet') then
-        if HasBuff('Притвориться мертвым') or UnitIsDeadOrGhost('player') then PetPassive() PetFollow() return end
+        if HasBuffById(5384) or UnitIsDeadOrGhost('player') then WB_FD=GetTime() PetPassive() PetFollow() return end
+        if WB_FD and GetTime()-WB_FD<5 then PetPassive() PetFollow() return end
     end
     if UnitIsDeadOrGhost('player') then return end
     if WB_S.Pet~=false then
