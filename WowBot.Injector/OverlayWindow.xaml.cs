@@ -152,9 +152,11 @@ public partial class OverlayWindow : Window
     /// <summary>Lua-строка с флагами спеллов: WB_S={VT=true,DP=false,...}</summary>
     public string GetSpellFlagsLua()
     {
-        if (_spellToggles.Count == 0 && _curseToggles.Count == 0) return "WB_S={} ";
+        // Snapshot коллекции чтобы избежать "Collection was modified" при конкурентном доступе
+        var toggles = _spellToggles.ToArray();
+        if (toggles.Length == 0 && _curseToggles.Count == 0) return "WB_S={} ";
         var parts = new List<string>();
-        foreach (var (key, btn) in _spellToggles)
+        foreach (var (key, btn) in toggles)
             parts.Add($"{key}={(btn.IsChecked == true ? "true" : "false")}");
         // Curse flags: только для варлока
         if (_playerClass == "WARLOCK")

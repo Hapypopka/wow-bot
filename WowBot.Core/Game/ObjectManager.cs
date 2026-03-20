@@ -14,9 +14,9 @@ public class ObjectManager
 
     public ulong LocalPlayerGuid { get; private set; }
     public WowPlayer? LocalPlayer { get; private set; }
-    public List<WowUnit> Units { get; } = new();
-    public List<WowPlayer> Players { get; } = new();
-    public List<WowObject> Objects { get; } = new();
+    public List<WowUnit> Units { get; private set; } = new();
+    public List<WowPlayer> Players { get; private set; } = new();
+    public List<WowObject> Objects { get; private set; } = new();
 
     /// <summary>
     /// Проверяет валидность базовых указателей ObjectManager
@@ -32,16 +32,16 @@ public class ObjectManager
     /// </summary>
     public void Update()
     {
-        Units.Clear();
-        Players.Clear();
-        Objects.Clear();
-        LocalPlayer = null;
+        var units = new List<WowUnit>();
+        var players = new List<WowPlayer>();
+        var objects = new List<WowObject>();
+        WowPlayer? localPlayer = null;
 
         uint clientConnection = _memory.ReadUInt32(Offsets.ClientConnection);
-        if (clientConnection == 0) return;
+        if (clientConnection == 0) { Units = units; Players = players; Objects = objects; LocalPlayer = null; return; }
 
         uint objectManagerBase = _memory.ReadUInt32(clientConnection + Offsets.ObjectManagerOffset);
-        if (objectManagerBase == 0) return;
+        if (objectManagerBase == 0) { Units = units; Players = players; Objects = objects; LocalPlayer = null; return; }
 
         LocalPlayerGuid = _memory.ReadUInt64(objectManagerBase + Offsets.LocalPlayerGuid);
 
@@ -59,28 +59,33 @@ public class ObjectManager
                 case WowObjectType.Unit:
                 {
                     var unit = new WowUnit(_memory, currentObject);
-                    Units.Add(unit);
+                    units.Add(unit);
                     break;
                 }
                 case WowObjectType.Player:
                 {
                     var player = new WowPlayer(_memory, currentObject);
-                    Players.Add(player);
+                    players.Add(player);
 
                     if (player.Guid == LocalPlayerGuid)
-                        LocalPlayer = player;
+                        localPlayer = player;
                     break;
                 }
                 default:
                 {
                     var obj = new WowObject(_memory, currentObject);
-                    Objects.Add(obj);
+                    objects.Add(obj);
                     break;
                 }
             }
 
             currentObject = _memory.ReadUInt32(currentObject + Offsets.NextObject);
         }
+
+        Units = units;
+        Players = players;
+        Objects = objects;
+        LocalPlayer = localPlayer;
     }
 
     /// <summary>
