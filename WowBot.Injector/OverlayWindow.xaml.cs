@@ -256,6 +256,7 @@ public partial class OverlayWindow : Window
         ["BM Hunter"] = new[]
         {
             ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
+            ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
             ("BW", "beast_within.jpg", "Повелитель зверей", true),
@@ -269,6 +270,7 @@ public partial class OverlayWindow : Window
         ["MM Hunter"] = new[]
         {
             ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
+            ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
             ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", true),
@@ -281,6 +283,7 @@ public partial class OverlayWindow : Window
         ["Survival Hunter"] = new[]
         {
             ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
+            ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
             ("Explosive", "explosive_shot.jpg", "Разрывной выстрел", true),
