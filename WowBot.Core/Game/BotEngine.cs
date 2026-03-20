@@ -582,6 +582,29 @@ WB_AoE()
             }
         }
 
+        // Аспект охотника (авто-переключение по мане: дракондор/гадюка)
+        if (PlayerClass == "HUNTER")
+        {
+            bool hasDragon = selfBuffs.Remove("Дух дракондора");
+            bool hasViper = selfBuffs.Remove("Дух гадюки");
+            if (hasDragon && hasViper)
+            {
+                // Гадюка при мане <30%, дракондор при мане >80% (гистерезис от перещёлкивания)
+                sb.Append("local m=UnitMana('player')/UnitManaMax('player') ");
+                sb.Append("if m<0.3 and not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
+                sb.Append("if m>0.8 and not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
+                sb.Append("if not HasB('player','Дух дракондора') and not HasB('player','Дух гадюки') then CastSpellByName('Дух дракондора') return end ");
+            }
+            else if (hasDragon)
+            {
+                sb.Append("if not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
+            }
+            else if (hasViper)
+            {
+                sb.Append("if not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
+            }
+        }
+
         // Камень чар (проверка чары на оружии, создание + применение)
         if (selfBuffs.Remove("WB_SPELLSTONE"))
         {

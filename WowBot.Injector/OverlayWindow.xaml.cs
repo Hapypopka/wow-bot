@@ -577,8 +577,8 @@ public partial class OverlayWindow : Window
         },
         ["HUNTER"] = new[]
         {
-            ("Дух ястреба", "aimed_shot.jpg", "Дух ястреба", true),
-            ("Дух гадюки", "serpent_sting.jpg", "Дух гадюки", false),
+            ("Дух дракондора", "aimed_shot.jpg", "Дух дракондора", true),
+            ("Дух гадюки", "serpent_sting.jpg", "Дух гадюки", true),
         },
         ["ROGUE"] = Array.Empty<(string, string, string, bool)>(),
         ["DEATHKNIGHT"] = new[]
