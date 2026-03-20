@@ -51,6 +51,7 @@ jobs:
           Copy-Item publish/WowBot.Injector.dll _patch/
           Copy-Item publish/version.txt _patch/
           if (Test-Path publish/Icons/*.jpg) { Copy-Item publish/Icons/*.jpg _patch/Icons/ }
+          if (Test-Path publish/app.ico) { Copy-Item publish/app.ico _patch/ }
           Compress-Archive -Path _patch/* -DestinationPath patch.zip -Force
 
       - name: Upload artifact
