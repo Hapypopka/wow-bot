@@ -21,8 +21,8 @@ from telegram.ext import (
 )
 
 # --- Config ---
-BOT_TOKEN = "8188885083:AAHdEfFSf6snAJUoC4nbz1oFf8HzwLq4Y6U"
-GITHUB_TOKEN = "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"
+BOT_TOKEN = os.environ.get("WOWBOT_TG_TOKEN", "")
+GITHUB_TOKEN = os.environ.get("WOWBOT_GH_TOKEN", "")
 GITHUB_REPO = "Hapypopka/wow-bot"
 WOWBOT_DIR = Path("/home/claude/wow-bot")
 BUGS_DIR = Path("/var/www/wowbot/bugs")
@@ -153,8 +153,8 @@ async def run_claude(prompt: str, session_id: str | None = None,
 
 # --- Git + GitHub Actions ---
 
-def git_push() -> tuple[bool, str]:
-    """Коммит + пуш через sudo -u claude"""
+def git_push(commit_msg: str = "") -> tuple[bool, str]:
+    """Коммит + пуш через sudo -u claude. Всегда пушит — даже если нет изменений (пустой коммит)"""
     try:
         def git(cmd: str) -> subprocess.CompletedProcess:
             return subprocess.run(
@@ -162,18 +162,32 @@ def git_push() -> tuple[bool, str]:
                 capture_output=True, text=True, timeout=60
             )
 
+        # Подтянуть свежие изменения перед коммитом
+        git("git pull --rebase origin master")
+
+        # Формируем commit message
+        msg = commit_msg if commit_msg else "автофикс через Telegram бот"
+        # Убираем кавычки чтобы не ломать shell
+        msg = msg.replace("'", "").replace('"', '').replace('\n', ' ')[:100]
+
         git("git add -A")
         status = git("git status --porcelain")
-        if not status.stdout.strip():
-            return False, "Нет изменений"
-
-        result = git("git commit -m 'fix: автофикс через Telegram бот'")
-        if result.returncode != 0:
-            return False, f"Commit ошибка: {result.stderr[:200]}"
+        if status.stdout.strip():
+            result = git(f"git commit -m 'fix: {msg}'")
+            if result.returncode != 0:
+                return False, f"Commit ошибка: {result.stderr[:200]}"
+        else:
+            result = git(f"git commit --allow-empty -m 'fix: {msg} (rebuild)'")
+            if result.returncode != 0:
+                return False, f"Commit ошибка: {result.stderr[:200]}"
 
         result = git("git push origin master")
         if result.returncode != 0:
-            return False, f"Push ошибка: {result.stderr[:200]}"
+            # Попробуем ещё раз с rebase
+            git("git pull --rebase origin master")
+            result = git("git push origin master")
+            if result.returncode != 0:
+                return False, f"Push ошибка: {result.stderr[:200]}"
         return True, "OK"
     except Exception as e:
         return False, str(e)
@@ -217,6 +231,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Привет! Я бот WowBot.\n\n"
         "• /bug — нашёл баг? Жми сюда\n"
+        "• /rollback — откатить последнее обновление\n"
+        "• /escalate — тяжёлый баг (для разработчика)\n"
         "• /new — сбросить диалог\n"
         "• /status — версия бота\n"
         "• Или просто пиши — отвечу\n\n"
@@ -360,7 +376,9 @@ async def _do_full_fix(bot, chat_id, user, username, description, log_path):
         await bot.send_message(chat_id, f"🤖 {fix_result[:2000]}")
 
         # 3. Коммит + пуш
-        pushed, push_msg = git_push()
+        # Берём первые 80 символов описания для commit message
+        short_desc = description.split('\n')[0][:80]
+        pushed, push_msg = git_push(short_desc)
         if not pushed:
             save_bug(user, description, f"{fix_result}\n\nPush: {push_msg}")
             await bot.send_message(chat_id, f"⚠️ Код пофикшен, но пуш не удался: {push_msg}")
@@ -432,6 +450,161 @@ async def handle_file_outside(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(f"📎 {doc.file_name} сохранён. Напиши /bug")
 
 
+# --- Rollback ---
+
+async def rollback_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать последние коммиты и предложить откатить"""
+    if not is_allowed(update.effective_user.id):
+        return
+    try:
+        result = subprocess.run(
+            ["sudo", "-u", "claude", "bash", "-c",
+             "cd /home/claude/wow-bot && git log --oneline -5"],
+            capture_output=True, text=True, timeout=15
+        )
+        commits = result.stdout.strip().split('\n')
+        if not commits or not commits[0]:
+            await update.message.reply_text("❌ Не удалось получить историю коммитов")
+            return
+
+        buttons = []
+        for i, c in enumerate(commits):
+            if i == 0:
+                continue  # Пропускаем текущий — нет смысла откатывать на себя
+            short_hash = c.split()[0] if c else ""
+            msg = c[len(short_hash):].strip()[:50] if c else ""
+            buttons.append([InlineKeyboardButton(
+                f"↩️ {msg}", callback_data=f"rollback_{short_hash}")])
+        buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="rollback_cancel")])
+
+        text = f"📋 Текущий коммит:\n`{commits[0]}`\n\nОткатить до:"
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons),
+                                         parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
+
+async def rollback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "rollback_cancel":
+        await query.edit_message_text("❌ Откат отменён.")
+        return
+
+    commit_hash = query.data.replace("rollback_", "")
+    await query.edit_message_text(f"⏳ Откатываю до `{commit_hash}`...", parse_mode="Markdown")
+
+    bot = query.get_bot()
+    chat_id = query.message.chat_id
+
+    try:
+        def git(cmd: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["sudo", "-u", "claude", "bash", "-c",
+                 f"cd /home/claude/wow-bot && {cmd}"],
+                capture_output=True, text=True, timeout=60
+            )
+
+        # git revert всех коммитов от HEAD до target
+        git("git pull --rebase origin master")
+        result = git(f"git revert --no-commit {commit_hash}..HEAD")
+        if result.returncode != 0:
+            await bot.send_message(chat_id, f"❌ Ошибка revert: {result.stderr[:200]}")
+            git("git revert --abort")
+            return
+
+        result = git(f"git commit -m 'revert: откат до {commit_hash}'")
+        if result.returncode != 0:
+            await bot.send_message(chat_id, f"❌ Ошибка commit: {result.stderr[:200]}")
+            return
+
+        result = git("git push origin master")
+        if result.returncode != 0:
+            git("git pull --rebase origin master")
+            result = git("git push origin master")
+            if result.returncode != 0:
+                await bot.send_message(chat_id, f"❌ Ошибка push: {result.stderr[:200]}")
+                return
+
+        await bot.send_message(chat_id, "📦 Откат отправлен. Собирается на GitHub...")
+
+        success, info = await wait_for_actions_success(timeout=600)
+        if success:
+            await bot.send_message(chat_id,
+                "✅ Откат готов!\nЗапусти update.exe прямо сейчас.")
+            for uid in load_allowed_users():
+                if uid != query.from_user.id:
+                    try:
+                        await bot.send_message(uid,
+                            f"🔔 Откат! Запусти update.exe\n\nВернулись к версии {commit_hash}")
+                    except Exception:
+                        pass
+        else:
+            await bot.send_message(chat_id, f"⚠️ Сборка не удалась: {info}")
+
+    except Exception as e:
+        await bot.send_message(chat_id, f"❌ Ошибка: {e}")
+
+
+# --- Escalate (тяжёлые баги) ---
+
+ESCALATE_DIR = DATA_DIR / "escalated"
+
+async def escalate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохранить тяжёлый баг для разработчика"""
+    if not is_allowed(update.effective_user.id):
+        return
+    text = " ".join(context.args) if context.args else ""
+    if not text:
+        await update.message.reply_text(
+            "📝 Опиши баг после команды:\n`/escalate Баг такой-то`",
+            parse_mode="Markdown")
+        return
+
+    ESCALATE_DIR.mkdir(parents=True, exist_ok=True)
+    uid = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Сохраняем историю сессии если есть
+    session_id = get_user_session(uid)
+    bug_data = {
+        "user": username,
+        "user_id": uid,
+        "timestamp": ts,
+        "description": text,
+        "session_id": session_id or "",
+        "status": "open"
+    }
+    filepath = ESCALATE_DIR / f"{ts}_{username}.json"
+    filepath.write_text(json.dumps(bug_data, ensure_ascii=False, indent=2))
+
+    await update.message.reply_text(
+        f"📌 Баг сохранён для разработчика.\n\n"
+        f"Разработчик увидит описание + всю историю вашего диалога с Claude.\n"
+        f"Ожидай фикса.")
+
+
+async def heavy_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать тяжёлые баги (для разработчика)"""
+    if not is_allowed(update.effective_user.id):
+        return
+    ESCALATE_DIR.mkdir(parents=True, exist_ok=True)
+    files = sorted(ESCALATE_DIR.glob("*.json"), reverse=True)
+    if not files:
+        await update.message.reply_text("📋 Тяжёлых багов нет!")
+        return
+
+    text = "📋 **Тяжёлые баги:**\n\n"
+    for f in files[:10]:
+        data = json.loads(f.read_text())
+        status = "🔴" if data.get("status") == "open" else "🟢"
+        text += f"{status} `{data['timestamp']}` — {data['user']}\n{data['description'][:60]}\n\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
 # --- Admin ---
 
 async def notify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -480,6 +653,10 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("bugs", list_bugs))
     app.add_handler(CommandHandler("notify", notify_cmd))
+    app.add_handler(CommandHandler("rollback", rollback_cmd))
+    app.add_handler(CommandHandler("escalate", escalate_cmd))
+    app.add_handler(CommandHandler("heavy", heavy_cmd))
+    app.add_handler(CallbackQueryHandler(rollback_callback, pattern="^rollback_"))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file_outside))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_chat))
 

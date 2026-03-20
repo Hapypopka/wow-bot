@@ -291,13 +291,20 @@ end
                 _followAttack = false;
                 _wantRotation = false;
                 _botEngine?.StopFollow();
-                // Множественные стопы — CTM + Lua + повторный стоп через 200мс
+                // CTM: записываем текущую позицию чтобы персонаж "добежал" к себе и встал
+                var me = _objectManager.LocalPlayer;
+                if (me != null)
+                    _ctm.MoveTo(me.X, me.Y, me.Z, 0.1f);
+                // Плюс явный CTM Stop + Lua стоп
                 _ctm.Stop();
-                _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop()", 100);
+                _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 100);
+                // Повторный стоп через 200мс (CTM может перезаписать)
                 Task.Run(async () => {
                     await Task.Delay(200);
+                    var me2 = _objectManager.LocalPlayer;
+                    if (me2 != null)
+                        _ctm.MoveTo(me2.X, me2.Y, me2.Z, 0.1f);
                     _ctm.Stop();
-                    _hook.ExecuteLua("MoveForwardStop()", 100);
                 });
                 OnCommandReceived?.Invoke(cmd, "");
                 Logger.Info("Hivemind: SLAVE stop");

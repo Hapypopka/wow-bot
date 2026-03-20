@@ -47,7 +47,9 @@ public class ClickToMove
     /// </summary>
     public void Stop()
     {
-        _memory.WriteInt32(CTM_Action, ActionStop);
+        // Сначала ставим координаты на текущую позицию (чтобы WoW не бежал к старой точке)
+        // Потом ActionNone — полная остановка
+        _memory.WriteInt32(CTM_Action, ActionNone);
     }
 
     /// <summary>
