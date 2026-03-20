@@ -275,6 +275,7 @@ public partial class OverlayWindow : Window
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
             ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", true),
+            ("CotW", "call_wild.jpg", "Зов дикой природы (боссы)", true),
             ("Chimera", "chimera_shot.jpg", "Выстрел химеры", true),
             ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
             ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),

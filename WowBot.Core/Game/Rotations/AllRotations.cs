@@ -191,6 +191,7 @@ public static class AllRotations
         if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end
     elseif t2>=t1 and t2>=t3 then
         if WB_S.Dragonhawk~=false and not HasBuff('Дух дракондора') and MP()>0.3 then CastSpellByName('Дух дракондора') return end
+        if WB_S.CotW~=false and UnitClassification('target')=='worldboss' and UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n and n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end break end end end
         if WB_S.Rapid~=false and IsReady('Быстрая стрельба') then CastSpellByName('Быстрая стрельба') return end
         if WB_S.Serpent~=false and not HasDebuff('target','Укус змеи') then CastSpellByName('Укус змеи') return end
         if WB_S.Chimera~=false and IsReady('Выстрел химеры') then CastSpellByName('Выстрел химеры') return end
