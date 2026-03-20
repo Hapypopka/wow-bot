@@ -991,10 +991,7 @@ public partial class OverlayWindow : Window
 
             AddHiveButton("⚔ Бейте таргет", "attack");
             AddHiveButton("🏃 Ко мне", "follow");
-            AddHiveButton("🛑 Стоп", "stop");
-            AddHiveButton("↔ Рассыпьтесь", "scatter");
-            AddHiveButton("📌 Стакайтесь", "stack");
-            AddHiveButton("📡 Пинг", "ping");
+            AddHiveButton("⏹ Стоп", "stop");
         }
         else if (_hivemindRole == "slave")
         {

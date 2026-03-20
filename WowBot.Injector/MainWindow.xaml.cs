@@ -64,6 +64,7 @@ public partial class MainWindow : Window
     private LuaReader? _luaReader;
     private DispatcherTimer? _updateTimer;
     private OverlayWindow? _overlay;
+    private MasterPanel? _masterPanel;
 
     public MainWindow()
     {
@@ -98,8 +99,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ShowMasterPanel()
+    {
+        if (_masterPanel != null) return;
+        _masterPanel = new MasterPanel();
+        _masterPanel.OnCommand += (cmd) =>
+        {
+            if (_botEngine == null) return;
+            var hive = _botEngine.Hivemind;
+            switch (cmd)
+            {
+                case "attack": hive.CmdAttack(); break;
+                case "follow": hive.CmdFollow(); break;
+                case "stop": hive.CmdStop(); break;
+            }
+        };
+        // Загрузить хоткеи из settings
+        _masterPanel.Show();
+    }
+
+    private void CloseMasterPanel()
+    {
+        _masterPanel?.Close();
+        _masterPanel = null;
+    }
+
     private void OnWindowClosed(object? sender, EventArgs e)
     {
+        CloseMasterPanel();
         if (_attachedPid != 0) UnlockPid(_attachedPid);
         StopUpdateLoop();
         _overlay?.SaveSettings();
@@ -266,6 +293,7 @@ public partial class MainWindow : Window
                 {
                     case "role:master":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Master;
+                        ShowMasterPanel();
                         break;
                     case "role:slave":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Slave;
@@ -274,6 +302,7 @@ public partial class MainWindow : Window
                         break;
                     case "role:none":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.None;
+                        CloseMasterPanel();
                         break;
                     case "attack": hive.CmdAttack(); break;
                     case "follow": hive.CmdFollow(); break;
@@ -415,6 +444,8 @@ public partial class MainWindow : Window
                 GetWindowThreadProcessId(fg, out uint fgPid);
                 bool wowActive = fgPid == (uint)_memory.Process.Id;
                 _overlay.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
+                if (_masterPanel != null)
+                    _masterPanel.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
             }
 
             if (_memory.Process?.HasExited == true)
