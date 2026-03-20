@@ -136,31 +136,16 @@ public class Hivemind
     {
         if (!_followMaster || string.IsNullOrEmpty(MasterName)) return;
 
-        var master = FindPlayerByName(MasterName);
-        if (master == null) return;
+        // Follow без атаки — полностью через штатный BotEngine follow (SetFollowGuid)
+        // SlaveTickFollow нужен ТОЛЬКО для режима атаки (ретаргет)
+        if (!_followAttack) return;
 
-        var player = _objectManager.LocalPlayer;
-        if (player == null) return;
-
-        float dist = player.DistanceTo(master);
-
-        if (_followAttack)
+        // Режим атаки: ретаргетим таргет мастера каждые 2 сек
+        _retargetTick++;
+        if (_retargetTick >= 13)
         {
-            // Режим атаки: ретаргетим + бежим если далеко
-            _retargetTick++;
-            if (_retargetTick >= 13)
-            {
-                _retargetTick = 0;
-                _hook.ExecuteLua($"AssistUnit('{MasterName}')", 200);
-            }
-            if (dist > 20f)
-                _ctm.MoveTo(master.X, master.Y, master.Z, 0.5f);
-        }
-        else
-        {
-            // Режим follow: бежим за мастером через CTM (работает на любой дистанции)
-            if (dist > 5f)
-                _ctm.MoveTo(master.X, master.Y, master.Z, 0.5f);
+            _retargetTick = 0;
+            _hook.ExecuteLua($"AssistUnit('{MasterName}')", 200);
         }
     }
 
@@ -291,20 +276,20 @@ end
                 _followAttack = false;
                 _wantRotation = false;
                 _botEngine?.StopFollow();
-                // CTM: записываем текущую позицию чтобы персонаж "добежал" к себе и встал
+                // Записываем свою позицию как CTM цель с большим precision — персонаж "уже на месте" и встаёт
                 var me = _objectManager.LocalPlayer;
                 if (me != null)
-                    _ctm.MoveTo(me.X, me.Y, me.Z, 0.1f);
-                // Плюс явный CTM Stop + Lua стоп
-                _ctm.Stop();
-                _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 100);
-                // Повторный стоп через 200мс (CTM может перезаписать)
+                    _ctm.StopAt(me.X, me.Y, me.Z);
+                // Повторный стоп через 150мс и 300мс — на случай если тик перезаписал
                 Task.Run(async () => {
-                    await Task.Delay(200);
+                    await Task.Delay(150);
                     var me2 = _objectManager.LocalPlayer;
                     if (me2 != null)
-                        _ctm.MoveTo(me2.X, me2.Y, me2.Z, 0.1f);
-                    _ctm.Stop();
+                        _ctm.StopAt(me2.X, me2.Y, me2.Z);
+                    await Task.Delay(150);
+                    var me3 = _objectManager.LocalPlayer;
+                    if (me3 != null)
+                        _ctm.StopAt(me3.X, me3.Y, me3.Z);
                 });
                 OnCommandReceived?.Invoke(cmd, "");
                 Logger.Info("Hivemind: SLAVE stop");

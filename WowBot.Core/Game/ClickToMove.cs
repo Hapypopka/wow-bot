@@ -47,9 +47,19 @@ public class ClickToMove
     /// </summary>
     public void Stop()
     {
-        // Сначала ставим координаты на текущую позицию (чтобы WoW не бежал к старой точке)
-        // Потом ActionNone — полная остановка
-        _memory.WriteInt32(CTM_Action, ActionNone);
+        _memory.WriteInt32(CTM_Action, ActionStop);
+    }
+
+    /// <summary>
+    /// Жёсткая остановка: записывает текущие координаты как цель + Stop
+    /// </summary>
+    public void StopAt(float x, float y, float z)
+    {
+        _memory.WriteFloat(CTM_X, x);
+        _memory.WriteFloat(CTM_Y, y);
+        _memory.WriteFloat(CTM_Z, z);
+        _memory.WriteFloat(CTM_Precision, 5.0f);
+        _memory.WriteInt32(CTM_Action, ActionMoveTo);
     }
 
     /// <summary>
