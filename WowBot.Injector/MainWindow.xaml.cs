@@ -34,6 +34,33 @@ public partial class MainWindow : Window
         Closed += OnWindowClosed;
     }
 
+    private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        DragMove();
+    }
+
+    private void BtnClose_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void LuaHeader_Click(object sender, MouseButtonEventArgs e) => ToggleLuaConsole();
+    private void LuaHeader_BtnClick(object sender, RoutedEventArgs e) => ToggleLuaConsole();
+
+    private void ToggleLuaConsole()
+    {
+        if (LuaContent.Visibility == Visibility.Collapsed)
+        {
+            LuaContent.Visibility = Visibility.Visible;
+            LuaArrow.Text = "\xE70D";
+        }
+        else
+        {
+            LuaContent.Visibility = Visibility.Collapsed;
+            LuaArrow.Text = "\xE76C";
+        }
+    }
+
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         StopUpdateLoop();
@@ -45,7 +72,7 @@ public partial class MainWindow : Window
         Environment.Exit(0);
     }
 
-    private void BtnAttach_Click(object sender, RoutedEventArgs e)
+    private async void BtnAttach_Click(object sender, RoutedEventArgs e)
     {
         var wowProcesses = Process.GetProcessesByName("Wow");
         if (wowProcesses.Length == 0)
@@ -65,6 +92,22 @@ public partial class MainWindow : Window
             wow = ShowProcessPicker(wowProcesses);
             if (wow == null) return;
         }
+        // Показываем лоадер
+        PanelDisconnected.Visibility = Visibility.Visible;
+        TxtStatus.Text = "Подключение...";
+        BtnAttach.IsEnabled = false;
+        // Заменяем красный индикатор на жёлтый
+        var indicator = PanelDisconnected.Children[0] as System.Windows.Shapes.Ellipse;
+        if (indicator != null)
+        {
+            indicator.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8A84E"));
+        }
+        var statusText = PanelDisconnected.Children[1] as TextBlock;
+        if (statusText != null) statusText.Text = "Подключение...";
+
+        // Даём UI перерисоваться
+        await Task.Delay(50);
+
         WowBot.Core.Logger.Init();
         WowBot.Core.Logger.Info($"Attaching to WoW PID={wow.Id}");
 
@@ -85,9 +128,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        BtnAttach.IsEnabled = false;
-        BtnDetach.IsEnabled = true;
-        BtnDump.IsEnabled = true;
+        BtnAttach.Visibility = Visibility.Collapsed;
+        BtnDetach.Visibility = Visibility.Visible;
 
         _endSceneHook = new EndSceneHook(_memory);
 
@@ -125,6 +167,12 @@ public partial class MainWindow : Window
                     playerClass = classInfo.Split('|')[0];
                 }
             }
+            // Обновляем UI — connected state
+            PanelDisconnected.Visibility = Visibility.Collapsed;
+            PanelConnected.Visibility = Visibility.Visible;
+            TxtCharName.Text = _objectManager.GetPlayerName() ?? "???";
+            TxtSpecName.Text = specName;
+            TxtPidInfo.Text = $"PID: {wow.Id}";
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
             bool isHealer = specName.Contains("Holy") || specName.Contains("Disc") || specName.Contains("Resto");
             WowBot.Core.Logger.Info($"Hooked OK | class={playerClass} spec={specName} healer={isHealer}");
@@ -143,10 +191,6 @@ public partial class MainWindow : Window
             _botEngine.LoadRotation(instantScript, fullScript);
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
-            BtnRotationToggle.IsEnabled = true;
-            BtnSetFollow.IsEnabled = true;
-            BtnClearFollow.IsEnabled = true;
-            BtnScanSpells.IsEnabled = true;
 
             // Открываем оверлей
             WowBot.Core.Logger.Info("Creating overlay...");
@@ -243,37 +287,15 @@ public partial class MainWindow : Window
         _memory.Detach();
         _objectManager = null;
 
-        TxtStatus.Text = "Not connected";
-        TxtLuaStatus.Text = "Hook not installed";
-        TxtRotationStatus.Text = "Not active";
-        BtnAttach.IsEnabled = true;
-        BtnDetach.IsEnabled = false;
-        BtnDump.IsEnabled = false;
+        TxtStatus.Text = "Отключено";
+        TxtLuaStatus.Text = "";
+        TxtRotationStatus.Text = "";
+        BtnAttach.Visibility = Visibility.Visible;
+        BtnDetach.Visibility = Visibility.Collapsed;
+        PanelDisconnected.Visibility = Visibility.Visible;
+        PanelConnected.Visibility = Visibility.Collapsed;
         BtnExecuteLua.IsEnabled = false;
-        BtnRotationToggle.IsEnabled = false;
-        BtnRotationToggle.Content = "Start Rotation";
         ClearDisplay();
-    }
-
-    // --- Rotation + Follow ---
-
-    private void BtnRotationToggle_Click(object sender, RoutedEventArgs e)
-    {
-        if (_botEngine == null) return;
-        _botEngine.ToggleRotation();
-        BtnRotationToggle.Content = _botEngine.RotationEnabled ? "Stop Rotation" : "Start Rotation";
-    }
-
-    private void BtnSetFollow_Click(object sender, RoutedEventArgs e)
-    {
-        if (_botEngine == null) return;
-        _botEngine.SetFollowTarget();
-    }
-
-    private void BtnClearFollow_Click(object sender, RoutedEventArgs e)
-    {
-        if (_botEngine == null) return;
-        _botEngine.ClearFollowTarget();
     }
 
     // --- Lua Console ---
@@ -289,14 +311,6 @@ public partial class MainWindow : Window
         {
             ExecuteLuaFromTextBox();
             e.Handled = true;
-        }
-    }
-
-    private void BtnQuickLua_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is System.Windows.Controls.Button btn && btn.Tag is string lua)
-        {
-            ExecuteLua(lua);
         }
     }
 
@@ -545,7 +559,7 @@ public partial class MainWindow : Window
         if (!_memory.IsAttached || _endSceneHook == null) return;
 
         TxtStatus.Text = "Writing macro + scanning memory...";
-        BtnDump.IsEnabled = false;
+        // BtnDump removed from UI
 
         Task.Run(() =>
         {
@@ -617,7 +631,7 @@ public partial class MainWindow : Window
             Dispatcher.Invoke(() =>
             {
                 TxtStatus.Text = $"Scan done! {results.Count - 1} results. Saved to macro_scan.txt";
-                BtnDump.IsEnabled = true;
+                // BtnDump removed from UI
             });
         });
     }
@@ -643,41 +657,89 @@ public partial class MainWindow : Window
             items.Add((proc, charName));
         }
 
-        // Показываем диалог выбора
+        // Стильный диалог выбора персонажа
         var dialog = new Window
         {
-            Title = "Выбери персонажа",
-            Width = 300, Height = 50 + items.Count * 45,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Background = new SolidColorBrush(
-                (Color)ColorConverter.ConvertFromString("#1a1a2e")),
-            WindowStyle = WindowStyle.ToolWindow,
+            Title = "WowBot",
+            Width = 340, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0a0a0f")),
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
             ResizeMode = ResizeMode.NoResize,
         };
 
         Process? selected = null;
-        var stack = new StackPanel { Margin = new Thickness(10) };
+
+        var outerBorder = new Border
+        {
+            CornerRadius = new CornerRadius(12),
+            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1e1e2e")),
+            BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0a0a0f")),
+            Padding = new Thickness(20),
+        };
+
+        var stack = new StackPanel();
+
+        var header = new TextBlock
+        {
+            Text = "Выбери персонажа",
+            FontSize = 15, FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8A84E")),
+            Margin = new Thickness(0, 0, 0, 12),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        stack.Children.Add(header);
 
         foreach (var (proc, name) in items)
         {
-            var btn = new Button
+            var btnBorder = new Border
             {
-                Content = $"{name}  (PID {proc.Id})",
-                Height = 35,
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12121a")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1e1e2e")),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(16, 12, 16, 12),
                 Margin = new Thickness(0, 3, 0, 3),
-                FontSize = 14,
-                Background = new SolidColorBrush(
-                    (Color)ColorConverter.ConvertFromString("#252830")),
-                Foreground = Brushes.White,
-                BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
             };
+
+            var btnStack = new StackPanel();
+            btnStack.Children.Add(new TextBlock
+            {
+                Text = name,
+                FontSize = 15, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e8e6e3")),
+            });
+            btnStack.Children.Add(new TextBlock
+            {
+                Text = $"PID {proc.Id}",
+                FontSize = 10,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a4a5a")),
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+
+            var btn = new Button { Cursor = Cursors.Hand, Padding = new Thickness(0), BorderThickness = new Thickness(0) };
+            btn.Template = new ControlTemplate(typeof(Button))
+            {
+                VisualTree = new FrameworkElementFactory(typeof(ContentPresenter))
+            };
+            btnBorder.Child = btnStack;
+            btn.Content = btnBorder;
             var p = proc;
             btn.Click += (s, e) => { selected = p; dialog.Close(); };
+            btnBorder.MouseEnter += (s, e) =>
+                btnBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28"));
+            btnBorder.MouseLeave += (s, e) =>
+                btnBorder.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12121a"));
             stack.Children.Add(btn);
         }
 
-        dialog.Content = stack;
+        outerBorder.Child = stack;
+        dialog.Content = outerBorder;
+        dialog.MouseLeftButtonDown += (s, e) => dialog.DragMove();
         dialog.ShowDialog();
         return selected;
     }

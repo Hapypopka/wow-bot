@@ -1,182 +1,260 @@
 <Window x:Class="WowBot.Injector.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="WowBot — WoTLK 3.3.5a" Height="780" Width="520"
+        Title="WowBot" Height="420" Width="380"
         Icon="app.ico"
         WindowStartupLocation="CenterScreen"
-        Background="#1a1a2e" ResizeMode="CanMinimize">
+        Background="#0a0a0f" ResizeMode="CanMinimize"
+        WindowStyle="None" AllowsTransparency="True"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        SizeToContent="Height">
 
     <Window.Resources>
-        <Style x:Key="DarkButton" TargetType="Button">
-            <Setter Property="Background" Value="#16213e"/>
-            <Setter Property="Foreground" Value="#e0e0e0"/>
-            <Setter Property="BorderBrush" Value="#0f3460"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,8"/>
+        <!-- Accent colors -->
+        <Color x:Key="GoldColor">#C8A84E</Color>
+        <Color x:Key="GoldDim">#8B7331</Color>
+        <Color x:Key="GoldGlow">#FFD966</Color>
+        <Color x:Key="CardBg">#12121a</Color>
+        <Color x:Key="CardBorder">#1e1e2e</Color>
+        <Color x:Key="TextPrimary">#e8e6e3</Color>
+        <Color x:Key="TextSecondary">#6b6b7b</Color>
+        <Color x:Key="RedAccent">#c0392b</Color>
+        <Color x:Key="GreenAccent">#27ae60</Color>
+
+        <SolidColorBrush x:Key="GoldBrush" Color="{StaticResource GoldColor}"/>
+        <SolidColorBrush x:Key="GoldDimBrush" Color="{StaticResource GoldDim}"/>
+        <SolidColorBrush x:Key="CardBgBrush" Color="{StaticResource CardBg}"/>
+        <SolidColorBrush x:Key="CardBorderBrush" Color="{StaticResource CardBorder}"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimary}"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}"/>
+
+        <!-- Primary button (gold) -->
+        <Style x:Key="GoldButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#0a0a0f"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bd" CornerRadius="6" Padding="20,10"
+                                Background="{StaticResource GoldBrush}"
+                                BorderThickness="0">
+                            <Border.Effect>
+                                <DropShadowEffect Color="{StaticResource GoldGlow}" BlurRadius="12" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#0f3460"/>
+                                <Setter TargetName="Bd" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="{StaticResource GoldGlow}"/>
+                                    </Setter.Value>
+                                </Setter>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="GreenButton" TargetType="Button" BasedOn="{StaticResource DarkButton}">
-            <Setter Property="Background" Value="#1a4a2e"/>
-            <Setter Property="BorderBrush" Value="#2d7a4a"/>
-        </Style>
-        <Style x:Key="LabelStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#b0b0b0"/>
+
+        <!-- Secondary button (outline) -->
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource GoldBrush}"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="5" Padding="14,7"
+                                Background="Transparent"
+                                BorderBrush="{StaticResource GoldDimBrush}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="#1a1a28"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style x:Key="ValueStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#e94560"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="Bold"/>
+
+        <!-- Danger button (red) -->
+        <Style x:Key="DangerButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#e8e6e3"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="5" Padding="12,6"
+                                Background="#1a0a0a" BorderBrush="#3d1515" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background">
+                                    <Setter.Value>
+                                        <SolidColorBrush Color="#2d1010"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <!-- Main border with subtle gold outline -->
+    <Border CornerRadius="12" BorderBrush="#1a1a28" BorderThickness="1"
+            Background="#0a0a0f">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <TextBlock Grid.Row="0" Text="WowBot" FontSize="24" FontWeight="Bold"
-                   Foreground="#e94560" Margin="0,0,0,12"/>
-
-        <!-- Connection -->
-        <Border Grid.Row="1" Background="#16213e" CornerRadius="6" Padding="12" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="PROCESS" Foreground="#0f3460" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="BtnAttach" Content="Attach + Hook" Style="{StaticResource DarkButton}"
-                            Click="BtnAttach_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnDetach" Content="Detach" Style="{StaticResource DarkButton}"
-                            Click="BtnDetach_Click" IsEnabled="False"/>
-                    <Button x:Name="BtnDump" Content="Dump" Style="{StaticResource DarkButton}"
-                            Click="BtnDump_Click" IsEnabled="False" Margin="8,0,0,0"/>
-                    <Button x:Name="BtnScanSpells" Content="Scan Spells" Style="{StaticResource DarkButton}"
-                            Click="BtnScanSpells_Click" IsEnabled="False" Margin="8,0,0,0"/>
-                </StackPanel>
-                <TextBlock x:Name="TxtStatus" Text="Not connected" Style="{StaticResource LabelStyle}" Margin="0,8,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <!-- Player data -->
-        <Border Grid.Row="2" Background="#16213e" CornerRadius="6" Padding="12" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="CHARACTER" Foreground="#0f3460" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
+            <!-- Title bar -->
+            <Border Grid.Row="0" CornerRadius="12,12,0,0" Padding="16,12">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name: " Style="{StaticResource LabelStyle}"/>
-                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="-" Style="{StaticResource ValueStyle}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="HP: " Style="{StaticResource LabelStyle}"/>
-                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TxtHealth" Text="-" Style="{StaticResource ValueStyle}"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Mana: " Style="{StaticResource LabelStyle}"/>
-                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TxtMana" Text="-" Style="{StaticResource ValueStyle}"/>
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Level: " Style="{StaticResource LabelStyle}"/>
-                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="TxtLevel" Text="-" Style="{StaticResource ValueStyle}"/>
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Position: " Style="{StaticResource LabelStyle}"/>
-                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="TxtPosition" Text="-" Style="{StaticResource ValueStyle}" TextWrapping="Wrap"/>
-                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Target: " Style="{StaticResource LabelStyle}"/>
-                    <TextBlock Grid.Row="5" Grid.Column="1" x:Name="TxtTarget" Text="-" Style="{StaticResource ValueStyle}"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="app.ico" Width="28" Height="28" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="WowBot" FontSize="18" FontWeight="Bold" Foreground="{StaticResource GoldBrush}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="WoTLK 3.3.5a" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center" Margin="8,3,0,0"/>
+                    </StackPanel>
+                    <!-- Close button -->
+                    <Button Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Foreground="{StaticResource TextSecondaryBrush}" Background="Transparent"
+                            BorderThickness="0" Cursor="Hand" Padding="6,2"
+                            Click="BtnClose_Click"/>
                 </Grid>
-            </StackPanel>
-        </Border>
+            </Border>
 
-        <!-- Rotation -->
-        <Border Grid.Row="3" Background="#16213e" CornerRadius="6" Padding="12" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="ROTATION" Foreground="#0f3460" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="BtnRotationToggle" Content="Start Rotation" Style="{StaticResource GreenButton}"
-                            Click="BtnRotationToggle_Click" IsEnabled="False" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnSetFollow" Content="Set Follow" Style="{StaticResource DarkButton}"
-                            Click="BtnSetFollow_Click" IsEnabled="False" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnClearFollow" Content="Clear" Style="{StaticResource DarkButton}"
-                            Click="BtnClearFollow_Click" IsEnabled="False"/>
-                </StackPanel>
-                <TextBlock x:Name="TxtRotationStatus" Text="Not active" Style="{StaticResource LabelStyle}" Margin="0,6,0,0"/>
-            </StackPanel>
-        </Border>
+            <!-- Content -->
+            <StackPanel Grid.Row="1" Margin="20,0,20,20">
 
-        <!-- Lua Console -->
-        <Border Grid.Row="4" Background="#16213e" CornerRadius="6" Padding="12" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="LUA CONSOLE" Foreground="#0f3460" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="TxtLua" Grid.Column="0" Background="#0a0a1a" Foreground="#00ff88"
-                             BorderThickness="1" BorderBrush="#0f3460" Padding="8,6"
-                             FontFamily="Consolas" FontSize="12"
-                             Text="CastSpellByName('Fireball')"
-                             KeyDown="TxtLua_KeyDown"/>
-                    <Button x:Name="BtnExecuteLua" Grid.Column="1" Content="Run" Style="{StaticResource GreenButton}"
-                            Click="BtnExecuteLua_Click" IsEnabled="False" Margin="8,0,0,0"/>
+                <!-- Status indicator -->
+                <Border x:Name="StatusCard" CornerRadius="8" Padding="16" Margin="0,0,0,16"
+                        Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Not connected state -->
+                        <StackPanel x:Name="PanelDisconnected" Grid.Row="0" HorizontalAlignment="Center">
+                            <Ellipse Width="10" Height="10" Fill="#c0392b" HorizontalAlignment="Center" Margin="0,0,0,8">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#c0392b" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <TextBlock Text="Не подключено" Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="13" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtStatus" Text="Запусти WoW и нажми Подключить"
+                                       Foreground="#4a4a5a" FontSize="11" HorizontalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Connected state (hidden by default) -->
+                        <StackPanel x:Name="PanelConnected" Grid.Row="0" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,4">
+                                <Ellipse Width="10" Height="10" Fill="#27ae60" Margin="0,0,8,0">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect Color="#27ae60" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                                <TextBlock x:Name="TxtCharName" Text="Lovelion" FontSize="18" FontWeight="Bold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtSpecName" Text="Balance Druid" FontSize="12"
+                                       Foreground="{StaticResource GoldBrush}" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                            <TextBlock x:Name="TxtPidInfo" Text="PID: 1234" FontSize="10"
+                                       Foreground="#3a3a4a" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Connect / Disconnect buttons -->
+                <Grid Margin="0,0,0,16">
+                    <Button x:Name="BtnAttach" Content="Подключить" Style="{StaticResource GoldButton}"
+                            Click="BtnAttach_Click" HorizontalAlignment="Stretch"/>
+                    <Button x:Name="BtnDetach" Content="Отключить" Style="{StaticResource DangerButton}"
+                            Click="BtnDetach_Click" Visibility="Collapsed" HorizontalAlignment="Stretch"/>
                 </Grid>
-                <TextBlock x:Name="TxtLuaStatus" Text="Hook not installed" Style="{StaticResource LabelStyle}" Margin="0,6,0,0"/>
-                <!-- Quick buttons -->
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button Content="/say Hello" Style="{StaticResource DarkButton}" FontSize="10" Padding="8,4"
-                            Click="BtnQuickLua_Click" Tag="SendChatMessage('Hello from WowBot!', 'SAY')" Margin="0,0,4,0"/>
-                    <Button Content="/dance" Style="{StaticResource DarkButton}" FontSize="10" Padding="8,4"
-                            Click="BtnQuickLua_Click" Tag="DoEmote('dance')" Margin="0,0,4,0"/>
-                    <Button Content="Jump" Style="{StaticResource DarkButton}" FontSize="10" Padding="8,4"
-                            Click="BtnQuickLua_Click" Tag="JumpOrAscendStart()" Margin="0,0,4,0"/>
-                </StackPanel>
+
+                <!-- Lua Console (collapsed by default) -->
+                <Border CornerRadius="8" Margin="0,0,0,12"
+                        Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                    <StackPanel>
+                        <!-- Header — clickable to expand -->
+                        <Button Click="LuaHeader_BtnClick" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="12,10" HorizontalContentAlignment="Left">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="LuaArrow" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                                           Foreground="{StaticResource GoldDimBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Lua Console" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                        <!-- Content — hidden by default -->
+                        <StackPanel x:Name="LuaContent" Visibility="Collapsed" Margin="12,0,12,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtLua" Grid.Column="0" Background="#08080e" Foreground="#4ade80"
+                                         BorderThickness="1" BorderBrush="#1e1e2e" Padding="10,8"
+                                         FontFamily="Consolas" FontSize="12" CaretBrush="#4ade80"
+                                         Text="CastSpellByName('Fireball')"
+                                         KeyDown="TxtLua_KeyDown"
+                                         VerticalContentAlignment="Center"/>
+                                <Button x:Name="BtnExecuteLua" Grid.Column="1" Content="Run" Style="{StaticResource OutlineButton}"
+                                        Click="BtnExecuteLua_Click" IsEnabled="False" Margin="8,0,0,0"/>
+                            </Grid>
+                            <TextBlock x:Name="TxtLuaStatus" Text="" Foreground="#4a4a5a" FontSize="10" Margin="0,6,0,0"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Hidden elements for compatibility -->
+                <TextBlock x:Name="TxtName" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtHealth" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtMana" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtLevel" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtPosition" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtTarget" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtObjectCount" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtRotationStatus" Visibility="Collapsed"/>
+                <ListBox x:Name="LstObjects" Visibility="Collapsed"/>
+
+                <!-- Footer -->
+                <TextBlock x:Name="TxtFooter" Text="v1.30" Foreground="#2a2a3a" FontSize="10"
+                           HorizontalAlignment="Center" Margin="0,8,0,0"/>
             </StackPanel>
-        </Border>
-
-        <!-- Objects list -->
-        <Border Grid.Row="5" Background="#16213e" CornerRadius="6" Padding="12">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Top" x:Name="TxtObjectCount" Text="OBJECTS (0)"
-                           Foreground="#0f3460" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
-                <ListBox x:Name="LstObjects" Background="#0a0a1a" Foreground="#c0c0c0"
-                         BorderThickness="0" FontFamily="Consolas" FontSize="11"/>
-            </DockPanel>
-        </Border>
-
-        <!-- Footer -->
-        <TextBlock Grid.Row="6" x:Name="TxtFooter" Text="WowBot v0.3 | Stage 3: Rotation Engine"
-                   Foreground="#444" FontSize="10" Margin="0,8,0,0" HorizontalAlignment="Center"/>
-    </Grid>
+        </Grid>
+    </Border>
 </Window>
