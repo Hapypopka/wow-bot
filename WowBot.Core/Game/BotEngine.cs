@@ -17,7 +17,7 @@ public class BotEngine : IDisposable
     private bool _followEnabled;
     private bool _rotationEnabled;
     private bool _autoFace = true;
-    private bool _autoSelectTarget;
+    private bool _autoSelectTarget = true;
     private float _maxTargetRange = 30f;
     private ulong _followGuid;
     private float _followDistance = 8f;
