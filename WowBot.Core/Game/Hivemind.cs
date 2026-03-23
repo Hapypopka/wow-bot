@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Scatter, Stack, Focus, Loot, Ping }
+    public enum Command { Follow, Attack, Stop, Scatter, Stack, Focus, Loot, Ping, ToggleAssist }
 
     private Role _currentRole = Role.None;
     public Role CurrentRole
@@ -107,6 +107,9 @@ public class Hivemind
     /// <summary>Мастер: пинг (проверка связи)</summary>
     public void CmdPing() => SendCommand(Command.Ping);
 
+    /// <summary>Мастер: переключить AlwaysAssist у слейвов</summary>
+    public void CmdToggleAssist() => SendCommand(Command.ToggleAssist);
+
     // ==================== СЛЕЙВ: ПОСТОЯННЫЙ FOLLOW ====================
 
     /// <summary>Сбросить Lua глобалы при включении слейва</summary>
@@ -185,17 +188,25 @@ public class Hivemind
         _hasTarget = true;
     }
 
+    private ulong _masterGuid;
+
     private Entities.WowUnit? FindPlayerByName(string name)
     {
-        // Ищем по GUID пати-мемберов через Lua — ненадёжно
-        // Лучше: ищем ближайшего игрока (не себя) — в пати из 2 это мастер
-        // TODO: когда будет больше 2 игроков — искать по имени через память
+        // Если уже знаем GUID мастера — ищем напрямую
+        if (_masterGuid != 0)
+        {
+            var cached = _objectManager.GetUnitByGuid(_masterGuid);
+            if (cached != null) return cached;
+            _masterGuid = 0;
+        }
+
         var player = _objectManager.LocalPlayer;
         if (player == null) return null;
 
+        // Ищем ближайшего игрока (не себя) — в пати это мастер
+        // Name для игроков ненадёжен (WoW хранит имена игроков отдельно от NPC)
         Entities.WowUnit? closest = null;
         float closestDist = float.MaxValue;
-
         foreach (var p in _objectManager.Players)
         {
             if (p.Guid == _objectManager.LocalPlayerGuid) continue;
@@ -205,6 +216,11 @@ public class Hivemind
                 closestDist = d;
                 closest = p;
             }
+        }
+        if (closest != null)
+        {
+            _masterGuid = closest.Guid;
+            Logger.Info($"Hivemind: found master GUID=0x{_masterGuid:X} dist={closestDist:F1}");
         }
         return closest;
     }
@@ -262,6 +278,7 @@ end
             "Focus" => Command.Focus,
             "Loot" => Command.Loot,
             "Ping" => Command.Ping,
+            "ToggleAssist" => Command.ToggleAssist,
             _ => null
         };
 
@@ -351,6 +368,12 @@ end
                 string myName = _objectManager.GetPlayerName() ?? "slave";
                 _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','Pong:{myName}','PARTY')", 200);
                 Logger.Info("Hivemind: SLAVE pong");
+                break;
+
+            case Command.ToggleAssist:
+                AlwaysAssist = !AlwaysAssist;
+                OnCommandReceived?.Invoke(cmd, AlwaysAssist ? "on" : "off");
+                Logger.Info($"Hivemind: SLAVE AlwaysAssist = {AlwaysAssist}");
                 break;
 
             default:

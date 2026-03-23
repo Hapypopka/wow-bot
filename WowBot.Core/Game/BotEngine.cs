@@ -86,6 +86,7 @@ public class BotEngine : IDisposable
     public string PlayerClass { get; set; } = "";
     private bool _isApproaching;
     private float _lastApproachX, _lastApproachY;
+    private int _approachRetryTick;
     private string? _specName;
     public string? SpecName { get => _specName; set => _specName = value; }
 
@@ -147,6 +148,7 @@ public class BotEngine : IDisposable
     {
         _followGuid = guid;
         _followEnabled = true;
+        Logger.Info($"SetFollowGuid: GUID=0x{guid:X} followEnabled={_followEnabled}");
         EnsureRunning();
     }
 
@@ -301,21 +303,23 @@ public class BotEngine : IDisposable
                                    (PlayerClass == "PALADIN" && !IsHealer) ||
                                    (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
                                    (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
-                    float castRange = isMelee ? 5f : 30f;
+                    float castRange = isMelee ? 8f : 30f; // WoW мили спеллы работают ~5-8 ярдов с учётом hitbox
 
-                    float stopDist = isMelee ? 4f : 23f; // На каком расстоянии от таргета остановиться
+                    float stopDist = isMelee ? 2f : 23f; // Мили — вплотную, рейндж — на 23 ярда
 
-                    if (distToTarget > stopDist + 3f)
+                    if (distToTarget > castRange)
                     {
-                        // Далеко — повернуться и дать CTM один раз
+                        // Далеко — повернуться и дать CTM
                         if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
-                        // Даём CTM только если ещё не бежим (или таргет сильно сдвинулся)
+                        // Повторяем CTM каждые ~10 тиков (1.5 сек) пока далеко, или если таргет сдвинулся
+                        _approachRetryTick++;
                         float dx = slaveTarget.X - _lastApproachX;
                         float dy = slaveTarget.Y - _lastApproachY;
                         float targetMoved = MathF.Sqrt(dx * dx + dy * dy);
-                        if (!_isApproaching || targetMoved > 8f)
+                        if (!_isApproaching || targetMoved > 5f || _approachRetryTick >= 10)
                         {
-                            // Рассчитываем точку на расстоянии stopDist от таргета в нашу сторону
+                            _approachRetryTick = 0;
+                            // Бежим прямо к таргету (stopDist от цели)
                             float dirX = player.X - slaveTarget.X;
                             float dirY = player.Y - slaveTarget.Y;
                             float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
@@ -327,10 +331,11 @@ public class BotEngine : IDisposable
                             float goalX = slaveTarget.X + dirX * stopDist;
                             float goalY = slaveTarget.Y + dirY * stopDist;
                             float goalZ = slaveTarget.Z;
-                            _ctm.MoveTo(goalX, goalY, goalZ, 1.5f);
+                            _ctm.MoveTo(goalX, goalY, goalZ, 0.5f);
                             _lastApproachX = slaveTarget.X;
                             _lastApproachY = slaveTarget.Y;
                             _isApproaching = true;
+                            Logger.Info($"Hivemind: CTM approach dist={distToTarget:F1} goal=({goalX:F1},{goalY:F1})");
                         }
                     }
                     else

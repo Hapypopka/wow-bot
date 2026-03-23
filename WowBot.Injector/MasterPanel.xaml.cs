@@ -52,6 +52,16 @@ public partial class MasterPanel : Window
     private void BtnFollow_Click(object sender, RoutedEventArgs e) => SendCommand("follow");
     private void BtnStop_Click(object sender, RoutedEventArgs e) => SendCommand("stop");
 
+    private bool _assistOn = false;
+
+    private void BtnToggleAssist_Click(object sender, RoutedEventArgs e)
+    {
+        _assistOn = !_assistOn;
+        BtnToggleAssist.Content = _assistOn ? "Ассист: ВКЛ" : "Ассист: ВЫКЛ";
+        BtnToggleAssist.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_assistOn ? "#4ade80" : "#888"));
+        OnCommand?.Invoke("toggleassist");
+    }
+
     private void SendCommand(string cmd)
     {
         OnCommand?.Invoke(cmd);

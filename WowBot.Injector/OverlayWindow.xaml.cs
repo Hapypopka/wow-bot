@@ -186,7 +186,8 @@ public partial class OverlayWindow : Window
     public string SelectedSeal => _selectedSeal;
     public string SelectedBlessing => _selectedBlessing;
     public string SelectedAura => _selectedAura;
-    public bool AutoFace => _chkAutoFace?.IsChecked == true;
+    private bool _autoFaceDefault = true;
+    public bool AutoFace => _chkAutoFace != null ? (_chkAutoFace.IsChecked == true) : _autoFaceDefault;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
     public int MaxTargetRange => (int)(_sliderMaxRange?.Value ?? 30);
 
@@ -1250,6 +1251,9 @@ public partial class OverlayWindow : Window
             }
 
             // Curse/Seal/Judgement — НЕ грузим здесь, грузим в SetPlayerClass по классу
+
+            // AutoFace default from settings
+            _autoFaceDefault = GetSavedBool("chk_autoFace", true);
 
             // Main toggles (AoE, Buffs)
             BtnAoe.IsChecked = GetSavedBool("aoe", false);

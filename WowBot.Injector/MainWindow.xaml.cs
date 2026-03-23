@@ -112,6 +112,7 @@ public partial class MainWindow : Window
                 case "attack": hive.CmdAttack(); break;
                 case "follow": hive.CmdFollow(); break;
                 case "stop": hive.CmdStop(); break;
+                case "toggleassist": hive.CmdToggleAssist(); break;
             }
         };
         // Загрузить хоткеи из settings

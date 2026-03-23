@@ -34,6 +34,12 @@
                         Height="40" Margin="1" Cursor="Hand"/>
             </UniformGrid>
 
+            <!-- Toggle button -->
+            <Button x:Name="BtnToggleAssist" Content="Ассист: ВЫКЛ" FontSize="10"
+                    Click="BtnToggleAssist_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#888" BorderThickness="0"
+                    Height="24" Margin="1,2,1,2" Cursor="Hand"/>
+
             <!-- Hotkey labels -->
             <UniformGrid Columns="3">
                 <TextBlock x:Name="TxtHkAttack" Text="" FontSize="9" Foreground="#555"
