@@ -86,11 +86,12 @@ public static class AllRotations
         CastSpellByName('Удар героя')
     else
         -- PROT
+        if WB_S.SB~=false and not HasBuff('Блок щитом') and IsReady('Блок щитом') then CastSpellByName('Блок щитом') return end
         if WB_S.ShieldSlam~=false and IsReady('Мощный удар щитом') then CastSpellByName('Мощный удар щитом') return end
         if WB_S.Revenge~=false and IsReady('Реванш') then CastSpellByName('Реванш') return end
-        if WB_S.Devastate~=false then CastSpellByName('Сокрушение') return end
         if WB_S.TC~=false and IsReady('Удар грома') then CastSpellByName('Удар грома') return end
         if WB_S.ShockW~=false and IsReady('Ударная волна') then CastSpellByName('Ударная волна') return end
+        if WB_S.Devastate~=false then CastSpellByName('Сокрушение') return end
         CastSpellByName('Удар героя')
     end
 ");
@@ -102,6 +103,7 @@ public static class AllRotations
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
+    local judgeSpell = WB_S.JoL==true and 'Правосудие света' or 'Правосудие мудрости'
 
     if t3>=t1 and t3>=t2 then
         -- RET
@@ -109,7 +111,7 @@ public static class AllRotations
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if WB_S.AW~=false and IsReady('Гнев карателя') then CastSpellByName('Гнев карателя') return end
         if WB_S.HoW~=false and THP()<0.2 and IsReady('Молот гнева') then CastSpellByName('Молот гнева') return end
-        if WB_S.Judge~=false and IsReady('Правосудие мудрости') then CastSpellByName('Правосудие мудрости') return end
+        if WB_S.Judge~=false and IsReady(judgeSpell) then CastSpellByName(judgeSpell) return end
         if WB_S.DS~=false and IsReady('Божественная буря') then CastSpellByName('Божественная буря') return end
         if WB_S.CS~=false and IsReady('Удар воина Света') then CastSpellByName('Удар воина Света') return end
         if WB_S.Cons~=false and IsReady('Освящение') then CastSpellByName('Освящение') return end
@@ -119,14 +121,16 @@ public static class AllRotations
         -- PROT
         if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
+        if WB_S.Plea~=false and not HasBuff('Святая клятва') and IsReady('Святая клятва') then CastSpellByName('Святая клятва') return end
         if WB_S.AW~=false and IsReady('Гнев карателя') then CastSpellByName('Гнев карателя') return end
         if WB_S.HoR~=false and IsReady('Молот праведника') then CastSpellByName('Молот праведника') return end
         if WB_S.ShoR~=false and IsReady('Щит праведности') then CastSpellByName('Щит праведности') return end
         if WB_S.HolyShield~=false and IsReady('Щит небес') then CastSpellByName('Щит небес') return end
-        if WB_S.Judge~=false and IsReady('Правосудие мудрости') then CastSpellByName('Правосудие мудрости') return end
+        if WB_S.Judge~=false and IsReady(judgeSpell) then CastSpellByName(judgeSpell) return end
         if WB_S.Cons~=false and IsReady('Освящение') then CastSpellByName('Освящение') return end
         if WB_S.HW~=false and IsReady('Гнев небес') then CastSpellByName('Гнев небес') return end
         if WB_S.AS~=false and IsReady('Щит мстителя') then CastSpellByName('Щит мстителя') return end
+        if WB_S.SS~=false and not HasBuff('Священный щит') and IsReady('Священный щит') then CastSpellByName('Священный щит') return end
     else
         -- HOLY
 " + HealerFindTarget + @"
@@ -403,7 +407,7 @@ public static class AllRotations
         if WB_S.Mirror~=false and IsReady('Зеркальное изображение') then CastSpellByName('Зеркальное изображение') return end
         if WB_S.Combust~=false and IsReady('Возгорание') then CastSpellByName('Возгорание') return end
         if WB_S.LB~=false and not HasDebuff('target','Живая бомба') then CastSpellByName('Живая бомба') return end
-        if WB_S.Pyro~=false and HasBuff('Жар души!') and IsReady('Огненная глыба') then CastSpellByName('Огненная глыба') return end
+        if WB_S.Pyro~=false and HasBuff('Путь огня') and IsReady('Огненная глыба') then CastSpellByName('Огненная глыба') return end
         if WB_S.Scorch~=false and not HasDebuff('target','Ожог') then CastSpellByName('Ожог') return end
         if WB_S.FB~=false then CastSpellByName('Огненный шар') end
     else
@@ -580,7 +584,7 @@ local function WB_Inst()
     if not HasDebuff('target','Кровавая чума') then CastSpellByName('Удар чумы') return end",
         "MAGE" => @"
     if HasBuff('Пальцы мороза') then CastSpellByName('Ледяное копье') return end
-    if HasBuff('Жар души!') then CastSpellByName('Огненная глыба') return end",
+    if HasBuff('Путь огня') then CastSpellByName('Огненная глыба') return end",
         _ => ""
     }) + @"
 end

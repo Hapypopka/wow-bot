@@ -538,6 +538,9 @@ public partial class MainWindow : Window
                 _botEngine.SelectedSeal = _overlay.SelectedSeal;
                 _botEngine.SelectedBlessing = _overlay.SelectedBlessing;
                 _botEngine.SelectedAura = _overlay.SelectedAura;
+                _botEngine.SelectedShout = _overlay.SelectedShout;
+                _botEngine.SelectedStance = _overlay.SelectedStance;
+                _botEngine.SelectedPresence = _overlay.SelectedPresence;
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;

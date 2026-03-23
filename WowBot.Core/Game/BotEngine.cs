@@ -82,6 +82,9 @@ public class BotEngine : IDisposable
     public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
     public string SelectedAura { get; set; } = "AuRet";
+    public string SelectedShout { get; set; } = "";
+    public string SelectedStance { get; set; } = "";
+    public string SelectedPresence { get; set; } = "";
     public bool IsHealer { get; set; }
     public string PlayerClass { get; set; } = "";
     private bool _isApproaching;
@@ -271,7 +274,7 @@ public class BotEngine : IDisposable
             if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ (каждые ~3 сек, вне боя) ===
-            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura)))
+            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence)))
             {
                 _buffCheckTick++;
                 if (_buffCheckTick >= 20)
@@ -583,7 +586,7 @@ WB_AoE()
     private string BuildBuffScript()
     {
         // Аура/печать/благословение кастуются даже если нет обычных баффов
-        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura)) return "";
+        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence)) return "";
 
         var selfBuffs = new List<string>();
         var raidBuffs = new List<string>();
@@ -609,7 +612,8 @@ WB_AoE()
             string auraSpell = SelectedAura switch
             {
                 "AuRet" => "Аура воздаяния",
-                "AuDev" => "Аура воина Света",
+                "AuDev" => "Аура благочестия",
+                "AuCru" => "Аура воина Света",
                 "AuFrost" => "Аура защиты от магии льда",
                 "AuFire" => "Аура защиты от огня",
                 "AuShadow" => "Аура защиты от темной магии",
@@ -649,6 +653,7 @@ WB_AoE()
                 "BoM" => ("Благословение могущества", "Великое благословение могущества"),
                 "BoK" => ("Благословение королей", "Великое благословение королей"),
                 "BoW" => ("Благословение мудрости", "Великое благословение мудрости"),
+                "BoS" => ("Благословение неприкосновенности", "Великое благословение неприкосновенности"),
                 _ => ("", "")
             };
             if (!string.IsNullOrEmpty(blessSpell))
@@ -656,6 +661,56 @@ WB_AoE()
                 var bs = blessSpell.Replace("'", "\\'");
                 var gs = greatSpell.Replace("'", "\\'");
                 sb.Append($"if not HasB('player','{bs}') and not HasB('player','{gs}') then if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end return end ");
+            }
+        }
+
+        // Крик воина (только для WARRIOR)
+        if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedShout))
+        {
+            string shoutSpell = SelectedShout switch
+            {
+                "Battle" => "Боевой крик",
+                "Commanding" => "Командирский крик",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(shoutSpell))
+            {
+                var sh = shoutSpell.Replace("'", "\\'");
+                sb.Append($"if not HasB('player','{sh}') then CastSpellByName('{sh}') return end ");
+            }
+        }
+
+        // Стойка воина (только для WARRIOR)
+        if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedStance))
+        {
+            string stanceSpell = SelectedStance switch
+            {
+                "Battle" => "Боевая стойка",
+                "Defensive" => "Оборонительная стойка",
+                "Berserker" => "Стойка берсерка",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(stanceSpell))
+            {
+                var st = stanceSpell.Replace("'", "\\'");
+                sb.Append($"if not HasB('player','{st}') then CastSpellByName('{st}') return end ");
+            }
+        }
+
+        // Власть ДК (только для DEATHKNIGHT)
+        if (PlayerClass == "DEATHKNIGHT" && !string.IsNullOrEmpty(SelectedPresence))
+        {
+            string presSpell = SelectedPresence switch
+            {
+                "Blood" => "Власть крови",
+                "Frost" => "Власть льда",
+                "Unholy" => "Власть нечестивости",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(presSpell))
+            {
+                var pr = presSpell.Replace("'", "\\'");
+                sb.Append($"if not HasB('player','{pr}') then CastSpellByName('{pr}') return end ");
             }
         }
 

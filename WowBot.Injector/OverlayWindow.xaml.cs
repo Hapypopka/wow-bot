@@ -103,10 +103,10 @@ public partial class OverlayWindow : Window
     private (string key, string icon, string tooltip)[] SealOptions =>
         _playerSpec == "Holy Paladin" ? SealOptionsHoly : SealOptionsRet;
 
-    // Judgement selection for Holy Paladin (radio-style)
-    private string _selectedJudgement = ""; // Только для Holy Paladin
+    // Judgement selection for all Paladins (radio-style)
+    private string _selectedJudgement = ""; // Для всех паладинов
     private readonly Dictionary<string, ToggleButton> _judgementToggles = new();
-    private static readonly (string key, string icon, string tooltip)[] JudgementOptionsHoly =
+    private static readonly (string key, string icon, string tooltip)[] JudgementOptions =
     {
         ("JoW", "judgement_wisdom.jpg", "Правосудие мудрости"),
         ("JoL", "judgement_light.jpg", "Правосудие света"),
@@ -120,6 +120,7 @@ public partial class OverlayWindow : Window
         ("BoM", "blessing_might.jpg", "Благословение могущества"),
         ("BoK", "blessing_kings.jpg", "Благословение королей"),
         ("BoW", "blessing_wisdom.jpg", "Благословение мудрости"),
+        ("BoS", "blessing_sanctuary.jpg", "Благословение неприкосновенности"),
     };
 
     // Aura selection for Paladin (radio-style)
@@ -128,11 +129,41 @@ public partial class OverlayWindow : Window
     private static readonly (string key, string icon, string tooltip)[] AuraOptions =
     {
         ("AuRet", "aura_retribution.jpg", "Аура воздаяния"),
-        ("AuDev", "aura_devotion.jpg", "Аура воина Света"),
+        ("AuDev", "aura_devotion.jpg", "Аура благочестия"),
+        ("AuCru", "aura_crusader.jpg", "Аура воина Света"),
         ("AuFrost", "aura_frost.jpg", "Аура защиты от магии льда"),
         ("AuFire", "aura_fire.jpg", "Аура защиты от огня"),
         ("AuShadow", "aura_shadow.jpg", "Аура защиты от темной магии"),
         ("AuConc", "aura_concentration.jpg", "Аура сосредоточенности"),
+    };
+
+    // Shout selection for Warrior (radio-style)
+    private string _selectedShout = ""; // Только для WARRIOR
+    private readonly Dictionary<string, ToggleButton> _shoutToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] ShoutOptions =
+    {
+        ("Battle", "battle_shout.jpg", "Боевой крик"),
+        ("Commanding", "commanding_shout.jpg", "Командирский крик"),
+    };
+
+    // Stance selection for Warrior (radio-style)
+    private string _selectedStance = ""; // Только для WARRIOR
+    private readonly Dictionary<string, ToggleButton> _stanceToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] StanceOptions =
+    {
+        ("Battle", "battle_stance.jpg", "Боевая стойка"),
+        ("Defensive", "defensive_stance.jpg", "Оборонительная стойка"),
+        ("Berserker", "berserker_stance.jpg", "Стойка берсерка"),
+    };
+
+    // Presence selection for DK (radio-style)
+    private string _selectedPresence = ""; // Только для DEATHKNIGHT
+    private readonly Dictionary<string, ToggleButton> _presenceToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] PresenceOptions =
+    {
+        ("Blood", "blood_presence.jpg", "Власть крови"),
+        ("Frost", "frost_presence.jpg", "Власть льда"),
+        ("Unholy", "unholy_presence.jpg", "Власть нечестивости"),
     };
 
     // Mana sliders
@@ -167,7 +198,7 @@ public partial class OverlayWindow : Window
         {
             foreach (var (key, _, _) in SealOptions)
                 parts.Add($"{key}={(_selectedSeal == key ? "true" : "false")}");
-            foreach (var (key, _, _) in JudgementOptionsHoly)
+            foreach (var (key, _, _) in JudgementOptions)
                 parts.Add($"{key}={(_selectedJudgement == key ? "true" : "false")}");
             foreach (var (key, _, _) in BlessingOptions)
                 parts.Add($"{key}={(_selectedBlessing == key ? "true" : "false")}");
@@ -186,6 +217,9 @@ public partial class OverlayWindow : Window
     public string SelectedSeal => _selectedSeal;
     public string SelectedBlessing => _selectedBlessing;
     public string SelectedAura => _selectedAura;
+    public string SelectedShout => _selectedShout;
+    public string SelectedStance => _selectedStance;
+    public string SelectedPresence => _selectedPresence;
     private bool _autoFaceDefault = true;
     public bool AutoFace => _chkAutoFace != null ? (_chkAutoFace.IsChecked == true) : _autoFaceDefault;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
@@ -215,11 +249,12 @@ public partial class OverlayWindow : Window
         },
         ["Prot Warrior"] = new[]
         {
+            ("SB", "shield_block.jpg", "Блок щитом", true),
             ("ShieldSlam", "shield_slam.jpg", "Мощный удар щитом", true),
             ("Revenge", "revenge.jpg", "Реванш", true),
-            ("Devastate", "devastate.jpg", "Сокрушение", true),
             ("TC", "thunder_clap.jpg", "Удар грома", true),
             ("ShockW", "shockwave.jpg", "Ударная волна", true),
+            ("Devastate", "devastate.jpg", "Сокрушение", true),
         },
         // ==================== PALADIN ====================
         ["Ret Paladin"] = new[]
@@ -235,6 +270,7 @@ public partial class OverlayWindow : Window
         },
         ["Prot Paladin"] = new[]
         {
+            ("Plea", "divine_plea.jpg", "Святая клятва", true),
             ("AW", "avenging_wrath.jpg", "Гнев карателя", true),
             ("HoR", "hammer_righteous.jpg", "Молот праведника", true),
             ("ShoR", "shield_righteousness.jpg", "Щит праведности", true),
@@ -243,6 +279,7 @@ public partial class OverlayWindow : Window
             ("Cons", "consecration.jpg", "Освящение", true),
             ("HW", "holy_wrath.jpg", "Гнев небес", true),
             ("AS", "avengers_shield.jpg", "Щит мстителя", true),
+            ("SS", "sacred_shield.jpg", "Священный щит", false),
         },
         ["Holy Paladin"] = new[]
         {
@@ -734,6 +771,7 @@ public partial class OverlayWindow : Window
                     _selectedCurse = curseKey;
                     foreach (var (k, btn) in _curseToggles)
                         if (k != curseKey) btn.IsChecked = false;
+                    SaveSettings();
                 };
                 toggle.Unchecked += (s, e) =>
                 {
@@ -744,6 +782,34 @@ public partial class OverlayWindow : Window
             SubContent.Children.Add(curseWrap);
 
             _sliderDispMana = AddSlider("Мана Life Tap", _sliderDispMana?.Value ?? GetSavedDouble("slider_dispMana", 30), 0, 100, 5);
+        }
+
+        // Выбор правосудия для всех паладинов (радио)
+        if (_playerClass == "PALADIN")
+        {
+            AddLabel("Выбор правосудия");
+            var judgeWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _judgementToggles.Clear();
+            foreach (var (key, icon, tooltip) in JudgementOptions)
+            {
+                bool isSelected = _selectedJudgement == key;
+                var toggle = AddSpellIcon(judgeWrap, icon, tooltip, isSelected);
+                _judgementToggles[key] = toggle;
+
+                var jKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedJudgement = jKey;
+                    foreach (var (k, btn) in _judgementToggles)
+                        if (k != jKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedJudgement == jKey) _selectedJudgement = "";
+                };
+            }
+            SubContent.Children.Add(judgeWrap);
         }
     }
 
@@ -782,7 +848,7 @@ public partial class OverlayWindow : Window
 
     private void BuildBuffsSubmenu()
     {
-        if (_buffToggles.Count == 0 && _playerClass != "PALADIN")
+        if (_buffToggles.Count == 0 && _playerClass != "PALADIN" && _playerClass != "WARRIOR" && _playerClass != "DEATHKNIGHT")
         {
             AddLabel("Класс не определен");
             return;
@@ -846,6 +912,7 @@ public partial class OverlayWindow : Window
                     _selectedSeal = sealKey;
                     foreach (var (k, btn) in _sealToggles)
                         if (k != sealKey) btn.IsChecked = false;
+                    SaveSettings();
                 };
                 toggle.Unchecked += (s, e) =>
                 {
@@ -854,32 +921,7 @@ public partial class OverlayWindow : Window
             }
             SubContent.Children.Add(sealWrap);
 
-            // Выбор правосудия для хпала (радио)
-            if (_playerSpec == "Holy Paladin")
-            {
-                AddLabel("Выбор правосудия");
-                var judgeWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
-                foreach (var (key, icon, tooltip) in JudgementOptionsHoly)
-                {
-                    bool isSelected = _selectedJudgement == key;
-                    var toggle = AddSpellIcon(judgeWrap, icon, tooltip, isSelected);
-                    _judgementToggles[key] = toggle;
-
-                    var jKey = key;
-                    toggle.Checked += (s, e) =>
-                    {
-                        _selectedJudgement = jKey;
-                        foreach (var (k, btn) in _judgementToggles)
-                            if (k != jKey) btn.IsChecked = false;
-                        SaveSettings();
-                    };
-                    toggle.Unchecked += (s, e) =>
-                    {
-                        if (_selectedJudgement == jKey) _selectedJudgement = "";
-                    };
-                }
-                SubContent.Children.Add(judgeWrap);
-            }
+            // Правосудие перенесено в раздел Rotation
 
             // Выбор благословения (радио)
             AddLabel("Выбор благословения");
@@ -896,6 +938,7 @@ public partial class OverlayWindow : Window
                     _selectedBlessing = blessKey;
                     foreach (var (k, btn) in _blessingToggles)
                         if (k != blessKey) btn.IsChecked = false;
+                    SaveSettings();
                 };
                 toggle.Unchecked += (s, e) =>
                 {
@@ -903,6 +946,86 @@ public partial class OverlayWindow : Window
                 };
             }
             SubContent.Children.Add(blessWrap);
+        }
+
+        // Выбор крика для воина (радио)
+        if (_playerClass == "WARRIOR")
+        {
+            AddLabel("Выбор крика");
+            var shoutWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _shoutToggles.Clear();
+            foreach (var (key, icon, tooltip) in ShoutOptions)
+            {
+                bool isSelected = _selectedShout == key;
+                var toggle = AddSpellIcon(shoutWrap, icon, tooltip, isSelected);
+                _shoutToggles[key] = toggle;
+
+                var shoutKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedShout = shoutKey;
+                    foreach (var (k, btn) in _shoutToggles)
+                        if (k != shoutKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedShout == shoutKey) _selectedShout = "";
+                };
+            }
+            SubContent.Children.Add(shoutWrap);
+
+            AddLabel("Выбор стойки");
+            var stanceWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _stanceToggles.Clear();
+            foreach (var (key, icon, tooltip) in StanceOptions)
+            {
+                bool isSelected = _selectedStance == key;
+                var toggle = AddSpellIcon(stanceWrap, icon, tooltip, isSelected);
+                _stanceToggles[key] = toggle;
+
+                var stanceKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedStance = stanceKey;
+                    foreach (var (k, btn) in _stanceToggles)
+                        if (k != stanceKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedStance == stanceKey) _selectedStance = "";
+                };
+            }
+            SubContent.Children.Add(stanceWrap);
+        }
+
+        // Выбор власти для ДК (радио)
+        if (_playerClass == "DEATHKNIGHT")
+        {
+            AddLabel("Выбор власти");
+            var presenceWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _presenceToggles.Clear();
+            foreach (var (key, icon, tooltip) in PresenceOptions)
+            {
+                bool isSelected = _selectedPresence == key;
+                var toggle = AddSpellIcon(presenceWrap, icon, tooltip, isSelected);
+                _presenceToggles[key] = toggle;
+
+                var presKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedPresence = presKey;
+                    foreach (var (k, btn) in _presenceToggles)
+                        if (k != presKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedPresence == presKey) _selectedPresence = "";
+                };
+            }
+            SubContent.Children.Add(presenceWrap);
         }
     }
 
@@ -1176,8 +1299,12 @@ public partial class OverlayWindow : Window
         // Устанавливаем дефолты ТОЛЬКО для нужного класса
         if (playerClass == "PALADIN")
         {
-            _selectedAura = GetSavedString("aura", "AuRet");
-            _selectedBlessing = GetSavedString("blessing", "BoM");
+            // Дефолт ауры по спеку: прот→воина Света, хпал→сосредоточенности, рет→воздаяния
+            string defaultAura = _playerSpec == "Prot Paladin" ? "AuDev"
+                : _playerSpec == "Holy Paladin" ? "AuConc" : "AuRet";
+            _selectedAura = GetSavedString("aura", defaultAura);
+            string defaultBlessing = _playerSpec == "Prot Paladin" ? "BoS" : "BoM";
+            _selectedBlessing = GetSavedString("blessing", defaultBlessing);
             _selectedSeal = _playerSpec == "Holy Paladin"
                 ? GetSavedString("seal", "SoW")
                 : GetSavedString("seal", "SoV");
@@ -1189,6 +1316,32 @@ public partial class OverlayWindow : Window
             _selectedBlessing = "";
             _selectedSeal = "";
             _selectedJudgement = "";
+        }
+        // Крик воина: дефолт — боевой для фури/армс, командирский для прота
+        // Стойка воина: дефолт — защитная для прота, боевая для армс, берсерк для фури
+        if (playerClass == "WARRIOR")
+        {
+            string defaultShout = _playerSpec == "Prot Warrior" ? "Commanding" : "Battle";
+            _selectedShout = GetSavedString("shout", defaultShout);
+            string defaultStance = _playerSpec == "Prot Warrior" ? "Defensive"
+                : _playerSpec == "Fury Warrior" ? "Berserker" : "Battle";
+            _selectedStance = GetSavedString("stance", defaultStance);
+        }
+        else
+        {
+            _selectedShout = "";
+            _selectedStance = "";
+        }
+        // Власть ДК: дефолт — кровь для блада, лёд для фроста, нечестивость для анхоли
+        if (playerClass == "DEATHKNIGHT")
+        {
+            string defaultPresence = _playerSpec == "Blood DK" ? "Blood"
+                : _playerSpec == "Frost DK" ? "Frost" : "Unholy";
+            _selectedPresence = GetSavedString("presence", defaultPresence);
+        }
+        else
+        {
+            _selectedPresence = "";
         }
         _selectedCurse = playerClass == "WARLOCK" ? GetSavedString("curse", "CoA") : "";
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
@@ -1232,8 +1385,12 @@ public partial class OverlayWindow : Window
     private double GetSavedDouble(string key, double defaultVal) =>
         _saved.TryGetValue(key, out var v) ? v.GetDouble() : defaultVal;
 
-    private string GetSavedString(string key, string defaultVal) =>
-        _saved.TryGetValue(key, out var v) ? v.GetString() ?? defaultVal : defaultVal;
+    private string GetSavedString(string key, string defaultVal)
+    {
+        if (!_saved.TryGetValue(key, out var v)) return defaultVal;
+        var s = v.GetString();
+        return string.IsNullOrEmpty(s) ? defaultVal : s;
+    }
 
     public void LoadSettings()
     {
@@ -1280,6 +1437,9 @@ public partial class OverlayWindow : Window
             data["blessing"] = _selectedBlessing;
             data["judgement"] = _selectedJudgement;
             data["aura"] = _selectedAura;
+            data["shout"] = _selectedShout;
+            data["stance"] = _selectedStance;
+            data["presence"] = _selectedPresence;
 
             // Main toggles
             data["aoe"] = BtnAoe.IsChecked == true;
@@ -1294,18 +1454,27 @@ public partial class OverlayWindow : Window
                 data[$"buff_{spell}"] = btn.IsChecked == true;
 
             // Sliders
+            // Sliders — если UI не создан, сохраняем предыдущее значение
             if (_sliderDispMana != null) data["slider_dispMana"] = _sliderDispMana.Value;
+            else if (_saved.ContainsKey("slider_dispMana")) data["slider_dispMana"] = GetSavedDouble("slider_dispMana", 30);
             if (_sliderSFMana != null) data["slider_sfMana"] = _sliderSFMana.Value;
+            else if (_saved.ContainsKey("slider_sfMana")) data["slider_sfMana"] = GetSavedDouble("slider_sfMana", 50);
             if (_sliderMaxDots != null) data["slider_maxDots"] = _sliderMaxDots.Value;
+            else if (_saved.ContainsKey("slider_maxDots")) data["slider_maxDots"] = GetSavedDouble("slider_maxDots", 4);
             if (_sliderMindSear != null) data["slider_mindSear"] = _sliderMindSear.Value;
+            else if (_saved.ContainsKey("slider_mindSear")) data["slider_mindSear"] = GetSavedDouble("slider_mindSear", 4);
             if (_sliderDist != null) data["slider_dist"] = _sliderDist.Value;
+            else if (_saved.ContainsKey("slider_dist")) data["slider_dist"] = GetSavedDouble("slider_dist", 8);
             if (_sliderMaxRange != null) data["slider_maxRange"] = _sliderMaxRange.Value;
+            else if (_saved.ContainsKey("slider_maxRange")) data["slider_maxRange"] = GetSavedDouble("slider_maxRange", 30);
 
-            // Checkboxes
-            if (_chkAutoFace != null) data["chk_autoFace"] = _chkAutoFace.IsChecked == true;
-            if (_chkAutoTarget != null) data["chk_autoTarget"] = _chkAutoTarget.IsChecked == true;
+            // Checkboxes — если UI не создан, сохраняем предыдущее значение из _saved
+            data["chk_autoFace"] = _chkAutoFace != null ? _chkAutoFace.IsChecked == true : GetSavedBool("chk_autoFace", true);
+            data["chk_autoTarget"] = _chkAutoTarget != null ? _chkAutoTarget.IsChecked == true : GetSavedBool("chk_autoTarget", true);
             if (_chkMultiDot != null) data["chk_multiDot"] = _chkMultiDot.IsChecked == true;
+            else if (_saved.ContainsKey("chk_multiDot")) data["chk_multiDot"] = GetSavedBool("chk_multiDot", true);
             if (_chkMindSear != null) data["chk_mindSear"] = _chkMindSear.IsChecked == true;
+            else if (_saved.ContainsKey("chk_mindSear")) data["chk_mindSear"] = GetSavedBool("chk_mindSear", true);
 
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json);
