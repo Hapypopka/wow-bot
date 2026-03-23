@@ -680,37 +680,38 @@ WB_AoE()
             }
         }
 
-        // Стойка воина (только для WARRIOR)
+        // Стойка воина (через GetShapeshiftForm: 1=боевая, 2=защитная, 3=берсерк)
         if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedStance))
         {
-            string stanceSpell = SelectedStance switch
+            var (stanceForm, stanceSpell) = SelectedStance switch
             {
-                "Battle" => "Боевая стойка",
-                "Defensive" => "Оборонительная стойка",
-                "Berserker" => "Стойка берсерка",
-                _ => ""
+                "Battle" => (1, "Боевая стойка"),
+                "Defensive" => (2, "Оборонительная стойка"),
+                "Berserker" => (3, "Стойка берсерка"),
+                _ => (0, "")
             };
-            if (!string.IsNullOrEmpty(stanceSpell))
+            if (stanceForm > 0)
             {
                 var st = stanceSpell.Replace("'", "\\'");
-                sb.Append($"if not HasB('player','{st}') then CastSpellByName('{st}') return end ");
+                Logger.Info($"BuildBuff: stance={SelectedStance} form={stanceForm} spell={stanceSpell}");
+                sb.Append($"if GetShapeshiftForm()~={stanceForm} then CastSpellByName('{st}') return end ");
             }
         }
 
-        // Власть ДК (только для DEATHKNIGHT)
+        // Власть ДК (через GetShapeshiftForm: 1=кровь, 2=лёд, 3=нечестивость)
         if (PlayerClass == "DEATHKNIGHT" && !string.IsNullOrEmpty(SelectedPresence))
         {
-            string presSpell = SelectedPresence switch
+            var (presForm, presSpell) = SelectedPresence switch
             {
-                "Blood" => "Власть крови",
-                "Frost" => "Власть льда",
-                "Unholy" => "Власть нечестивости",
-                _ => ""
+                "Blood" => (1, "Власть крови"),
+                "Frost" => (2, "Власть льда"),
+                "Unholy" => (3, "Власть нечестивости"),
+                _ => (0, "")
             };
-            if (!string.IsNullOrEmpty(presSpell))
+            if (presForm > 0)
             {
                 var pr = presSpell.Replace("'", "\\'");
-                sb.Append($"if not HasB('player','{pr}') then CastSpellByName('{pr}') return end ");
+                sb.Append($"if GetShapeshiftForm()~={presForm} then CastSpellByName('{pr}') return end ");
             }
         }
 

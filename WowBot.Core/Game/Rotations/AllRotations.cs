@@ -24,6 +24,7 @@ public static class AllRotations
     local function PHP() local h,hm=UnitHealth('player'),UnitHealthMax('player') if hm==0 then return 1 end return h/hm end
     local function CP() return GetComboPoints('player','target') or 0 end
     local function CDLeft(name) local s,d=GetSpellCooldown(name) if not s or s==0 then return 0 end return s+d-GetTime() end
+    local function IsUsable(name) local u,nm=IsUsableSpell(name) if not u then return false end local s,d=GetSpellCooldown(name) return s~=nil and s==0 end
 ";
 
     private const string PreChecksDPS = @"
@@ -86,13 +87,29 @@ public static class AllRotations
         CastSpellByName('Удар героя')
     else
         -- PROT
+        if WB_S.HS~=false and UnitMana('player')>50 and IsReady('Удар героя') then CastSpellByName('Удар героя') end
+        if WB_S.BR==true and UnitMana('player')<30 and IsReady('Кровавая ярость') then CastSpellByName('Кровавая ярость') return end
+        local defHP = (WB_S.DefHP or 40) / 100
+        if PHP()<=defHP then
+            local hasSW = HasBuff('Глухая оборона')
+            local hasLS = HasBuff('Ни шагу назад')
+            local anyDef = hasSW or hasLS
+            if WB_S.DefAll==true then
+                if WB_S.SW~=false and not hasSW and IsReady('Глухая оборона') then CastSpellByName('Глухая оборона') return end
+                if WB_S.LS~=false and not hasLS and IsReady('Ни шагу назад') then CastSpellByName('Ни шагу назад') return end
+            else
+                if not anyDef then
+                    if WB_S.SW~=false and IsReady('Глухая оборона') then CastSpellByName('Глухая оборона') return end
+                    if WB_S.LS~=false and IsReady('Ни шагу назад') then CastSpellByName('Ни шагу назад') return end
+                end
+            end
+        end
         if WB_S.SB~=false and not HasBuff('Блок щитом') and IsReady('Блок щитом') then CastSpellByName('Блок щитом') return end
         if WB_S.ShieldSlam~=false and IsReady('Мощный удар щитом') then CastSpellByName('Мощный удар щитом') return end
-        if WB_S.Revenge~=false and IsReady('Реванш') then CastSpellByName('Реванш') return end
+        if WB_S.Revenge~=false and IsUsable('Реванш') then CastSpellByName('Реванш') return end
         if WB_S.TC~=false and IsReady('Удар грома') then CastSpellByName('Удар грома') return end
         if WB_S.ShockW~=false and IsReady('Ударная волна') then CastSpellByName('Ударная волна') return end
         if WB_S.Devastate~=false then CastSpellByName('Сокрушение') return end
-        CastSpellByName('Удар героя')
     end
 ");
 

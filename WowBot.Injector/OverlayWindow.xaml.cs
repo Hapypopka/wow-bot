@@ -175,6 +175,8 @@ public partial class OverlayWindow : Window
     // Target checkboxes
     private CheckBox _chkAutoFace = null!, _chkAutoTarget = null!;
     private Slider _sliderMaxRange = null!;
+    private Slider? _sliderDefHP;
+    private CheckBox? _chkDefAll;
 
     /// <summary>Проверяет включён ли спелл по ключу</summary>
     public bool IsSpellEnabled(string key) =>
@@ -203,6 +205,11 @@ public partial class OverlayWindow : Window
             foreach (var (key, _, _) in BlessingOptions)
                 parts.Add($"{key}={(_selectedBlessing == key ? "true" : "false")}");
         }
+        // DefHP slider + DefAll для прот воина
+        if (_playerClass == "WARRIOR" && _sliderDefHP != null)
+            parts.Add($"DefHP={(int)_sliderDefHP.Value}");
+        if (_playerClass == "WARRIOR" && _chkDefAll != null)
+            parts.Add($"DefAll={(_chkDefAll.IsChecked == true ? "true" : "false")}");
         return "WB_S={" + string.Join(",", parts) + "} ";
     }
 
@@ -249,6 +256,10 @@ public partial class OverlayWindow : Window
         },
         ["Prot Warrior"] = new[]
         {
+            ("HS", "heroic_strike.jpg", "Удар героя", true),
+            ("BR", "berserker_rage.jpg", "Кровавая ярость", false),
+            ("SW", "shield_wall.jpg", "Глухая оборона", true),
+            ("LS", "last_stand.jpg", "Ни шагу назад", true),
             ("SB", "shield_block.jpg", "Блок щитом", true),
             ("ShieldSlam", "shield_slam.jpg", "Мощный удар щитом", true),
             ("Revenge", "revenge.jpg", "Реванш", true),
@@ -619,11 +630,7 @@ public partial class OverlayWindow : Window
             ("Щит молний", "lightning_shield.jpg", "Щит молний", true),
             ("Водный щит", "water_shield.jpg", "Водный щит", false),
         },
-        ["WARRIOR"] = new[]
-        {
-            ("Боевой крик", "heroic_strike.jpg", "Боевой крик", true),
-            ("Командирский крик", "heroic_strike.jpg", "Командирский крик", false),
-        },
+        // WARRIOR: крики и стойки через радио-выбор (ShoutOptions/StanceOptions), не здесь
         ["HUNTER"] = new[]
         {
             ("Дух дракондора", "aimed_shot.jpg", "Дух дракондора", true),
@@ -782,6 +789,13 @@ public partial class OverlayWindow : Window
             SubContent.Children.Add(curseWrap);
 
             _sliderDispMana = AddSlider("Мана Life Tap", _sliderDispMana?.Value ?? GetSavedDouble("slider_dispMana", 30), 0, 100, 5);
+        }
+
+        // Дефабилки прот воина
+        if (_playerSpec == "Prot Warrior")
+        {
+            _sliderDefHP = AddSlider("HP деф. бафов %", _sliderDefHP?.Value ?? GetSavedDouble("slider_defHP", 40), 10, 80, 5);
+            _chkDefAll = AddCheckBox("Все дефы разом", _chkDefAll?.IsChecked ?? GetSavedBool("chk_defAll", false));
         }
 
         // Выбор правосудия для всех паладинов (радио)
@@ -1467,6 +1481,10 @@ public partial class OverlayWindow : Window
             else if (_saved.ContainsKey("slider_dist")) data["slider_dist"] = GetSavedDouble("slider_dist", 8);
             if (_sliderMaxRange != null) data["slider_maxRange"] = _sliderMaxRange.Value;
             else if (_saved.ContainsKey("slider_maxRange")) data["slider_maxRange"] = GetSavedDouble("slider_maxRange", 30);
+            if (_sliderDefHP != null) data["slider_defHP"] = _sliderDefHP.Value;
+            else if (_saved.ContainsKey("slider_defHP")) data["slider_defHP"] = GetSavedDouble("slider_defHP", 40);
+            if (_chkDefAll != null) data["chk_defAll"] = _chkDefAll.IsChecked == true;
+            else if (_saved.ContainsKey("chk_defAll")) data["chk_defAll"] = GetSavedBool("chk_defAll", false);
 
             // Checkboxes — если UI не создан, сохраняем предыдущее значение из _saved
             data["chk_autoFace"] = _chkAutoFace != null ? _chkAutoFace.IsChecked == true : GetSavedBool("chk_autoFace", true);
