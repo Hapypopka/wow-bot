@@ -85,6 +85,7 @@ public class BotEngine : IDisposable
     public string SelectedShout { get; set; } = "";
     public string SelectedStance { get; set; } = "";
     public string SelectedPresence { get; set; } = "";
+    public string SelectedFeralForm { get; set; } = "";
     public bool IsHealer { get; set; }
     public string PlayerClass { get; set; } = "";
     private bool _isApproaching;
@@ -273,22 +274,23 @@ public class BotEngine : IDisposable
             _logTick++;
             if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
-            // === БАФФЫ (каждые ~3 сек, вне боя) ===
-            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence)))
+            // === БАФФЫ ===
+            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
             {
                 _buffCheckTick++;
-                if (_buffCheckTick >= 20)
+                // Классовые баффы (стойка/форма/власть/аура/печать) — каждые 3 тика (~0.5 сек)
+                // Обычные баффы (self-buffs) — каждые 20 тиков (~3 сек)
+                bool classBuffCheck = _buffCheckTick % 3 == 0;
+                bool fullBuffCheck = _buffCheckTick >= 20;
+                if (fullBuffCheck) _buffCheckTick = 0;
+                if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
                 {
-                    _buffCheckTick = 0;
-                    if (!player.IsCasting)
+                    string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
+                    if (!string.IsNullOrEmpty(buffScript))
                     {
-                        string buffScript = BuildBuffScript();
-                        if (!string.IsNullOrEmpty(buffScript))
-                        {
-                            Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal}");
-                            _hook.ExecuteLua(buffScript, 500);
-                            return; // Не выполняем ротацию на этом тике
-                        }
+                        if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal}");
+                        _hook.ExecuteLua(buffScript, 500);
+                        return; // Не выполняем ротацию на этом тике
                     }
                 }
             }
@@ -583,10 +585,96 @@ WB_AoE()
         { "Чародейская гениальность", ("Чародейский порошок", "Чародейский интеллект") },
     };
 
+    /// <summary>Быстрая проверка только классовых баффов (стойка/форма/власть/аура/печать) — каждые 0.5 сек</summary>
+    private string BuildClassBuffScript()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("local function WB_CB() ");
+        sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
+
+        bool hasAnything = false;
+
+        // Стойка воина
+        if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedStance))
+        {
+            var (stanceForm, stanceSpell) = SelectedStance switch
+            {
+                "Battle" => (1, "Боевая стойка"),
+                "Defensive" => (2, "Оборонительная стойка"),
+                "Berserker" => (3, "Стойка берсерка"),
+                _ => (0, "")
+            };
+            if (stanceForm > 0)
+            {
+                sb.Append($"if GetShapeshiftForm()~={stanceForm} then CastSpellByName('{stanceSpell}') return end ");
+                hasAnything = true;
+            }
+        }
+
+        // Власть ДК
+        if (PlayerClass == "DEATHKNIGHT" && !string.IsNullOrEmpty(SelectedPresence))
+        {
+            var (presForm, presSpell) = SelectedPresence switch
+            {
+                "Blood" => (1, "Власть крови"),
+                "Frost" => (2, "Власть льда"),
+                "Unholy" => (3, "Власть нечестивости"),
+                _ => (0, "")
+            };
+            if (presForm > 0)
+            {
+                sb.Append($"if GetShapeshiftForm()~={presForm} then CastSpellByName('{presSpell}') return end ");
+                hasAnything = true;
+            }
+        }
+
+        // Форма друида
+        if (PlayerClass == "DRUID" && !string.IsNullOrEmpty(SelectedFeralForm))
+        {
+            var (formId, formSpell) = SelectedFeralForm switch
+            {
+                "Cat" => (3, "Облик кошки"),
+                "Bear" => (1, "Облик лютого медведя"),
+                _ => (0, "")
+            };
+            if (formId > 0)
+            {
+                sb.Append($"if GetShapeshiftForm()~={formId} then CastSpellByName('{formSpell}') return end ");
+                hasAnything = true;
+            }
+        }
+
+        // Аура паладина
+        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedAura))
+        {
+            string auraSpell = SelectedAura switch
+            {
+                "AuRet" => "Аура воздаяния",
+                "AuDev" => "Аура благочестия",
+                "AuCru" => "Аура воина Света",
+                "AuFrost" => "Аура защиты от магии льда",
+                "AuFire" => "Аура защиты от огня",
+                "AuShadow" => "Аура защиты от темной магии",
+                "AuConc" => "Аура сосредоточенности",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(auraSpell))
+            {
+                sb.Append($"local function HasB(u,n) for i=1,40 do local b=UnitBuff(u,i) if not b then return false end if b==n then return true end end return false end ");
+                sb.Append($"if not HasB('player','{auraSpell}') then CastSpellByName('{auraSpell}') return end ");
+                hasAnything = true;
+            }
+        }
+
+        if (!hasAnything) return "";
+        sb.Append("end WB_CB()");
+        return sb.ToString();
+    }
+
     private string BuildBuffScript()
     {
         // Аура/печать/благословение кастуются даже если нет обычных баффов
-        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence)) return "";
+        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence) && string.IsNullOrEmpty(SelectedFeralForm)) return "";
 
         var selfBuffs = new List<string>();
         var raidBuffs = new List<string>();
@@ -712,6 +800,22 @@ WB_AoE()
             {
                 var pr = presSpell.Replace("'", "\\'");
                 sb.Append($"if GetShapeshiftForm()~={presForm} then CastSpellByName('{pr}') return end ");
+            }
+        }
+
+        // Форма ферал друида (через GetShapeshiftForm: 1=медведь, 3=кот)
+        if (PlayerClass == "DRUID" && !string.IsNullOrEmpty(SelectedFeralForm))
+        {
+            var (formId, formSpell) = SelectedFeralForm switch
+            {
+                "Cat" => (3, "Облик кошки"),
+                "Bear" => (1, "Облик лютого медведя"),
+                _ => (0, "")
+            };
+            if (formId > 0)
+            {
+                var fs = formSpell.Replace("'", "\\'");
+                sb.Append($"if GetShapeshiftForm()~={formId} then CastSpellByName('{fs}') return end ");
             }
         }
 

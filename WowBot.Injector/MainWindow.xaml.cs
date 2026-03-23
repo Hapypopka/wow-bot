@@ -541,6 +541,7 @@ public partial class MainWindow : Window
                 _botEngine.SelectedShout = _overlay.SelectedShout;
                 _botEngine.SelectedStance = _overlay.SelectedStance;
                 _botEngine.SelectedPresence = _overlay.SelectedPresence;
+                _botEngine.SelectedFeralForm = _overlay.SelectedFeralForm;
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;

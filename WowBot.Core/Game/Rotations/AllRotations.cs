@@ -510,32 +510,54 @@ public static class AllRotations
         if WB_ECL==1 and WB_S.Starfire~=false then CastSpellByName('Звездный огонь')
         elseif WB_S.Wrath~=false then CastSpellByName('Гнев') end
     elseif t2>=t1 and t2>=t3 then
-        -- FERAL (Cat/Bear по форме)
-        if not UnitAffectingCombat('target') then return end
+        -- FERAL (Cat/Bear по форме через GetShapeshiftForm: 1=bear, 3=cat)
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
-        local inCat = HasBuffById(768)
-        local inBear = HasBuffById(9634) or HasBuffById(5487)
-        if not inCat and not inBear then
-            if WB_S.Bear==true then CastSpellByName('Облик лютого медведя') else CastSpellByName('Облик кошки') end
-            return
-        end
-        if inCat then
-            local cp = CP()
-            if WB_S.Berserk~=false and IsReady('Берсерк') then CastSpellByName('Берсерк') return end
-            if WB_S.TF~=false and IsReady('Тигриное неистовство') then CastSpellByName('Тигриное неистовство') return end
-            if WB_S.Roar~=false and cp>=1 and not HasBuff('Дикий рев') then CastSpellByName('Дикий рев') return end
-            if WB_S.Mangle~=false and not HasDebuff('target','Увечье (кошка)') then CastSpellByName('Увечье (кошка)') return end
-            if WB_S.Rake~=false and not HasDebuff('target','Растерзать') then CastSpellByName('Растерзать') return end
-            if WB_S.Rip~=false and cp>=5 and not HasDebuff('target','Разорвать') then CastSpellByName('Разорвать') return end
-            if WB_S.FB~=false and cp>=5 then CastSpellByName('Свирепый укус') return end
+        local form = GetShapeshiftForm()
+        local energy = UnitPower and UnitPower('player') or UnitMana('player')
+        local cp = CP()
+        if not WB_FLOG then WB_FLOG=0 end
+        if GetTime()-WB_FLOG>2 then WB_FLOG=GetTime() end
+        if form~=1 and form~=3 then return end
+        if form==3 then
+            -- CAT DPS (приоритетная система с комбо-поинтами)
+            local hasRoar = HasBuff('Дикий рев')
+            local hasBerserk = HasBuff('Берсерк')
+            local hasRip = HasDebuff('target','Разорвать')
+            local hasMangle = HasDebuff('target','Увечье (кошка)')
+            local hasRake = HasDebuff('target','Глубокая рана')
+            -- Тигриное неистовство — по КД, не в берсерке (даёт +60 энергии + бафф урона)
+            if WB_S.TF~=false and not hasBerserk and IsReady('Тигриное неистовство') then CastSpellByName('Тигриное неистовство') return end
+            -- === ФИНИШЕРЫ (5 КП) ===
+            if cp>=5 then
+                -- Дикий рев спал → обновить (приоритет над рипом)
+                if WB_S.Roar~=false and not hasRoar then CastSpellByName('Дикий рев') return end
+                -- Разорвать не висит → повесить
+                if WB_S.Rip~=false and not hasRip then CastSpellByName('Разорвать') return end
+                -- Всё висит → Свирепый укус
+                if WB_S.FB~=false and hasRoar and hasRip then CastSpellByName('Свирепый укус') return end
+            end
+            -- Дикий рев спал и есть хоть 1 КП → срочно обновить
+            if WB_S.Roar~=false and not hasRoar and cp>=1 then CastSpellByName('Дикий рев') return end
+            -- Берсерк — только если рев и рип уже висят
+            if WB_S.Berserk~=false and hasRoar and hasRip and IsReady('Берсерк') then CastSpellByName('Берсерк') return end
+            -- === БИЛДЕРЫ (набираем КП) ===
+            -- Волшебный огонь — бесплатно, -5% брони
+            if WB_S.FF_cat~=false and not HasDebuff('target','Волшебный огонь (зверь)') and IsReady('Волшебный огонь (зверь)') then CastSpellByName('Волшебный огонь (зверь)') return end
+            -- Увечье — поддерживать дебафф (+30% блид урон)
+            if WB_S.Mangle~=false and not hasMangle then CastSpellByName('Увечье (кошка)') return end
+            -- Растерзать (Rake) — поддерживать ДоТ (даёт 1 КП)
+            if WB_S.Rake~=false and not hasRake then CastSpellByName('Глубокая рана') return end
+            -- Полоснуть (Shred) — основной билдер КП
             if WB_S.Shred~=false then CastSpellByName('Полоснуть') return end
+            -- Цапнуть — фоллбэк (если не за спиной для Полоснуть)
             CastSpellByName('Цапнуть')
         else
-            if WB_S.FF_bear~=false and not HasDebuff('target','Волшебный огонь (зверь)') then CastSpellByName('Волшебный огонь (зверь)') return end
+            -- BEAR TANK
+            if WB_S.Maul~=false and UnitMana('player')>15 then CastSpellByName('Трепка') end
+            if WB_S.FF_bear~=false and not HasDebuff('target','Волшебный огонь (зверь)') and IsReady('Волшебный огонь (зверь)') then CastSpellByName('Волшебный огонь (зверь)') return end
             if WB_S.Mangle_b~=false and IsReady('Увечье (медведь)') then CastSpellByName('Увечье (медведь)') return end
             if WB_S.Lacerate~=false then CastSpellByName('Растерзать') return end
             if WB_S.Swipe~=false and IsReady('Размах (медведь)') then CastSpellByName('Размах (медведь)') return end
-            if WB_S.Maul~=false then CastSpellByName('Трепка') end
         end
     else
         -- RESTO

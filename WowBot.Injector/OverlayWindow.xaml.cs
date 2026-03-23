@@ -166,6 +166,15 @@ public partial class OverlayWindow : Window
         ("Unholy", "unholy_presence.jpg", "Власть нечестивости"),
     };
 
+    // Feral form selection (radio-style)
+    private string _selectedFeralForm = ""; // Только для DRUID feral
+    private readonly Dictionary<string, ToggleButton> _feralFormToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] FeralFormOptions =
+    {
+        ("Cat", "cat_form.jpg", "Облик кошки"),
+        ("Bear", "bear_form.jpg", "Облик лютого медведя"),
+    };
+
     // Mana sliders
     private Slider _sliderDispMana = null!, _sliderSFMana = null!;
 
@@ -227,6 +236,7 @@ public partial class OverlayWindow : Window
     public string SelectedShout => _selectedShout;
     public string SelectedStance => _selectedStance;
     public string SelectedPresence => _selectedPresence;
+    public string SelectedFeralForm => _selectedFeralForm;
     private bool _autoFaceDefault = true;
     public bool AutoFace => _chkAutoFace != null ? (_chkAutoFace.IsChecked == true) : _autoFaceDefault;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
@@ -468,6 +478,49 @@ public partial class OverlayWindow : Window
             ("HW", "healing_wave.jpg", "Волна исцеления", true),
             ("ES", "earth_shield.jpg", "Щит земли", true),
         },
+        // ==================== DRUID ====================
+        ["Balance Druid"] = new[]
+        {
+            ("Moonkin", "moonkin.jpg", "Облик лунного совуха", true),
+            ("Starfall", "starfall.jpg", "Звездопад", true),
+            ("Treants", "treants.jpg", "Сила Природы", true),
+            ("FF", "faerie_fire.jpg", "Волшебный огонь", true),
+            ("IS", "insect_swarm.jpg", "Рой насекомых", true),
+            ("MF_d", "moonfire.jpg", "Лунный огонь", true),
+            ("Starfire", "starfire.jpg", "Звездный огонь", true),
+            ("Wrath", "wrath.jpg", "Гнев", true),
+            ("Innervate", "innervate.jpg", "Озарение", true),
+        },
+        ["Feral Druid"] = new[]
+        {
+            // Кот
+            ("Roar", "savage_roar.jpg", "Дикий рев", true),
+            ("TF", "tigers_fury.jpg", "Тигриное неистовство", true),
+            ("Berserk", "berserk.jpg", "Берсерк", true),
+            ("FF_cat", "faerie_fire.jpg", "Волшебный огонь (зверь)", true),
+            ("Mangle", "mangle_cat.jpg", "Увечье (кошка)", true),
+            ("Rake", "faerie_fire.jpg", "Глубокая рана", true),
+            ("Rip", "rip.jpg", "Разорвать", true),
+            ("FB", "ferocious_bite.jpg", "Свирепый укус", true),
+            ("Shred", "shred.jpg", "Полоснуть", true),
+            // Медведь
+            ("FF_bear", "faerie_fire.jpg", "Волшебный огонь (медведь)", true),
+            ("Mangle_b", "mangle_bear.jpg", "Увечье (медведь)", true),
+            ("Lacerate", "lacerate.jpg", "Увечье (медведь доп)", true),
+            ("Swipe", "swipe_bear.jpg", "Размах", true),
+            ("Maul", "maul.jpg", "Трепка", true),
+        },
+        ["Resto Druid"] = new[]
+        {
+            ("ToL", "tree_life.jpg", "Древо Жизни", true),
+            ("WG", "wild_growth.jpg", "Буйный рост", true),
+            ("NS", "natures_swift.jpg", "Природная стремительность", true),
+            ("SM", "swiftmend.jpg", "Быстрое восстановление", true),
+            ("Rejuv", "rejuvenation.jpg", "Омоложение", true),
+            ("LB", "lifebloom.jpg", "Жизнецвет", true),
+            ("Regrowth", "regrowth.jpg", "Восстановление", true),
+            ("Nourish", "nourish.jpg", "Целительное прикосновение", true),
+        },
         // ==================== MAGE ====================
         ["Arcane Mage"] = new[]
         {
@@ -529,47 +582,7 @@ public partial class OverlayWindow : Window
             ("LifeTap", "life_tap.jpg", "Жизнеотвод", true),
             ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
         },
-        // ==================== DRUID ====================
-        ["Balance Druid"] = new[]
-        {
-            ("Moonkin", "moonkin.jpg", "Облик лунного совуха", true),
-            ("Starfall", "starfall.jpg", "Звездопад", true),
-            ("Treants", "treants.jpg", "Сила Природы", true),
-            ("FF", "faerie_fire.jpg", "Волшебный огонь", true),
-            ("IS", "insect_swarm.jpg", "Рой насекомых", true),
-            ("MF_d", "moonfire.jpg", "Лунный огонь", true),
-            ("Starfire", "starfire.jpg", "Звездный огонь", true),
-            ("Wrath", "wrath.jpg", "Гнев", true),
-            ("Innervate", "innervate.jpg", "Озарение", true),
-        },
-        ["Feral Druid"] = new[]
-        {
-            ("Bear", "bear_form.jpg", "Режим медведя", false),
-            ("Berserk", "berserk.jpg", "Берсерк", true),
-            ("TF", "tigers_fury.jpg", "Тигриное неистовство", true),
-            ("Roar", "savage_roar.jpg", "Дикий рев", true),
-            ("Mangle", "mangle_cat.jpg", "Увечье (кошка)", true),
-            ("Rake", "faerie_fire.jpg", "Растерзать", true),
-            ("Rip", "rip.jpg", "Разорвать", true),
-            ("FB", "ferocious_bite.jpg", "Свирепый укус", true),
-            ("Shred", "shred.jpg", "Полоснуть", true),
-            ("FF_bear", "faerie_fire.jpg", "Волшебный огонь (зверь)", true),
-            ("Mangle_b", "mangle_bear.jpg", "Увечье (медведь)", true),
-            ("Lacerate", "lacerate.jpg", "Растерзать", true),
-            ("Swipe", "swipe_bear.jpg", "Размах (медведь)", true),
-            ("Maul", "maul.jpg", "Трепка", true),
-        },
-        ["Resto Druid"] = new[]
-        {
-            ("ToL", "tree_life.jpg", "Древо Жизни", true),
-            ("WG", "wild_growth.jpg", "Буйный рост", true),
-            ("NS", "natures_swift.jpg", "Природная стремительность", true),
-            ("SM", "swiftmend.jpg", "Быстрое восстановление", true),
-            ("Rejuv", "rejuvenation.jpg", "Омоложение", true),
-            ("LB", "lifebloom.jpg", "Жизнецвет", true),
-            ("Regrowth", "regrowth.jpg", "Восстановление", true),
-            ("Nourish", "nourish.jpg", "Целительное прикосновение", true),
-        },
+        // DRUID toggles в SpecSpells
     };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
     public bool UseMultiDot => _chkMultiDot?.IsChecked == true;
@@ -862,7 +875,7 @@ public partial class OverlayWindow : Window
 
     private void BuildBuffsSubmenu()
     {
-        if (_buffToggles.Count == 0 && _playerClass != "PALADIN" && _playerClass != "WARRIOR" && _playerClass != "DEATHKNIGHT")
+        if (_buffToggles.Count == 0 && _playerClass != "PALADIN" && _playerClass != "WARRIOR" && _playerClass != "DEATHKNIGHT" && !(_playerClass == "DRUID" && _playerSpec == "Feral Druid"))
         {
             AddLabel("Класс не определен");
             return;
@@ -960,6 +973,34 @@ public partial class OverlayWindow : Window
                 };
             }
             SubContent.Children.Add(blessWrap);
+        }
+
+        // Выбор формы для ферал друида (радио)
+        if (_playerClass == "DRUID" && _playerSpec == "Feral Druid")
+        {
+            AddLabel("Выбор формы");
+            var formWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _feralFormToggles.Clear();
+            foreach (var (key, icon, tooltip) in FeralFormOptions)
+            {
+                bool isSelected = _selectedFeralForm == key;
+                var toggle = AddSpellIcon(formWrap, icon, tooltip, isSelected);
+                _feralFormToggles[key] = toggle;
+
+                var formKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedFeralForm = formKey;
+                    foreach (var (k, btn) in _feralFormToggles)
+                        if (k != formKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedFeralForm == formKey) _selectedFeralForm = "";
+                };
+            }
+            SubContent.Children.Add(formWrap);
         }
 
         // Выбор крика для воина (радио)
@@ -1331,6 +1372,16 @@ public partial class OverlayWindow : Window
             _selectedSeal = "";
             _selectedJudgement = "";
         }
+        // Форма ферала: дефолт — кот
+        if (playerClass == "DRUID" && (_playerSpec == "Feral Druid"))
+        {
+            _selectedFeralForm = GetSavedString("feralForm", "Cat");
+        }
+        else
+        {
+            _selectedFeralForm = "";
+        }
+
         // Крик воина: дефолт — боевой для фури/армс, командирский для прота
         // Стойка воина: дефолт — защитная для прота, боевая для армс, берсерк для фури
         if (playerClass == "WARRIOR")
@@ -1452,6 +1503,7 @@ public partial class OverlayWindow : Window
             data["judgement"] = _selectedJudgement;
             data["aura"] = _selectedAura;
             data["shout"] = _selectedShout;
+            data["feralForm"] = _selectedFeralForm;
             data["stance"] = _selectedStance;
             data["presence"] = _selectedPresence;
 
