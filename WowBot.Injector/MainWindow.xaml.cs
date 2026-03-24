@@ -328,7 +328,8 @@ public partial class MainWindow : Window
                         if (on) { _botEngine.BuffsEnabled = true; _overlay.UpdateBuffs(true); }
                         break;
                     case "follow":
-                        // Для follow просто обновляем UI индикатор
+                        if (on && !_botEngine.FollowEnabled) _botEngine.ToggleFollow();
+                        if (!on && _botEngine.FollowEnabled) _botEngine.ToggleFollow();
                         _overlay.UpdateFollow(on, on ? "Hivemind" : "");
                         break;
                 }
@@ -347,6 +348,9 @@ public partial class MainWindow : Window
             {
                 if (_botEngine == null) return;
                 _botEngine.ToggleFollow();
+                // Если выключили follow — сбросить SlaveController
+                if (!_botEngine.FollowEnabled)
+                    _botEngine.SlaveCtrl.CmdStop();
                 _overlay.UpdateFollow(_botEngine.FollowEnabled);
             };
             _overlay.OnSetFollowTarget += () =>

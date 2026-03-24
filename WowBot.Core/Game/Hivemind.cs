@@ -301,25 +301,20 @@ WB_HIVE_TIME = 0
         {
             case Command.Follow:
             case Command.Stack:
-                // Ко мне: следуй + автоассист (бей мой таргет когда в бою)
-                _botEngine?.StopFollow();
+                // Ко мне → SlaveController.Following
+                _botEngine?.SlaveCtrl.CmdFollow(arg);
                 MasterName = arg;
                 _followMaster = true;
-                _followAttack = true;
-                _wantRotation = true;
-                _hasTarget = false;
-                AlwaysAssist = true; // Постоянно ассистить мастера
-                _hook.ExecuteLua($"TargetUnit('{arg}') StartAttack()", 200);
-                _hasTarget = true;
+                _followAttack = false;
+                _wantRotation = false;
                 OnAutoToggle?.Invoke("follow", true);
-                OnAutoToggle?.Invoke("rotation", true);
-                OnAutoToggle?.Invoke("buffs", true);
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE follow master={arg}");
                 break;
 
             case Command.Attack:
                 // Бейте таргет: ассистим мастера + ротация
+                _botEngine?.SlaveCtrl.CmdStop(); // Сброс follow
                 _botEngine?.StopFollow();
                 MasterName = arg;
                 _followMaster = true;
@@ -331,6 +326,7 @@ WB_HIVE_TIME = 0
                 // Авто-включение ротации + баффов в UI
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
+                OnAutoToggle?.Invoke("follow", false);
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE attack target of {arg}");
                 break;
@@ -339,22 +335,7 @@ WB_HIVE_TIME = 0
                 _followMaster = false;
                 _followAttack = false;
                 _wantRotation = false;
-                _botEngine?.StopFollow();
-                // Записываем свою позицию как CTM цель с большим precision — персонаж "уже на месте" и встаёт
-                var me = _objectManager.LocalPlayer;
-                if (me != null)
-                    _ctm.StopAt(me.X, me.Y, me.Z);
-                // Повторный стоп через 150мс и 300мс — на случай если тик перезаписал
-                Task.Run(async () => {
-                    await Task.Delay(150);
-                    var me2 = _objectManager.LocalPlayer;
-                    if (me2 != null)
-                        _ctm.StopAt(me2.X, me2.Y, me2.Z);
-                    await Task.Delay(150);
-                    var me3 = _objectManager.LocalPlayer;
-                    if (me3 != null)
-                        _ctm.StopAt(me3.X, me3.Y, me3.Z);
-                });
+                _botEngine?.SlaveCtrl.CmdStop();
                 OnCommandReceived?.Invoke(cmd, "");
                 Logger.Info("Hivemind: SLAVE stop");
                 break;

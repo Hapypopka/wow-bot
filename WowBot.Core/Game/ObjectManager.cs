@@ -6,6 +6,7 @@ namespace WowBot.Core.Game;
 public class ObjectManager
 {
     private readonly MemoryReader _memory;
+    public MemoryReader Memory => _memory;
 
     public ObjectManager(MemoryReader memory)
     {

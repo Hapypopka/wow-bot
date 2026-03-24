@@ -3,14 +3,26 @@ using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game;
 
-public enum StrafeDirection { None, Left, Right }
-
 public class Navigation
 {
     private readonly MemoryReader _memory;
     private readonly EndSceneHook _hook;
-    private StrafeDirection _currentStrafe = StrafeDirection.None;
+
+    // Состояние поворота
+    private enum TurnState { Idle, Turning, Done }
+    private TurnState _turnState = TurnState.Idle;
+    private float _targetFacing;
+    private int _turnTicks; // Счётчик тиков с начала поворота
+
+    // Состояние движения
     private bool _isMovingForward;
+
+    // Настройки
+    private const float FACE_TOLERANCE = 0.3f;   // Радиан — "уже смотрим" (~17°)
+    private const int MAX_TURN_TICKS = 5;         // Макс тиков на поворот (750мс)
+
+    public bool IsMovingForward => _isMovingForward;
+    public bool IsTurning => _turnState == TurnState.Turning;
 
     public Navigation(MemoryReader memory, EndSceneHook hook)
     {
@@ -18,7 +30,10 @@ public class Navigation
         _hook = hook;
     }
 
-    public float GetAngleTo(WowUnit from, WowUnit to)
+    /// <summary>
+    /// Рассчитать угол от одного юнита к другому (мировые координаты)
+    /// </summary>
+    public static float GetAngleTo(WowUnit from, WowUnit to)
     {
         float dx = to.X - from.X;
         float dy = to.Y - from.Y;
@@ -27,7 +42,10 @@ public class Navigation
         return angle;
     }
 
-    public bool IsFacing(WowUnit from, WowUnit to, float tolerance = 0.5f)
+    /// <summary>
+    /// Проверить смотрит ли юнит на цель (в пределах tolerance)
+    /// </summary>
+    public static bool IsFacing(WowUnit from, WowUnit to, float tolerance = FACE_TOLERANCE)
     {
         float needed = GetAngleTo(from, to);
         float current = from.Facing;
@@ -36,131 +54,129 @@ public class Navigation
         return diff < tolerance;
     }
 
-    private bool _isTurning;
+    /// <summary>
+    /// Кратчайшая разница углов (с учётом перехода через 0/2π)
+    /// </summary>
+    private static float AngleDiff(float from, float to)
+    {
+        float diff = to - from;
+        while (diff > MathF.PI) diff -= MathF.PI * 2;
+        while (diff < -MathF.PI) diff += MathF.PI * 2;
+        return diff;
+    }
 
     /// <summary>
-    /// Поворачивает к юниту — серверно через TurnLeft/RightStart + запись facing + Stop
+    /// Повернуться к юниту. Вызывать каждый тик.
+    /// Возвращает true когда поворот завершён.
+    /// НЕ перезаписывает facing каждый тик — пишет один раз, ждёт, стопит.
     /// </summary>
-    public void FaceUnit(WowUnit player, WowUnit target)
+    public bool FaceUnit(WowUnit player, WowUnit target)
     {
-        // Широкий tolerance — не дёргать если примерно смотрим на таргет
-        if (IsFacing(player, target, 0.8f))
+        // Уже смотрим на цель?
+        if (IsFacing(player, target))
         {
-            if (_isTurning)
-            {
-                _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 50);
-                _isTurning = false;
-            }
-            return;
+            FinishTurn();
+            return true;
         }
 
-        // Не поворачиваем если кастуем (прервёт каст)
-        if (player.IsCasting) return;
+        // Не поворачиваем во время каста
+        if (player.IsCasting) return false;
 
         float needed = GetAngleTo(player, target);
-        float current = player.Facing;
 
-        // Определяем направление поворота (кратчайший путь)
-        float diff = needed - current;
-        while (diff > MathF.PI) diff -= MathF.PI * 2;
-        while (diff < -MathF.PI) diff += MathF.PI * 2;
+        switch (_turnState)
+        {
+            case TurnState.Idle:
+                // Начинаем поворот: записываем facing + TurnStart
+                _targetFacing = needed;
+                _turnTicks = 0;
 
-        // Записываем нужный facing в память (мгновенный локальный поворот)
-        _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
+                // Записываем facing в память (мгновенный локальный поворот)
+                _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
 
-        // Запускаем серверный поворот (TurnStart) и сразу стопим — сервер видит новый facing
-        if (diff > 0)
-            _hook.ExecuteLua("TurnRightStop() TurnLeftStart()", 30);
-        else
-            _hook.ExecuteLua("TurnLeftStop() TurnRightStart()", 30);
-        _isTurning = true;
+                // Определяем направление и запускаем серверный поворот
+                float diff = AngleDiff(player.Facing, needed);
+                if (diff > 0)
+                    _hook.ExecuteLua("TurnRightStop() TurnLeftStart()", 30);
+                else
+                    _hook.ExecuteLua("TurnLeftStop() TurnRightStart()", 30);
+
+                _turnState = TurnState.Turning;
+                return false;
+
+            case TurnState.Turning:
+                _turnTicks++;
+
+                // Проверяем: довернулись?
+                if (IsFacing(player, target) || _turnTicks >= MAX_TURN_TICKS)
+                {
+                    FinishTurn();
+                    return true;
+                }
+
+                // Ещё не довернулись — НЕ перезаписываем, просто ждём
+                return false;
+
+            case TurnState.Done:
+                // Поворот завершён, сброс для следующего
+                _turnState = TurnState.Idle;
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
-    /// Бежит прямо к юниту (лицом к нему + MoveForward)
+    /// Завершить поворот — остановить TurnStart
     /// </summary>
-    public void MoveToward(WowUnit player, WowUnit target)
+    private void FinishTurn()
     {
-        FaceUnit(player, target);
-        StopStrafe();
+        if (_turnState == TurnState.Turning)
+        {
+            _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 30);
+        }
+        _turnState = TurnState.Done;
+    }
+
+    /// <summary>
+    /// Сбросить состояние поворота (при смене цели)
+    /// </summary>
+    public void ResetTurn()
+    {
+        if (_turnState == TurnState.Turning)
+            _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 30);
+        _turnState = TurnState.Idle;
+        _turnTicks = 0;
+    }
+
+    // === Движение ===
+
+    public void StartMoveForward()
+    {
         if (!_isMovingForward)
         {
-            _hook.ExecuteLua("MoveForwardStart()", 100);
+            _hook.ExecuteLua("MoveForwardStart()", 50);
             _isMovingForward = true;
         }
     }
 
-    /// <summary>
-    /// Strafe к followTarget, лицом к combatTarget
-    /// Бежит боком в сторону followTarget, но повёрнут к combatTarget
-    /// </summary>
-    public void StrafeToward(WowUnit player, WowUnit followTarget, WowUnit combatTarget)
-    {
-        // Лицом к combatTarget (для кастов)
-        FaceUnit(player, combatTarget);
-
-        // Определяем с какой стороны followTarget относительно нашего facing
-        float facingAngle = GetAngleTo(player, combatTarget);
-        float followAngle = GetAngleTo(player, followTarget);
-
-        float diff = followAngle - facingAngle;
-        // Нормализуем в [-PI, PI]
-        while (diff > MathF.PI) diff -= MathF.PI * 2;
-        while (diff < -MathF.PI) diff += MathF.PI * 2;
-
-        // Если follow-цель слева — strafe left, если справа — strafe right
-        StrafeDirection needed = diff > 0 ? StrafeDirection.Left : StrafeDirection.Right;
-
-        // Если follow-цель сзади (угол > 90°), нужен forward + strafe
-        bool needForward = MathF.Abs(diff) < MathF.PI * 0.6f; // ~108°
-
-        StopForward();
-
-        if (needForward && !_isMovingForward)
-        {
-            _hook.ExecuteLua("MoveForwardStart()", 100);
-            _isMovingForward = true;
-        }
-
-        if (needed != _currentStrafe)
-        {
-            StopStrafe();
-            if (needed == StrafeDirection.Left)
-                _hook.ExecuteLua("StrafeLeftStart()", 100);
-            else
-                _hook.ExecuteLua("StrafeRightStart()", 100);
-            _currentStrafe = needed;
-        }
-    }
-
-    public void StopAll()
-    {
-        StopForward();
-        StopStrafe();
-    }
-
-    public void StopForward()
+    public void StopMoveForward()
     {
         if (_isMovingForward)
         {
-            _hook.ExecuteLua("MoveForwardStop()", 100);
+            _hook.ExecuteLua("MoveForwardStop()", 50);
             _isMovingForward = false;
         }
     }
 
-    public void StopStrafe()
+    /// <summary>
+    /// Полная остановка всего движения
+    /// </summary>
+    public void StopAll()
     {
-        if (_currentStrafe != StrafeDirection.None)
-        {
-            _hook.ExecuteLua("StrafeLeftStop() StrafeRightStop()", 100);
-            _currentStrafe = StrafeDirection.None;
-        }
-    }
-
-    public void StopMoving()
-    {
-        _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 200);
+        _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop() TurnLeftStop() TurnRightStop()", 100);
         _isMovingForward = false;
-        _currentStrafe = StrafeDirection.None;
+        _turnState = TurnState.Idle;
+        _turnTicks = 0;
     }
 }

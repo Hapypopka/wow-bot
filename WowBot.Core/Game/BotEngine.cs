@@ -106,6 +106,7 @@ public class BotEngine : IDisposable
 
     // Hivemind (мультибоксинг)
     public Hivemind Hivemind { get; private set; }
+    public SlaveController SlaveCtrl { get; private set; }
     public double LastHiveCheck { get; set; }
     // _slaveListenerInstalled хранится в Hivemind
 
@@ -117,6 +118,7 @@ public class BotEngine : IDisposable
         _ctm = ctm;
         Hivemind = new Hivemind(hook, objectManager, navigation, ctm);
         Hivemind.SetBotEngine(this);
+        SlaveCtrl = new SlaveController(navigation, hook, objectManager);
     }
 
     public LuaReader? LuaReader { get; set; }
@@ -272,6 +274,13 @@ public class BotEngine : IDisposable
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.IsFollowing)
             {
                 Hivemind.SlaveTickFollow();
+            }
+
+            // === SlaveController ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && SlaveCtrl.CurrentState != SlaveController.State.Idle)
+            {
+                SlaveCtrl.FollowDistance = _followDistance;
+                SlaveCtrl.Tick();
             }
 
             // Анти-АФК: каждые ~2 мин сбрасываем флаг
