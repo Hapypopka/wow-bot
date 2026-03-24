@@ -95,6 +95,40 @@ public class BotEngine : IDisposable
     private bool _isMovingForward;
     private int _healerTickCount;
     private int _afkTick;
+    private uint _hiveMacroAddr;
+    private int _hiveAddrRetry;
+
+    /// <summary>Найти адрес макроса #2 в памяти WoW</summary>
+    private uint FindHiveMacroAddr()
+    {
+        // Пишем маркер в макрос #2
+        string marker = "WBHM_" + (Environment.TickCount % 100000);
+        _hook.ExecuteLua($"EditMacro(2,'WH',1,'{marker}')", 300);
+        System.Threading.Thread.Sleep(300);
+
+        // Сканируем память
+        byte[] needle = System.Text.Encoding.UTF8.GetBytes(marker);
+        uint[][] regions = { new uint[] { 0x01000000, 0x20000000 }, new uint[] { 0x20000000, 0x30000000 } };
+        foreach (var region in regions)
+        {
+            for (uint addr = region[0]; addr < region[1]; addr += 4096)
+            {
+                try
+                {
+                    byte[] block = _objectManager.Memory.ReadBytes(addr, 4096 + needle.Length);
+                    for (int i = 0; i < 4096; i++)
+                    {
+                        bool match = true;
+                        for (int j = 0; j < needle.Length; j++)
+                            if (block[i + j] != needle[j]) { match = false; break; }
+                        if (match) return addr + (uint)i;
+                    }
+                }
+                catch { }
+            }
+        }
+        return 0;
+    }
     private string? _specName;
     public string? SpecName { get => _specName; set => _specName = value; }
 
@@ -248,9 +282,16 @@ public class BotEngine : IDisposable
                     _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
                     Hivemind._slaveListenerInstalled = true;
                     Logger.Info("Hivemind: slave listener installed");
+                    // Найти адрес макроса #2 для прямого чтения
+                    if (_hiveMacroAddr == 0 && LuaReader != null && LuaReader.IsInitialized)
+                    {
+                        System.Threading.Thread.Sleep(300);
+                        _hiveMacroAddr = FindHiveMacroAddr();
+                        Logger.Info($"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
+                    }
                 }
 
-                // Проверяем новые команды каждые 500мс
+                // Читаем команды через LuaReader (макрос #1)
                 _hiveCheckTick++;
                 if (_hiveCheckTick >= 3 && LuaReader != null && LuaReader.IsInitialized)
                 {

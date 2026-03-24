@@ -107,49 +107,72 @@ public class LuaReader
     /// Выполняет Lua, результат должен быть записан в WB_R.
     /// Lua скрипт должен заканчиваться: EditMacro(1,'WB',1,WB_R)
     /// </summary>
+    private int _failCount;
+    private const int MAX_FAILS_BEFORE_REINIT = 5;
+
     public string? Execute(string luaCode, int timeoutMs = 2000)
     {
         if (!_initialized) return null;
 
-        // Очищаем макрос ЧЕРЕЗ LUA (не WriteString — WoW может сдвинуть буфер)
+        // Слишком много неудач — переинициализируемся один раз
+        if (_failCount >= MAX_FAILS_BEFORE_REINIT)
+        {
+            Logger.Info("LuaReader: too many fails, reinitializing...");
+            _initialized = false;
+            _failCount = 0;
+            if (!Initialize())
+                return null;
+        }
+
+        // Очищаем макрос ЧЕРЕЗ LUA
         string clearTag = "WB_CLR";
         _hook.ExecuteLua($"EditMacro(1,'WB',1,'{clearTag}')", 500);
         System.Threading.Thread.Sleep(200);
 
-        // Проверяем что адрес актуален — если нет, пересканим
+        // Проверяем что адрес актуален
         string check = _memory.ReadString(_macroAddr, clearTag.Length + 2);
         if (!check.StartsWith(clearTag))
         {
-            // Адрес сдвинулся — ищем заново
+            _failCount++;
+            // Пробуем пересканить один раз (быстро, только маленький диапазон)
             var newCandidates = ScanForAllStrings(System.Text.Encoding.UTF8.GetBytes(clearTag));
             if (newCandidates.Count > 0)
             {
                 _macroAddr = newCandidates[^1];
+                _failCount = 0;
                 Logger.Info($"LuaReader: macro addr shifted to 0x{_macroAddr:X8}");
             }
             else
             {
-                Logger.Warn("LuaReader: lost macro address");
+                Logger.Warn($"LuaReader: lost macro address (fail {_failCount}/{MAX_FAILS_BEFORE_REINIT})");
                 return null;
             }
         }
 
-        // Выполняем Lua (должен записать результат в макрос)
+        // Выполняем Lua
         _hook.ExecuteLua(luaCode, timeoutMs);
         System.Threading.Thread.Sleep(300);
 
-        // Читаем результат — пробуем дважды
-        for (int i = 0; i < 2; i++)
+        // Читаем результат
+        string result = _memory.ReadString(_macroAddr, 255);
+        if (!string.IsNullOrEmpty(result) && result != clearTag)
         {
-            string result = _memory.ReadString(_macroAddr, 255);
-            if (!string.IsNullOrEmpty(result) && result != clearTag)
-                return result;
-            System.Threading.Thread.Sleep(200);
+            _failCount = 0;
+            return result;
         }
 
-        // Последняя попытка — может адрес опять сдвинулся
-        // Ищем паттерн результата (класс содержит '|')
-        Logger.Warn("LuaReader: result not at expected addr, trying rescan");
+        // Одна попытка повтора
+        System.Threading.Thread.Sleep(200);
+        result = _memory.ReadString(_macroAddr, 255);
+        if (!string.IsNullOrEmpty(result) && result != clearTag)
+        {
+            _failCount = 0;
+            return result;
+        }
+
+        _failCount++;
+        if (_failCount <= 2) // Не спамим лог
+            Logger.Warn($"LuaReader: no result (fail {_failCount})");
         return null;
     }
 

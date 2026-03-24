@@ -516,6 +516,82 @@ public partial class MainWindow : Window
 
         try
         {
+            // ?выражение → ExecuteLuaWithResult (тест GetLocalizedText)
+            // !0xАДРЕС → прочитать 4 байта из памяти WoW
+            // !scan → найти все функции (пролог 55 8B EC) в диапазоне lua функций
+            if (lua == "!scan" && _memory != null)
+            {
+                try
+                {
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine("Scanning 0x0084D000-0x0084F000 for function prologues (55 8B EC):");
+                    int count = 0;
+                    for (uint addr = 0x0084D000; addr < 0x0084F000; addr += 0x10)
+                    {
+                        byte[] bytes = _memory.ReadBytes(addr, 16);
+                        for (int i = 0; i < 16 - 2; i++)
+                        {
+                            if (bytes[i] == 0x55 && bytes[i + 1] == 0x8B && bytes[i + 2] == 0xEC)
+                            {
+                                uint funcAddr = addr + (uint)i;
+                                sb.AppendLine($"  0x{funcAddr:X8}");
+                                count++;
+                            }
+                        }
+                    }
+                    sb.AppendLine($"Total: {count} functions");
+                    TxtLuaStatus.Text = sb.ToString();
+                    // Также в лог
+                    WowBot.Core.Logger.Info(sb.ToString());
+                }
+                catch (Exception ex) { TxtLuaStatus.Text = $"Scan error: {ex.Message}"; }
+                return;
+            }
+            // !dump 0xADDR → дамп 64 байт функции
+            if (lua.StartsWith("!dump ") && _memory != null)
+            {
+                try
+                {
+                    uint addr = Convert.ToUInt32(lua[6..].Trim(), 16);
+                    byte[] bytes = _memory.ReadBytes(addr, 64);
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine($"Dump 0x{addr:X8}:");
+                    for (int i = 0; i < 64; i += 16)
+                    {
+                        sb.Append($"  +{i:X2}: ");
+                        for (int j = 0; j < 16 && i + j < 64; j++)
+                            sb.Append($"{bytes[i + j]:X2} ");
+                        sb.AppendLine();
+                    }
+                    TxtLuaStatus.Text = sb.ToString();
+                    WowBot.Core.Logger.Info(sb.ToString());
+                }
+                catch (Exception ex) { TxtLuaStatus.Text = $"Dump error: {ex.Message}"; }
+                return;
+            }
+            if (lua.StartsWith("!0x") && _memory != null)
+            {
+                try
+                {
+                    uint addr = Convert.ToUInt32(lua[1..].Trim(), 16);
+                    uint val = _memory.ReadUInt32(addr);
+                    TxtLuaStatus.Text = $"[0x{addr:X8}] = 0x{val:X8} ({val})";
+                }
+                catch (Exception ex) { TxtLuaStatus.Text = $"Read error: {ex.Message}"; }
+                return;
+            }
+
+            if (lua.StartsWith("?"))
+            {
+                string expr = lua[1..].Trim();
+                // DoString с return → пушит на стек → lua_tolstring читает
+                string luaReturn = $"return tostring({expr})";
+                uint playerBase = _objectManager?.LocalPlayer?.BaseAddress ?? 0;
+                string? result = _endSceneHook.ExecuteLuaWithResult(luaReturn, playerBase);
+                TxtLuaStatus.Text = result != null ? $"= {result}" : "= nil (или краш)";
+                return;
+            }
+
             bool success = _endSceneHook.ExecuteLua(lua);
             TxtLuaStatus.Text = success
                 ? $"OK: {lua}"
