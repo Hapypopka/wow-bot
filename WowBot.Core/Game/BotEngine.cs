@@ -91,7 +91,6 @@ public class BotEngine : IDisposable
     public string PlayerClass { get; set; } = "";
     private bool _isMovingForward;
     private int _healerTickCount;
-    private int _afkTick;
     private uint _hiveMacroAddr;
     private int _hiveAddrRetry;
 
@@ -150,6 +149,20 @@ public class BotEngine : IDisposable
         Hivemind = new Hivemind(hook, objectManager, navigation, ctm);
         Hivemind.SetBotEngine(this);
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
+        // Антиафк — всегда пока бот заатачен
+        _afkTimer = new Timer(AfkTick, null, 60_000, 120_000); // первый через 1 мин, потом каждые 2 мин
+    }
+
+    private Timer? _afkTimer;
+    private void AfkTick(object? state)
+    {
+        if (WowProcess == null || WowProcess.HasExited) return;
+        var hwnd = WowProcess.MainWindowHandle;
+        if (hwnd != IntPtr.Zero)
+        {
+            Memory.WinApi.PostMessage(hwnd, 0x0100, 0x28, 0); // WM_KEYDOWN, VK_DOWN
+            Memory.WinApi.PostMessage(hwnd, 0x0101, 0x28, 0); // WM_KEYUP, VK_DOWN
+        }
     }
 
     public LuaReader? LuaReader { get; set; }
@@ -257,23 +270,46 @@ public class BotEngine : IDisposable
                        (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
                        (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
         float castRange = isMelee ? 8f : 30f;
+        float stopDist = isMelee ? 2f : 23f;
 
-        if (distToTarget > castRange)
+        // Мили: ВСЕГДА бежать к мобу (танк может тащить) + бить если в дистанции
+        // Рейндж: бежать если далеко, стоять и кастовать если близко
+        if (isMelee)
         {
-            // Подбег к цели — CTM к точке на stopDist от цели
-            float stopDist = isMelee ? 2f : 23f;
-            float dirX = player.X - slaveTarget.X;
-            float dirY = player.Y - slaveTarget.Y;
-            float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
-            if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
-            _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
+            // Всегда CTM к мобу
+            if (distToTarget > stopDist)
+            {
+                float dirX = player.X - slaveTarget.X;
+                float dirY = player.Y - slaveTarget.Y;
+                float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
+                if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
+                _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
+            }
+            // Бить если в дистанции (даже на бегу)
+            if (distToTarget <= castRange)
+            {
+                _navigation.FaceUnit(player, slaveTarget);
+                string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+                _hook.ExecuteLua(script, 500);
+            }
         }
         else
         {
-            // В дистанции — face + ротация
-            _navigation.FaceUnit(player, slaveTarget);
-            string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-            _hook.ExecuteLua(script, 500);
+            // Рейндж: подбег или каст
+            if (distToTarget > castRange)
+            {
+                float dirX = player.X - slaveTarget.X;
+                float dirY = player.Y - slaveTarget.Y;
+                float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
+                if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
+                _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
+            }
+            else
+            {
+                _navigation.FaceUnit(player, slaveTarget);
+                string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+                _hook.ExecuteLua(script, 500);
+            }
         }
     }
 
@@ -392,7 +428,27 @@ public class BotEngine : IDisposable
                 }
             }
 
-            // === HIVEMIND SLAVE: выполнение режима ===
+            // === HIVEMIND SLAVE: хилер всегда хилит ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer)
+            {
+                // Follow к мастеру если есть команда follow/auto
+                if (Hivemind.Mode == Hivemind.SlaveMode.Following || Hivemind.Mode == Hivemind.SlaveMode.Auto)
+                {
+                    SlaveCtrl.FollowDistance = _followDistance;
+                    SlaveCtrl.Tick();
+                }
+                // Хил ВСЕГДА — каждые ~500мс
+                _healerTickCount++;
+                if (_healerTickCount >= 3)
+                {
+                    _healerTickCount = 0;
+                    string script = enemyCountLua + SpellFlagsLua + _fullScript;
+                    _hook.ExecuteLua(script, 500);
+                }
+                return;
+            }
+
+            // === HIVEMIND SLAVE: выполнение режима (DPS) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.Mode != Hivemind.SlaveMode.Idle)
             {
                 SlaveCtrl.FollowDistance = _followDistance;
@@ -422,22 +478,6 @@ public class BotEngine : IDisposable
                 return;
             }
 
-            // Анти-АФК: каждые ~2 мин сбрасываем флаг
-            _afkTick++;
-            if (_afkTick >= 800) // 800 * 150мс = 2 мин
-            {
-                _afkTick = 0;
-                // Имитация нажатия клавиши для сброса AFK (hardware input)
-                if (WowProcess != null)
-                {
-                    var hwnd = WowProcess.MainWindowHandle;
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        Memory.WinApi.PostMessage(hwnd, 0x0100, 0x28, 0); // WM_KEYDOWN, VK_DOWN
-                        Memory.WinApi.PostMessage(hwnd, 0x0101, 0x28, 0); // WM_KEYUP, VK_DOWN
-                    }
-                }
-            }
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
@@ -466,25 +506,6 @@ public class BotEngine : IDisposable
                 }
             }
 
-            // Слейв-хилер: хил + follow к мастеру
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer &&
-                (Hivemind.Mode == Hivemind.SlaveMode.Attacking || Hivemind.Mode == Hivemind.SlaveMode.Auto || _rotationEnabled))
-            {
-                // CTM к мастеру
-                var master = Hivemind.GetMasterUnit();
-                if (master != null)
-                    FollowViaCTM(player, master, _followDistance);
-
-                // Хил каждые ~500мс
-                _healerTickCount++;
-                if (_healerTickCount >= 3)
-                {
-                    _healerTickCount = 0;
-                    string script = enemyCountLua + SpellFlagsLua + _fullScript;
-                    _hook.ExecuteLua(script, 500);
-                }
-                return;
-            }
 
 
             if (!_followEnabled && !_rotationEnabled) return;
@@ -1021,5 +1042,7 @@ WB_AoE()
     public void Dispose()
     {
         StopAll();
+        _afkTimer?.Dispose();
+        _afkTimer = null;
     }
 }
