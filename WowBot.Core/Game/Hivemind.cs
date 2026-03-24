@@ -18,7 +18,10 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Scatter, Stack, Focus, Loot, Ping, ToggleAssist }
+    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping }
+
+    /// <summary>Режим слейва — каждая команда отменяет предыдущую</summary>
+    public enum SlaveMode { Idle, Following, Attacking, Auto }
 
     private Role _currentRole = Role.None;
     public Role CurrentRole
@@ -27,9 +30,7 @@ public class Hivemind
         set
         {
             _currentRole = value;
-            // Сброс состояния при смене роли
-            _followMaster = false;
-            _followAttack = false;
+            Mode = SlaveMode.Idle;
             MasterName = "";
             LastCommand = null;
             LastCommandArg = "";
@@ -38,12 +39,8 @@ public class Hivemind
     public bool IsActive => CurrentRole != Role.None;
     public string MasterName { get; private set; } = "";
 
-    // Слейв: состояние follow/attack
-    private bool _followMaster;
-    private bool _followAttack;
-    private bool _wantRotation;
-    public bool IsFollowing => _followMaster;
-    public bool WantRotation => _wantRotation;
+    /// <summary>Текущий режим слейва</summary>
+    public SlaveMode Mode { get; private set; } = SlaveMode.Idle;
 
     // Слейв: последняя полученная команда
     public Command? LastCommand { get; private set; }
@@ -51,7 +48,7 @@ public class Hivemind
 
     public event Action<string>? OnStatusChanged;
     public event Action<Command, string>? OnCommandReceived;
-    /// <summary>Авто-включение UI: ("rotation",true), ("buffs",true), ("follow",true)</summary>
+    /// <summary>Авто-включение UI: ("rotation",true), ("buffs",true)</summary>
     public event Action<string, bool>? OnAutoToggle;
 
     public Hivemind(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
@@ -80,8 +77,6 @@ public class Hivemind
     /// <summary>Мастер: бейте мой таргет</summary>
     public void CmdAttack()
     {
-        var player = _objectManager.LocalPlayer;
-        if (player == null) return;
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.Attack, name);
     }
@@ -96,6 +91,13 @@ public class Hivemind
     /// <summary>Мастер: стоп</summary>
     public void CmdStop() => SendCommand(Command.Stop);
 
+    /// <summary>Мастер: авторежим (follow + auto-assist)</summary>
+    public void CmdAuto()
+    {
+        string name = _objectManager.GetPlayerName() ?? "master";
+        SendCommand(Command.Auto, name);
+    }
+
     /// <summary>Мастер: рассыпьтесь на N метров</summary>
     public void CmdScatter(int meters = 10) => SendCommand(Command.Scatter, meters.ToString());
 
@@ -109,92 +111,41 @@ public class Hivemind
     /// <summary>Мастер: пинг (проверка связи)</summary>
     public void CmdPing() => SendCommand(Command.Ping);
 
-    /// <summary>Мастер: переключить AlwaysAssist у слейвов</summary>
-    public void CmdToggleAssist() => SendCommand(Command.ToggleAssist);
+    // ==================== СЛЕЙВ: СОСТОЯНИЕ ====================
 
-    // ==================== СЛЕЙВ: ПОСТОЯННЫЙ FOLLOW ====================
-
-    /// <summary>Сбросить Lua глобалы при включении слейва</summary>
+    /// <summary>Сбросить при включении слейва</summary>
     public void ResetSlaveState()
     {
-        _followMaster = false;
-        _followAttack = false;
-        _wantRotation = false;
-        // Сбрасываем Lua глобалы И listener
+        Mode = SlaveMode.Idle;
         _hook.ExecuteLua("WB_HIVE_CMD='' WB_HIVE_ARG='' WB_HIVE_TIME=0 WB_HIVE_REGISTERED=nil", 200);
         _slaveListenerInstalled = false;
-        if (_botEngine != null) _botEngine.LastHiveCheck = 0; // Сброс
+        if (_botEngine != null) _botEngine.LastHiveCheck = 0;
         Logger.Info("Hivemind: slave state reset");
     }
 
-    // Флаг для BotEngine
     internal bool _slaveListenerInstalled;
-
-    private int _retargetTick;
-    private bool _hasTarget; // Слейв уже взял таргет от мастера
-
-    /// <summary>Автосвич: если таргет умер — берёт новый от мастера</summary>
-    public bool AutoSwitch { get; set; } = true;
-
-    /// <summary>Всегда ассистить мастера (ретаргет каждые 2 сек). По дефолту OFF.</summary>
-    public bool AlwaysAssist { get; set; } = false;
+    private int _autoAssistTick;
 
     /// <summary>
-    /// Вызывать каждый тик (150мс) из BotEngine.
-    /// Attack — проверяем жив ли таргет, автосвич если умер.
+    /// Авторежим тик: AssistUnit каждые ~1 сек, если таргет жив — ротация.
+    /// Вызывать из BotEngine.Tick().
     /// </summary>
-    public void SlaveTickFollow()
+    public void SlaveAutoTick()
     {
-        if (!_followMaster || string.IsNullOrEmpty(MasterName)) return;
+        if (Mode != SlaveMode.Auto || string.IsNullOrEmpty(MasterName)) return;
 
-        // Follow без атаки — полностью через штатный BotEngine follow (SetFollowGuid)
-        if (!_followAttack) return;
+        _autoAssistTick++;
+        if (_autoAssistTick < 7) return; // каждые ~1 сек
+        _autoAssistTick = 0;
 
-        // Проверяем таргет каждые ~1 сек
-        _retargetTick++;
-        if (_retargetTick < 7) return;
-        _retargetTick = 0;
-
-        // AlwaysAssist — всегда бьём таргет мастера + подбег
-        if (AlwaysAssist)
-        {
-            _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
-            _hasTarget = true;
-            return;
-        }
-
-        // Если у слейва уже есть живой таргет — не трогаем
-        if (_hasTarget)
-        {
-            // Проверяем жив ли наш таргет через Lua
-            _hook.ExecuteLua(
-                "if not UnitExists('target') or UnitIsDead('target') then WB_TARGET_DEAD=1 else WB_TARGET_DEAD=0 end", 100);
-            // Читаем результат на следующем тике (упрощённо: проверяем через ObjectManager)
-            var target = _objectManager.GetTarget();
-            if (target == null || !target.IsAlive)
-            {
-                _hasTarget = false;
-                if (AutoSwitch)
-                {
-                    // Таргет умер — берём новый от мастера
-                    _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
-                    _hasTarget = true;
-                    Logger.Info("Hivemind: SLAVE auto-switch target (old died)");
-                }
-            }
-            return;
-        }
-
-        // Нет таргета — берём от мастера
-        _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
-        _hasTarget = true;
+        // Сбросить таргет + взять таргет мастера. Если у мастера нет цели — слейв без таргета → follow
+        _hook.ExecuteLua($"ClearTarget() AssistUnit('{MasterName}')", 200);
     }
 
     private ulong _masterGuid;
 
     private Entities.WowUnit? FindPlayerByName(string name)
     {
-        // Если уже знаем GUID мастера — ищем напрямую
         if (_masterGuid != 0)
         {
             var cached = _objectManager.GetUnitByGuid(_masterGuid);
@@ -205,8 +156,6 @@ public class Hivemind
         var player = _objectManager.LocalPlayer;
         if (player == null) return null;
 
-        // Ищем ближайшего игрока (не себя) — в пати это мастер
-        // Name для игроков ненадёжен (WoW хранит имена игроков отдельно от NPC)
         Entities.WowUnit? closest = null;
         float closestDist = float.MaxValue;
         foreach (var p in _objectManager.Players)
@@ -227,15 +176,11 @@ public class Hivemind
         return closest;
     }
 
-    /// <summary>Получить юнит мастера (по GUID или поиском)</summary>
+    /// <summary>Получить юнит мастера</summary>
     public Entities.WowUnit? GetMasterUnit() => FindPlayerByName(MasterName);
 
-    // ==================== СЛЕЙВ ====================
+    // ==================== СЛЕЙВ: КОМАНДЫ ====================
 
-    /// <summary>
-    /// Lua-скрипт для слейва: регистрирует слушатель аддон-канала.
-    /// Сохраняет последнюю команду в глобальную WB_HIVE_CMD/WB_HIVE_ARG.
-    /// </summary>
     public static string GetSlaveListenerScript() => $@"
 if WB_HIVE_FRAME then WB_HIVE_FRAME:UnregisterAllEvents() WB_HIVE_FRAME:SetScript('OnEvent',nil) end
 local g,_=GetNumMacros() if g<2 then CreateMacro('WH',1,'init') end
@@ -256,16 +201,9 @@ WB_HIVE_CMD = ''
 WB_HIVE_TIME = 0
 ";
 
-    /// <summary>
-    /// Lua-скрипт для чтения последней команды слейвом.
-    /// Возвращает CMD|ARG|SENDER|TIME через WB_R (Lua C API, без макросов).
-    /// </summary>
     public static string GetSlaveReadScript() =>
         "WB_R=(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0')";
 
-    /// <summary>
-    /// Парсит ответ от слейва: "CMD|ARG|SENDER|TIME"
-    /// </summary>
     public static (Command? cmd, string arg, string sender, double time) ParseSlaveResponse(string? response)
     {
         if (string.IsNullOrEmpty(response)) return (null, "", "", 0);
@@ -277,12 +215,10 @@ WB_HIVE_TIME = 0
             "Follow" => Command.Follow,
             "Attack" => Command.Attack,
             "Stop" => Command.Stop,
+            "Auto" => Command.Auto,
             "Scatter" => Command.Scatter,
             "Stack" => Command.Stack,
-            "Focus" => Command.Focus,
-            "Loot" => Command.Loot,
             "Ping" => Command.Ping,
-            "ToggleAssist" => Command.ToggleAssist,
             _ => null
         };
 
@@ -292,86 +228,75 @@ WB_HIVE_TIME = 0
         return (cmd, parts[1], parts[2], time);
     }
 
-    /// <summary>
-    /// Выполнить команду слейвом. Вызывается из BotEngine tick.
-    /// </summary>
+    /// <summary>Общий сброс — вызывается перед каждой командой</summary>
+    private void ResetMode()
+    {
+        Mode = SlaveMode.Idle;
+        _autoAssistTick = 0;
+        _botEngine?.SlaveCtrl.CmdStop();
+        OnAutoToggle?.Invoke("rotation", false);
+        OnAutoToggle?.Invoke("buffs", false);
+    }
+
     public void ExecuteSlaveCommand(Command cmd, string arg)
     {
         LastCommand = cmd;
         LastCommandArg = arg;
 
+        // Каждая команда отменяет предыдущую
+        ResetMode();
+
         switch (cmd)
         {
             case Command.Follow:
             case Command.Stack:
-                // Ко мне → SlaveController.Following
-                _botEngine?.SlaveCtrl.CmdFollow(arg);
+                // Ко мне — только следовать, не бить
                 MasterName = arg;
-                _followMaster = true;
-                _followAttack = false;
-                _wantRotation = false;
-                OnAutoToggle?.Invoke("follow", true);
-                OnCommandReceived?.Invoke(cmd, arg);
+                Mode = SlaveMode.Following;
+                _botEngine?.SlaveCtrl.CmdFollow(arg);
+                OnAutoToggle?.Invoke("buffs", true);
                 Logger.Info($"Hivemind: SLAVE follow master={arg}");
                 break;
 
             case Command.Attack:
-                // Бейте таргет: ассистим мастера + ротация
-                _botEngine?.SlaveCtrl.CmdStop(); // Сброс follow
-                _botEngine?.StopFollow();
+                // Бейте таргет — ассистим мастера, ротация, подбег к цели
                 MasterName = arg;
-                _followMaster = true;
-                _followAttack = true;
-                _wantRotation = true;
-                _hasTarget = false;
+                Mode = SlaveMode.Attacking;
                 _hook.ExecuteLua($"AssistUnit('{arg}') StartAttack()", 200);
-                _hasTarget = true;
-                // Авто-включение ротации + баффов в UI
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
-                OnAutoToggle?.Invoke("follow", false);
-                OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE attack target of {arg}");
                 break;
 
+            case Command.Auto:
+                // Авторежим — follow + auto-assist в бою
+                MasterName = arg;
+                Mode = SlaveMode.Auto;
+                _botEngine?.SlaveCtrl.CmdFollow(arg);
+                OnAutoToggle?.Invoke("rotation", true);
+                OnAutoToggle?.Invoke("buffs", true);
+                Logger.Info($"Hivemind: SLAVE auto mode, master={arg}");
+                break;
+
             case Command.Stop:
-                _followMaster = false;
-                _followAttack = false;
-                _wantRotation = false;
-                _botEngine?.SlaveCtrl.CmdStop();
-                OnCommandReceived?.Invoke(cmd, "");
+                // Стоп — всё отменено в ResetMode()
                 Logger.Info("Hivemind: SLAVE stop");
                 break;
 
             case Command.Scatter:
-                // Отбежать — отменяем follow, бежим назад 1.5 сек
-                _followMaster = false;
-                _followAttack = false;
-                _wantRotation = false;
                 _hook.ExecuteLua("MoveForwardStart() MoveForwardStop() MoveBackwardStart()", 200);
                 Task.Run(async () => { await Task.Delay(1500); _hook.ExecuteLua("MoveBackwardStop()", 100); });
-                OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE scatter {arg}m");
                 break;
 
             case Command.Ping:
-                // Ответить мастеру что жив
                 string myName = _objectManager.GetPlayerName() ?? "slave";
                 _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','Pong:{myName}','PARTY')", 200);
                 Logger.Info("Hivemind: SLAVE pong");
                 break;
-
-            case Command.ToggleAssist:
-                AlwaysAssist = !AlwaysAssist;
-                OnCommandReceived?.Invoke(cmd, AlwaysAssist ? "on" : "off");
-                Logger.Info($"Hivemind: SLAVE AlwaysAssist = {AlwaysAssist}");
-                break;
-
-            default:
-                OnCommandReceived?.Invoke(cmd, arg);
-                break;
         }
 
+        OnCommandReceived?.Invoke(cmd, arg);
         OnStatusChanged?.Invoke($"Cmd: {cmd}");
     }
 }

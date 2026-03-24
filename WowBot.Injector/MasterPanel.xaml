@@ -34,11 +34,11 @@
                         Height="40" Margin="1" Cursor="Hand"/>
             </UniformGrid>
 
-            <!-- Toggle button -->
-            <Button x:Name="BtnToggleAssist" Content="Ассист: ВЫКЛ" FontSize="10"
-                    Click="BtnToggleAssist_Click" Style="{x:Null}"
-                    Background="#1a1a28" Foreground="#888" BorderThickness="0"
-                    Height="24" Margin="1,2,1,2" Cursor="Hand"/>
+            <!-- Авто кнопка -->
+            <Button x:Name="BtnAuto" Content="Авто" FontSize="10"
+                    Click="BtnAuto_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
+                    Height="24" Margin="1,2,1,2" Cursor="Hand" ToolTip="Follow + авто-ассист в бою"/>
 
             <!-- Hotkey labels -->
             <UniformGrid Columns="3">

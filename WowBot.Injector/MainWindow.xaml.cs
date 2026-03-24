@@ -155,7 +155,7 @@ public partial class MainWindow : Window
                 case "attack": hive.CmdAttack(); break;
                 case "follow": hive.CmdFollow(); break;
                 case "stop": hive.CmdStop(); break;
-                case "toggleassist": hive.CmdToggleAssist(); break;
+                case "auto": hive.CmdAuto(); break;
             }
         };
         // Загрузить хоткеи из settings
@@ -388,10 +388,7 @@ public partial class MainWindow : Window
                     case "scatter": hive.CmdScatter(); break;
                     case "stack": hive.CmdStack(); break;
                     case "ping": hive.CmdPing(); break;
-                    case "autoswitch:on": hive.AutoSwitch = true; break;
-                    case "autoswitch:off": hive.AutoSwitch = false; break;
-                    case "alwaysassist:on": hive.AlwaysAssist = true; break;
-                    case "alwaysassist:off": hive.AlwaysAssist = false; break;
+                    case "auto": hive.CmdAuto(); break;
                 }
             };
             WowBot.Core.Logger.Info("Loading overlay settings...");

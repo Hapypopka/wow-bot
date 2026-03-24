@@ -52,21 +52,13 @@ public partial class MasterPanel : Window
     private void BtnFollow_Click(object sender, RoutedEventArgs e) => SendCommand("follow");
     private void BtnStop_Click(object sender, RoutedEventArgs e) => SendCommand("stop");
 
-    private bool _assistOn = false;
-
-    private void BtnToggleAssist_Click(object sender, RoutedEventArgs e)
-    {
-        _assistOn = !_assistOn;
-        BtnToggleAssist.Content = _assistOn ? "Ассист: ВКЛ" : "Ассист: ВЫКЛ";
-        BtnToggleAssist.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_assistOn ? "#4ade80" : "#888"));
-        OnCommand?.Invoke("toggleassist");
-    }
+    private void BtnAuto_Click(object sender, RoutedEventArgs e) => SendCommand("auto");
 
     private void SendCommand(string cmd)
     {
         OnCommand?.Invoke(cmd);
         // Flash button
-        var btn = cmd switch { "attack" => BtnAttack, "follow" => BtnFollow, _ => BtnStop };
+        var btn = cmd switch { "attack" => BtnAttack, "follow" => BtnFollow, "auto" => BtnAuto, _ => BtnStop };
         btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"));
         var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         timer.Tick += (s, e) => { btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")); timer.Stop(); };

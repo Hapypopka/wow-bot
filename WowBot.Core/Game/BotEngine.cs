@@ -244,6 +244,39 @@ public class BotEngine : IDisposable
         _isFollowMoving = true;
     }
 
+    /// <summary>Слейв: подбег к таргету + ротация. Используется в Attacking и Auto.</summary>
+    private void SlaveAttackTick(Entities.WowPlayer player, string enemyCountLua)
+    {
+        var slaveTarget = _objectManager.GetTarget();
+        if (slaveTarget == null || !slaveTarget.IsAlive) return;
+
+        float distToTarget = player.DistanceTo2D(slaveTarget);
+        bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
+                       PlayerClass == "DEATHKNIGHT" ||
+                       (PlayerClass == "PALADIN" && !IsHealer) ||
+                       (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
+                       (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
+        float castRange = isMelee ? 8f : 30f;
+
+        if (distToTarget > castRange)
+        {
+            // Подбег к цели — CTM к точке на stopDist от цели
+            float stopDist = isMelee ? 2f : 23f;
+            float dirX = player.X - slaveTarget.X;
+            float dirY = player.Y - slaveTarget.Y;
+            float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
+            if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
+            _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
+        }
+        else
+        {
+            // В дистанции — face + ротация
+            _navigation.FaceUnit(player, slaveTarget);
+            string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+            _hook.ExecuteLua(script, 500);
+        }
+    }
+
     /// <summary>Полная остановка follow</summary>
     private void StopFollowMovement()
     {
@@ -359,17 +392,34 @@ public class BotEngine : IDisposable
                 }
             }
 
-            // === HIVEMIND: постоянный follow за мастером ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.IsFollowing)
-            {
-                Hivemind.SlaveTickFollow();
-            }
-
-            // === SlaveController ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && SlaveCtrl.CurrentState != SlaveController.State.Idle)
+            // === HIVEMIND SLAVE: выполнение режима ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.Mode != Hivemind.SlaveMode.Idle)
             {
                 SlaveCtrl.FollowDistance = _followDistance;
-                SlaveCtrl.Tick();
+
+                switch (Hivemind.Mode)
+                {
+                    case Hivemind.SlaveMode.Following:
+                        // Ко мне — только follow
+                        SlaveCtrl.Tick();
+                        break;
+
+                    case Hivemind.SlaveMode.Attacking:
+                        // Бейте таргет — подбег + ротация
+                        SlaveAttackTick(player, enemyCountLua);
+                        break;
+
+                    case Hivemind.SlaveMode.Auto:
+                        // Авторежим — follow + auto-assist
+                        Hivemind.SlaveAutoTick();
+                        var autoTarget = _objectManager.GetTarget();
+                        if (autoTarget != null && autoTarget.IsAlive && autoTarget.Type != WowObjectType.Player)
+                            SlaveAttackTick(player, enemyCountLua);
+                        else
+                            SlaveCtrl.Tick(); // Нет цели — follow
+                        break;
+                }
+                return;
             }
 
             // Анти-АФК: каждые ~2 мин сбрасываем флаг
@@ -417,7 +467,8 @@ public class BotEngine : IDisposable
             }
 
             // Слейв-хилер: хил + follow к мастеру
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && (Hivemind.WantRotation || _rotationEnabled))
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer &&
+                (Hivemind.Mode == Hivemind.SlaveMode.Attacking || Hivemind.Mode == Hivemind.SlaveMode.Auto || _rotationEnabled))
             {
                 // CTM к мастеру
                 var master = Hivemind.GetMasterUnit();
@@ -435,41 +486,6 @@ public class BotEngine : IDisposable
                 return;
             }
 
-            // Слейв в режиме атаки (подбег к таргету + ротация)
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.WantRotation)
-            {
-                var slaveTarget = _objectManager.GetTarget();
-                if (slaveTarget != null && slaveTarget.IsAlive)
-                {
-                    float distToTarget = player.DistanceTo2D(slaveTarget);
-                    bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
-                                   PlayerClass == "DEATHKNIGHT" ||
-                                   (PlayerClass == "PALADIN" && !IsHealer) ||
-                                   (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
-                                   (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
-                    bool isFollowingPlayer = slaveTarget.Type == WowObjectType.Player;
-                    float castRange = isFollowingPlayer ? _followDistance : (isMelee ? 8f : 30f);
-
-                    if (distToTarget > castRange)
-                    {
-                        // Далеко — CTM к цели, стоп на castRange
-                        float stopDist = isMelee ? 2f : 23f;
-                        if (isFollowingPlayer) stopDist = Math.Max(_followDistance - 2f, 1f);
-                        _ctm.MoveTo(slaveTarget.X, slaveTarget.Y, slaveTarget.Z, stopDist);
-                    }
-                    else
-                    {
-                        // В дистанции — бьём
-                        _navigation.FaceUnit(player, slaveTarget);
-                        if (Hivemind.WantRotation)
-                        {
-                            string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-                            _hook.ExecuteLua(script, 500);
-                        }
-                    }
-                }
-                return;
-            }
 
             if (!_followEnabled && !_rotationEnabled) return;
 
