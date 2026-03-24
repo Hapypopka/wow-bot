@@ -554,7 +554,7 @@ public static class AllRotations
 " + HealerFindTarget + @"
         if bestHP>=1.0 then return end
         -- Экстренный хил: NS + целительное прикосновение (инстант)
-        if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') TargetUnit(best) CastSpellByName('Целительное прикосновение') return end
+        if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') TargetUnit(best) CastSpellByName('Покровительство Природы') return end
         -- Быстрое восстановление (Swiftmend) — инстант если есть Омоложение/Восстановление на цели
         if WB_S.SM~=false and bestHP<0.5 and IsReady('Быстрое восстановление') then TargetUnit(best) CastSpellByName('Быстрое восстановление') return end
         -- Буйный рост (Wild Growth) — АоЕ хил при нескольких раненых
@@ -571,8 +571,8 @@ public static class AllRotations
         end
         -- Восстановление (Regrowth) — при сильном уроне
         if WB_S.Regrowth~=false and bestHP<0.5 then TargetUnit(best) CastSpellByName('Восстановление') return end
-        -- Целительное прикосновение (Nourish) — филлер (сильнее если HoT на цели)
-        if WB_S.Nourish~=false and bestHP<0.8 then TargetUnit(best) CastSpellByName('Целительное прикосновение') return end
+        -- Покровительство Природы (Nourish) — филлер (сильнее если HoT на цели)
+        if WB_S.Nourish~=false and bestHP<0.8 then TargetUnit(best) CastSpellByName('Покровительство Природы') return end
     end
 ");
 

@@ -66,10 +66,53 @@ public partial class MainWindow : Window
     private OverlayWindow? _overlay;
     private MasterPanel? _masterPanel;
 
+    private int _autoConnectPid;
+    private string _autoConnectRole = "";
+
     public MainWindow()
     {
         InitializeComponent();
         Closed += OnWindowClosed;
+        Loaded += MainWindow_Loaded;
+
+        // Парсим аргументы командной строки: --pid=1234 --role=slave
+        var args = Environment.GetCommandLineArgs();
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith("--pid=") && int.TryParse(arg[6..], out int pid))
+                _autoConnectPid = pid;
+            if (arg.StartsWith("--role="))
+                _autoConnectRole = arg[7..];
+        }
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_autoConnectPid > 0)
+        {
+            // Автоподключение через аргументы (из лаунчера)
+            await Task.Delay(500); // Дать UI загрузиться
+            AutoConnect(_autoConnectPid, _autoConnectRole);
+        }
+    }
+
+    private Process? _pendingProcess; // Для автоподключения из лаунчера
+
+    private void AutoConnect(int pid, string role)
+    {
+        try
+        {
+            var proc = Process.GetProcessById(pid);
+            if (proc == null || proc.HasExited) return;
+
+            _pendingProcess = proc;
+            _autoConnectRole = role;
+            BtnAttach_Click(this, new RoutedEventArgs());
+        }
+        catch (Exception ex)
+        {
+            WowBot.Core.Logger.Error("AutoConnect failed", ex);
+        }
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -140,23 +183,29 @@ public partial class MainWindow : Window
 
     private async void BtnAttach_Click(object sender, RoutedEventArgs e)
     {
-        var wowProcesses = Process.GetProcessesByName("Wow");
-        if (wowProcesses.Length == 0)
-        {
-            TxtStatus.Text = "WoW process not found! Launch WoW first.";
-            return;
-        }
-
         Process wow;
-        if (wowProcesses.Length == 1)
+        if (_pendingProcess != null)
         {
-            wow = wowProcesses[0];
+            wow = _pendingProcess;
+            _pendingProcess = null;
         }
         else
         {
-            // Несколько WoW — показываем выбор с именами персонажей
-            wow = ShowProcessPicker(wowProcesses);
-            if (wow == null) return;
+            var wowProcesses = Process.GetProcessesByName("Wow");
+            if (wowProcesses.Length == 0)
+            {
+                TxtStatus.Text = "WoW process not found! Launch WoW first.";
+                return;
+            }
+            if (wowProcesses.Length == 1)
+            {
+                wow = wowProcesses[0];
+            }
+            else
+            {
+                wow = ShowProcessPicker(wowProcesses);
+                if (wow == null) return;
+            }
         }
         // Показываем лоадер
         PanelDisconnected.Visibility = Visibility.Visible;
@@ -254,6 +303,7 @@ public partial class MainWindow : Window
             var ctm = new ClickToMove(_memory);
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
+            _botEngine.WowProcess = wow;
             _botEngine.PlayerClass = playerClass;
             _botEngine.SpecName = specName;
             _botEngine.LuaReader = _luaReader;
@@ -263,6 +313,26 @@ public partial class MainWindow : Window
             _botEngine.LoadRotation(instantScript, fullScript);
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
+
+            // Авто-переключение UI от Hivemind команд
+            _botEngine.Hivemind.OnAutoToggle += (what, on) => Dispatcher.Invoke(() =>
+            {
+                if (_botEngine == null || _overlay == null) return;
+                switch (what)
+                {
+                    case "rotation":
+                        if (on && !_botEngine.RotationEnabled) { _botEngine.ToggleRotation(); _overlay.UpdateRotation(true); }
+                        if (!on && _botEngine.RotationEnabled) { _botEngine.ToggleRotation(); _overlay.UpdateRotation(false); }
+                        break;
+                    case "buffs":
+                        if (on) { _botEngine.BuffsEnabled = true; _overlay.UpdateBuffs(true); }
+                        break;
+                    case "follow":
+                        // Для follow просто обновляем UI индикатор
+                        _overlay.UpdateFollow(on, on ? "Hivemind" : "");
+                        break;
+                }
+            });
 
             // Открываем оверлей
             WowBot.Core.Logger.Info("Creating overlay...");
@@ -327,6 +397,29 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.Info("Showing overlay...");
             _overlay.Show();
             WowBot.Core.Logger.Info("Overlay shown OK");
+
+            // Автороль из лаунчера
+            if (!string.IsNullOrEmpty(_autoConnectRole) && _botEngine != null)
+            {
+                var hive = _botEngine.Hivemind;
+                switch (_autoConnectRole)
+                {
+                    case "master":
+                        hive.CurrentRole = Hivemind.Role.Master;
+                        _overlay.SetHivemindRole("master");
+                        ShowMasterPanel();
+                        WowBot.Core.Logger.Info("AutoConnect: role=Master");
+                        break;
+                    case "slave":
+                        hive.CurrentRole = Hivemind.Role.Slave;
+                        hive.ResetSlaveState();
+                        _botEngine.EnsureRunning();
+                        _overlay.SetHivemindRole("slave");
+                        WowBot.Core.Logger.Info("AutoConnect: role=Slave");
+                        break;
+                }
+                _autoConnectRole = "";
+            }
         }
         catch (Exception ex)
         {
@@ -885,6 +978,195 @@ public partial class MainWindow : Window
                        t2 >= t1 && t2 >= t3 ? "Feral Druid" : "Resto Druid",
             _ => $"{cls} ({t1}/{t2}/{t3})"
         };
+    }
+
+    // ==================== МУЛЬТИБОКС ====================
+    private bool _multiboxExpanded;
+    private readonly Dictionary<int, string> _processRoles = new(); // pid → "master"/"slave"/"none"
+
+    private void MultiboxHeader_Click(object sender, RoutedEventArgs e)
+    {
+        _multiboxExpanded = !_multiboxExpanded;
+        MultiboxContent.Visibility = _multiboxExpanded ? Visibility.Visible : Visibility.Collapsed;
+        MultiboxArrow.Text = _multiboxExpanded ? "\uE70D" : "\uE76C";
+    }
+
+    private void BtnScanWow_Click(object sender, RoutedEventArgs e)
+    {
+        WowProcessList.Children.Clear();
+        var procs = WowScanner.ScanAll();
+
+        if (procs.Count == 0)
+        {
+            WowProcessList.Children.Add(new TextBlock
+            {
+                Text = "WoW процессы не найдены",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6b6b7b")),
+                FontSize = 11, Margin = new Thickness(0, 4, 0, 4),
+                HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            BtnLaunchAll.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        foreach (var proc in procs)
+        {
+            // Загрузить сохранённую роль
+            if (!_processRoles.ContainsKey(proc.Pid))
+            {
+                string saved = LoadSavedRole(proc.CharName);
+                _processRoles[proc.Pid] = saved;
+            }
+
+            var row = new Border
+            {
+                CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                Padding = new Thickness(10, 6, 10, 6),
+                Margin = new Thickness(0, 2, 0, 2),
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Имя перса + PID
+            var namePanel = new StackPanel();
+            namePanel.Children.Add(new TextBlock
+            {
+                Text = proc.CharName,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e8e6e3")),
+                FontSize = 13, FontWeight = FontWeights.SemiBold,
+            });
+            namePanel.Children.Add(new TextBlock
+            {
+                Text = $"PID: {proc.Pid}",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a4a5a")),
+                FontSize = 9,
+            });
+            Grid.SetColumn(namePanel, 0);
+            grid.Children.Add(namePanel);
+
+            // Две кнопки: Master / Slave
+            string role = _processRoles.GetValueOrDefault(proc.Pid, "none");
+            var btnPanel = new StackPanel { Orientation = Orientation.Horizontal };
+
+            var btnMaster = new Button
+            {
+                Content = "M",
+                Width = 32, Height = 26,
+                Foreground = new SolidColorBrush(role == "master" ? (Color)ColorConverter.ConvertFromString("#0a0a0f") : (Color)ColorConverter.ConvertFromString("#C8A84E")),
+                Background = new SolidColorBrush(role == "master" ? (Color)ColorConverter.ConvertFromString("#C8A84E") : (Color)ColorConverter.ConvertFromString("#12121a")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8A84E")),
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11, FontWeight = FontWeights.Bold,
+                Tag = proc.Pid, Margin = new Thickness(0, 0, 4, 0),
+            };
+            btnMaster.Click += (s, ev) => { _processRoles[(int)((Button)s).Tag] = _processRoles.GetValueOrDefault((int)((Button)s).Tag) == "master" ? "none" : "master"; SaveRoles(); BtnScanWow_Click(s, ev); };
+
+            var btnSlave = new Button
+            {
+                Content = "S",
+                Width = 32, Height = 26,
+                Foreground = new SolidColorBrush(role == "slave" ? (Color)ColorConverter.ConvertFromString("#0a0a0f") : (Color)ColorConverter.ConvertFromString("#5dade2")),
+                Background = new SolidColorBrush(role == "slave" ? (Color)ColorConverter.ConvertFromString("#5dade2") : (Color)ColorConverter.ConvertFromString("#12121a")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5dade2")),
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                FontSize = 11, FontWeight = FontWeights.Bold,
+                Tag = proc.Pid,
+            };
+            btnSlave.Click += (s, ev) => { _processRoles[(int)((Button)s).Tag] = _processRoles.GetValueOrDefault((int)((Button)s).Tag) == "slave" ? "none" : "slave"; SaveRoles(); BtnScanWow_Click(s, ev); };
+
+            btnPanel.Children.Add(btnMaster);
+            btnPanel.Children.Add(btnSlave);
+            Grid.SetColumn(btnPanel, 1);
+            grid.Children.Add(btnPanel);
+
+            row.Child = grid;
+            WowProcessList.Children.Add(row);
+        }
+
+        BtnLaunchAll.Visibility = Visibility.Visible;
+    }
+
+
+    private async void BtnLaunchAll_Click(object sender, RoutedEventArgs e)
+    {
+        string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location
+            .Replace(".dll", ".exe");
+
+        int launched = 0;
+        foreach (var (pid, role) in _processRoles)
+        {
+            if (role == "none") continue;
+            // Задержка между запусками чтобы не конфликтовали
+            if (launched > 0) await Task.Delay(1500);
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = $"--pid={pid} --role={role}",
+                    UseShellExecute = true,
+                    Verb = "runas", // Админ
+                });
+            }
+            catch (Exception ex)
+            {
+                WowBot.Core.Logger.Error($"Launch failed for PID {pid}", ex);
+            }
+            launched++;
+        }
+    }
+
+    private static string RoleDisplayName(string role) => role switch
+    {
+        "master" => "Master",
+        "slave" => "Slave",
+        _ => "—"
+    };
+
+    private static Color RoleColor(string role) => role switch
+    {
+        "master" => (Color)ColorConverter.ConvertFromString("#C8A84E"),
+        "slave" => (Color)ColorConverter.ConvertFromString("#5dade2"),
+        _ => (Color)ColorConverter.ConvertFromString("#4a4a5a"),
+    };
+
+    // --- Сохранение/загрузка ролей по имени перса ---
+    private static readonly string LauncherConfigPath = System.IO.Path.Combine(
+        AppDomain.CurrentDomain.BaseDirectory, "launcher.json");
+
+    private void SaveRoles()
+    {
+        try
+        {
+            var procs = WowScanner.ScanAll();
+            var data = new Dictionary<string, string>();
+            foreach (var proc in procs)
+            {
+                if (_processRoles.TryGetValue(proc.Pid, out var role))
+                    data[proc.CharName] = role;
+            }
+            var json = System.Text.Json.JsonSerializer.Serialize(data, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            System.IO.File.WriteAllText(LauncherConfigPath, json);
+        }
+        catch { }
+    }
+
+    private string LoadSavedRole(string charName)
+    {
+        try
+        {
+            if (!System.IO.File.Exists(LauncherConfigPath)) return "none";
+            var json = System.IO.File.ReadAllText(LauncherConfigPath);
+            var data = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            if (data != null && data.TryGetValue(charName, out var role)) return role;
+        }
+        catch { }
+        return "none";
     }
 
     private void ClearDisplay()

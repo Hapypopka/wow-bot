@@ -521,7 +521,7 @@ public partial class OverlayWindow : Window
             ("Rejuv", "rejuvenation.jpg", "Омоложение", true),
             ("LB", "lifebloom.jpg", "Жизнецвет", true),
             ("Regrowth", "regrowth.jpg", "Восстановление", true),
-            ("Nourish", "nourish.jpg", "Целительное прикосновение", true),
+            ("Nourish", "nourish.jpg", "Покровительство Природы", true),
         },
         // ==================== MAGE ====================
         ["Arcane Mage"] = new[]
@@ -1112,6 +1112,14 @@ public partial class OverlayWindow : Window
     // --- Hivemind ---
     public event Action<string>? OnHivemindCommand;
     private string _hivemindRole = "none"; // "none", "master", "slave"
+
+    /// <summary>Установить роль извне (из лаунчера)</summary>
+    public void SetHivemindRole(string role)
+    {
+        _hivemindRole = role;
+        // Перерисовать подменю если открыто
+        if (_activeSubmenu == "Hivemind") ShowSubmenu("Hivemind");
+    }
     private bool _autoSwitch = true;
     private bool _alwaysAssist = false;
 
@@ -1449,6 +1457,12 @@ public partial class OverlayWindow : Window
         BtnFollow.IsChecked = active;
         BtnFollow.Content = active ? "ON" : "OFF";
         TxtFollowInfo.Text = active && !string.IsNullOrEmpty(info) ? $"Follow: {info}" : "";
+    }
+
+    public void UpdateBuffs(bool active)
+    {
+        BtnBuffs.IsChecked = active;
+        BtnBuffs.Content = active ? "ON" : "OFF";
     }
 
     public void UpdateInfo(string text) => TxtInfo.Text = text;

@@ -51,6 +51,8 @@ public class Hivemind
 
     public event Action<string>? OnStatusChanged;
     public event Action<Command, string>? OnCommandReceived;
+    /// <summary>Авто-включение UI: ("rotation",true), ("buffs",true), ("follow",true)</summary>
+    public event Action<string, bool>? OnAutoToggle;
 
     public Hivemind(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
     {
@@ -84,7 +86,7 @@ public class Hivemind
         SendCommand(Command.Attack, name);
     }
 
-    /// <summary>Мастер: все ко мне (follow)</summary>
+    /// <summary>Мастер: все ко мне</summary>
     public void CmdFollow()
     {
         string name = _objectManager.GetPlayerName() ?? "master";
@@ -153,7 +155,7 @@ public class Hivemind
         if (_retargetTick < 7) return;
         _retargetTick = 0;
 
-        // AlwaysAssist — всегда бьём таргет мастера
+        // AlwaysAssist — всегда бьём таргет мастера + подбег
         if (AlwaysAssist)
         {
             _hook.ExecuteLua($"AssistUnit('{MasterName}') StartAttack()", 200);
@@ -299,29 +301,36 @@ WB_HIVE_TIME = 0
         {
             case Command.Follow:
             case Command.Stack:
-                // Включаем штатный follow BotEngine (CTM, работает на любой дистанции)
-                MasterName = arg;
-                _followMaster = true;
-                _followAttack = false;
-                _wantRotation = false;
-                var masterUnit = FindPlayerByName(arg);
-                if (masterUnit != null && _botEngine != null)
-                    _botEngine.SetFollowGuid(masterUnit.Guid);
-                OnCommandReceived?.Invoke(cmd, arg);
-                Logger.Info($"Hivemind: SLAVE follow master={arg} found={masterUnit != null}");
-                break;
-
-            case Command.Attack:
-                // Сбрасываем follow, берём таргет мастера + включаем ротацию
+                // Ко мне: следуй + автоассист (бей мой таргет когда в бою)
                 _botEngine?.StopFollow();
                 MasterName = arg;
                 _followMaster = true;
                 _followAttack = true;
                 _wantRotation = true;
-                _hasTarget = false; // Сброс — возьмёт новый таргет на следующем тике
-                // Ассистим таргет мастера + автоатака
+                _hasTarget = false;
+                AlwaysAssist = true; // Постоянно ассистить мастера
+                _hook.ExecuteLua($"TargetUnit('{arg}') StartAttack()", 200);
+                _hasTarget = true;
+                OnAutoToggle?.Invoke("follow", true);
+                OnAutoToggle?.Invoke("rotation", true);
+                OnAutoToggle?.Invoke("buffs", true);
+                OnCommandReceived?.Invoke(cmd, arg);
+                Logger.Info($"Hivemind: SLAVE follow master={arg}");
+                break;
+
+            case Command.Attack:
+                // Бейте таргет: ассистим мастера + ротация
+                _botEngine?.StopFollow();
+                MasterName = arg;
+                _followMaster = true;
+                _followAttack = true;
+                _wantRotation = true;
+                _hasTarget = false;
                 _hook.ExecuteLua($"AssistUnit('{arg}') StartAttack()", 200);
                 _hasTarget = true;
+                // Авто-включение ротации + баффов в UI
+                OnAutoToggle?.Invoke("rotation", true);
+                OnAutoToggle?.Invoke("buffs", true);
                 OnCommandReceived?.Invoke(cmd, arg);
                 Logger.Info($"Hivemind: SLAVE attack target of {arg}");
                 break;

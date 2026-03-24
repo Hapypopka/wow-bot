@@ -199,6 +199,35 @@
                             Click="BtnDetach_Click" Visibility="Collapsed" HorizontalAlignment="Stretch"/>
                 </Grid>
 
+                <!-- Multibox panel -->
+                <Border x:Name="MultiboxPanel" CornerRadius="8" Margin="0,0,0,12"
+                        Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                    <StackPanel>
+                        <Button Click="MultiboxHeader_Click" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="12,10" HorizontalContentAlignment="Left">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="MultiboxArrow" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                                           Foreground="{StaticResource GoldDimBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Мультибокс" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+                        <StackPanel x:Name="MultiboxContent" Visibility="Collapsed" Margin="12,0,12,12">
+                            <Button Content="🔍 Сканировать WoW" Style="{StaticResource OutlineButton}"
+                                    Click="BtnScanWow_Click" Margin="0,0,0,8" HorizontalAlignment="Stretch"/>
+                            <StackPanel x:Name="WowProcessList"/>
+                            <Button x:Name="BtnLaunchAll" Content="🚀 Запустить всех" Style="{StaticResource GoldButton}"
+                                    Click="BtnLaunchAll_Click" Margin="0,8,0,0" HorizontalAlignment="Stretch"
+                                    Visibility="Collapsed"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Lua Console (collapsed by default) -->
                 <Border CornerRadius="8" Margin="0,0,0,12"
                         Background="{StaticResource CardBgBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
