@@ -372,10 +372,17 @@ public partial class MainWindow : Window
         TxtLuaStatus.Text = "";
         TxtRotationStatus.Text = "";
         BtnAttach.Visibility = Visibility.Visible;
+        BtnAttach.IsEnabled = true;
         BtnDetach.Visibility = Visibility.Collapsed;
         PanelDisconnected.Visibility = Visibility.Visible;
         PanelConnected.Visibility = Visibility.Collapsed;
         BtnExecuteLua.IsEnabled = false;
+        // Сброс индикатора на красный + текст "Отключено"
+        var indicator = PanelDisconnected.Children[0] as System.Windows.Shapes.Ellipse;
+        if (indicator != null)
+            indicator.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E74C3C"));
+        var statusText = PanelDisconnected.Children[1] as TextBlock;
+        if (statusText != null) statusText.Text = "Отключено";
         ClearDisplay();
     }
 

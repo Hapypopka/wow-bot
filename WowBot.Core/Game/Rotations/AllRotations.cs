@@ -549,17 +549,30 @@ public static class AllRotations
             if WB_S.Swipe~=false and IsReady('Размах (медведь)') then CastSpellByName('Размах (медведь)') return end
         end
     else
-        -- RESTO
+        -- RESTO DRUID
         if WB_S.ToL~=false and not HasBuff('Древо Жизни') and IsReady('Древо Жизни') then CastSpellByName('Древо Жизни') return end
 " + HealerFindTarget + @"
         if bestHP>=1.0 then return end
-        if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') return end
-        if WB_S.WG~=false and bestHP<0.85 and IsReady('Буйный рост') then CastSpellByName('Буйный рост') return end
-        if WB_S.SM~=false and bestHP<0.2 and IsReady('Быстрое восстановление') then TargetUnit(best) CastSpellByName('Быстрое восстановление') return end
-        if WB_S.Rejuv~=false and bestHP<0.9 then TargetUnit(best) CastSpellByName('Омоложение') return end
-        if WB_S.LB~=false and bestHP<0.85 then TargetUnit(best) CastSpellByName('Жизнецвет') return end
-        if WB_S.Regrowth~=false and bestHP<0.6 then TargetUnit(best) CastSpellByName('Восстановление') return end
-        if WB_S.Nourish~=false and bestHP<0.7 then TargetUnit(best) CastSpellByName('Целительное прикосновение') return end
+        -- Экстренный хил: NS + целительное прикосновение (инстант)
+        if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') TargetUnit(best) CastSpellByName('Целительное прикосновение') return end
+        -- Быстрое восстановление (Swiftmend) — инстант если есть Омоложение/Восстановление на цели
+        if WB_S.SM~=false and bestHP<0.5 and IsReady('Быстрое восстановление') then TargetUnit(best) CastSpellByName('Быстрое восстановление') return end
+        -- Буйный рост (Wild Growth) — АоЕ хил при нескольких раненых
+        if WB_S.WG~=false and bestHP<0.8 and IsReady('Буйный рост') then TargetUnit(best) CastSpellByName('Буйный рост') return end
+        -- Омоложение (Rejuv) — поддерживать на раненых
+        if WB_S.Rejuv~=false and bestHP<0.9 then
+            local hasRejuv=false for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n=='Омоложение' then hasRejuv=true break end end
+            if not hasRejuv then TargetUnit(best) CastSpellByName('Омоложение') return end
+        end
+        -- Жизнецвет (Lifebloom) — поддерживать на танке (фокус)
+        if WB_S.LB~=false and UnitExists('focus') then
+            local lbCount=0 for i=1,40 do local n,_,_,c=UnitBuff('focus',i) if not n then break end if n=='Жизнецвет' then lbCount=c or 1 break end end
+            if lbCount<3 then TargetUnit('focus') CastSpellByName('Жизнецвет') TargetLastTarget() return end
+        end
+        -- Восстановление (Regrowth) — при сильном уроне
+        if WB_S.Regrowth~=false and bestHP<0.5 then TargetUnit(best) CastSpellByName('Восстановление') return end
+        -- Целительное прикосновение (Nourish) — филлер (сильнее если HoT на цели)
+        if WB_S.Nourish~=false and bestHP<0.8 then TargetUnit(best) CastSpellByName('Целительное прикосновение') return end
     end
 ");
 

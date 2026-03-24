@@ -232,24 +232,23 @@ public class Hivemind
     /// Сохраняет последнюю команду в глобальную WB_HIVE_CMD/WB_HIVE_ARG.
     /// </summary>
     public static string GetSlaveListenerScript() => $@"
-if not WB_HIVE_REGISTERED then
-    local f = CreateFrame('Frame')
-    f:RegisterEvent('CHAT_MSG_ADDON')
-    f:SetScript('OnEvent', function(self, event, prefix, msg, channel, sender)
-        if prefix ~= '{CHANNEL}' then return end
-        if sender == UnitName('player') then return end
-        local cmd, arg = strsplit(':', msg, 2)
-        WB_HIVE_CMD = cmd or ''
-        WB_HIVE_ARG = arg or ''
-        WB_HIVE_SENDER = sender or ''
-        WB_HIVE_TIME = GetTime()
-    end)
-    WB_HIVE_REGISTERED = true
-    WB_HIVE_CMD = ''
-    WB_HIVE_ARG = ''
-    WB_HIVE_SENDER = ''
-    WB_HIVE_TIME = 0
-end
+if WB_HIVE_FRAME then WB_HIVE_FRAME:UnregisterAllEvents() WB_HIVE_FRAME:SetScript('OnEvent',nil) end
+WB_HIVE_FRAME = CreateFrame('Frame')
+WB_HIVE_FRAME:RegisterEvent('CHAT_MSG_ADDON')
+WB_HIVE_FRAME:SetScript('OnEvent', function(self, event, prefix, msg, channel, sender)
+    if prefix ~= '{CHANNEL}' then return end
+    if sender == UnitName('player') then return end
+    local cmd, arg = strsplit(':', msg, 2)
+    WB_HIVE_CMD = cmd or ''
+    WB_HIVE_ARG = arg or ''
+    WB_HIVE_SENDER = sender or ''
+    WB_HIVE_TIME = GetTime()
+end)
+WB_HIVE_REGISTERED = true
+WB_HIVE_CMD = ''
+WB_HIVE_ARG = ''
+WB_HIVE_SENDER = ''
+WB_HIVE_TIME = 0
 ";
 
     /// <summary>

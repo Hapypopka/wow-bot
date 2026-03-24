@@ -1406,9 +1406,25 @@ public partial class OverlayWindow : Window
             _selectedPresence = "";
         }
         _selectedCurse = playerClass == "WARLOCK" ? GetSavedString("curse", "CoA") : "";
-        if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
 
-        // Pre-create toggles with metadata (will be rebuilt in submenu)
+        // Pre-create spell toggles from SpecSpells (для GetSpellFlagsLua)
+        string specKey = specName;
+        if (SpecSpells.TryGetValue(specKey, out var spells))
+        {
+            foreach (var (key, icon, label, defaultOn) in spells)
+            {
+                var toggle = new ToggleButton
+                {
+                    IsChecked = GetSavedBool($"spell_{key}", defaultOn),
+                    ToolTip = label,
+                    Tag = icon,
+                };
+                _spellToggles[key] = toggle;
+            }
+        }
+
+        // Pre-create buff toggles from ClassBuffs
+        if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
         foreach (var (spell, icon, label, defaultOn) in buffs)
         {
             var toggle = new ToggleButton

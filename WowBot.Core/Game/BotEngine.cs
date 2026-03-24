@@ -348,7 +348,7 @@ public class BotEngine : IDisposable
                     {
                         // В дистанции — бьём без проверки комбата
                         _isApproaching = false;
-                        if (_autoFace) _navigation.FaceUnit(player, slaveTarget);
+                        _navigation.FaceUnit(player, slaveTarget); // Слейв ВСЕГДА поворачивается к цели
                         // Слейв: пропускаем PreChecks (комбат-проверку) — кастуем сразу
                         string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
                         _hook.ExecuteLua(script, 500);
