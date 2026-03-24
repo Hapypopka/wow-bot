@@ -241,6 +241,8 @@ public partial class OverlayWindow : Window
     public bool AutoFace => _chkAutoFace != null ? (_chkAutoFace.IsChecked == true) : _autoFaceDefault;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
     public int MaxTargetRange => (int)(_sliderMaxRange?.Value ?? 30);
+    public float GetFollowDistance() => (float)(_sliderDist?.Value ?? GetSavedDouble("slider_dist", 8));
+    public float GetMaxTargetRange() => (float)(_sliderMaxRange?.Value ?? GetSavedDouble("slider_maxRange", 30));
 
     // Спеллы по спекам: (key, icon, tooltip, defaultOn)
     private static readonly Dictionary<string, (string key, string icon, string tooltip, bool on)[]> SpecSpells = new()
@@ -1509,6 +1511,10 @@ public partial class OverlayWindow : Window
             BtnAoe.Content = BtnAoe.IsChecked == true ? "ON" : "OFF";
             BtnBuffs.IsChecked = GetSavedBool("buffs", false);
             BtnBuffs.Content = BtnBuffs.IsChecked == true ? "ON" : "OFF";
+
+            // Слайдеры — применить сохранённые значения (триггерит ValueChanged → BotEngine)
+            if (_sliderDist != null) _sliderDist.Value = GetSavedDouble("slider_dist", 8);
+            if (_sliderMaxRange != null) _sliderMaxRange.Value = GetSavedDouble("slider_maxRange", 30);
         }
         catch { /* corrupted file — ignore, use defaults */ }
     }

@@ -227,6 +227,9 @@ public class Hivemind
         return closest;
     }
 
+    /// <summary>Получить юнит мастера (по GUID или поиском)</summary>
+    public Entities.WowUnit? GetMasterUnit() => FindPlayerByName(MasterName);
+
     // ==================== СЛЕЙВ ====================
 
     /// <summary>
@@ -255,10 +258,10 @@ WB_HIVE_TIME = 0
 
     /// <summary>
     /// Lua-скрипт для чтения последней команды слейвом.
-    /// Возвращает CMD|ARG|SENDER|TIME через макрос.
+    /// Возвращает CMD|ARG|SENDER|TIME через WB_R (Lua C API, без макросов).
     /// </summary>
     public static string GetSlaveReadScript() =>
-        "EditMacro(1,'WB',1,(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0'))";
+        "WB_R=(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0')";
 
     /// <summary>
     /// Парсит ответ от слейва: "CMD|ARG|SENDER|TIME"

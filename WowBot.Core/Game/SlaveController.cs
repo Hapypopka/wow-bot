@@ -11,6 +11,7 @@ public class SlaveController
     private readonly Navigation _nav;
     private readonly EndSceneHook _hook;
     private readonly ObjectManager _objectManager;
+    private readonly ClickToMove _ctm;
 
     public enum State { Idle, Following, Attacking, Stopped }
     public State CurrentState { get; private set; } = State.Idle;
@@ -21,29 +22,31 @@ public class SlaveController
     private ulong _masterGuid;
     private int _stopTimer;
 
-    public SlaveController(Navigation nav, EndSceneHook hook, ObjectManager objectManager)
+    public SlaveController(Navigation nav, EndSceneHook hook, ObjectManager objectManager, ClickToMove ctm)
     {
         _nav = nav;
         _hook = hook;
         _objectManager = objectManager;
+        _ctm = ctm;
     }
 
     // === Команды ===
 
     public void CmdFollow(string masterName)
     {
-        _nav.StopAll();
+        // Стоп всё предыдущее движение
+        _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() TurnLeftStop() TurnRightStop()", 100);
+        _ctm.Stop();
         MasterName = masterName;
         CurrentState = State.Following;
-        _followRetargetTick = 0;
-        // WoW нативно бежит к мастеру
-        _hook.ExecuteLua($"TargetUnit('{masterName}') StartAttack()", 200);
+        // Находим мастера по имени для GUID
+        FindMasterGuid(masterName);
         Logger.Info($"SlaveCtrl: Following {masterName}");
     }
 
     public void CmdStop()
     {
-        _nav.StopAll();
+        _ctm.Stop();
         CurrentState = State.Stopped;
         _stopTimer = 20; // 3 сек → Idle
         Logger.Info("SlaveCtrl: Stopped");
@@ -59,7 +62,6 @@ public class SlaveController
         switch (CurrentState)
         {
             case State.Idle:
-                // Ничего — юзер управляет вручную
                 break;
 
             case State.Following:
@@ -77,36 +79,51 @@ public class SlaveController
         }
     }
 
-    private int _followRetargetTick;
+    private bool _isFollowMoving;
+    private float _lastCtmX, _lastCtmY;
 
     private void TickFollowing(WowPlayer player)
     {
-        // Проверяем дистанцию до мастера (через текущий таргет)
-        var target = _objectManager.GetTarget();
-        if (target != null && target.Type == WowObjectType.Player)
+        var master = FindMaster();
+        if (master == null) return;
+
+        float dist = player.DistanceTo(master);
+
+        if (dist <= FollowDistance)
         {
-            float dist = player.DistanceTo(target);
-            if (dist <= FollowDistance)
-            {
-                // Достаточно близко — стоим
-                return;
-            }
+            if (_isFollowMoving) { _ctm.Stop(); _isFollowMoving = false; }
+            return;
         }
 
-        // Периодически повторяем TargetUnit + StartAttack (WoW нативно бежит к таргету)
-        _followRetargetTick++;
-        if (_followRetargetTick >= 10) // каждые ~1.5 сек
-        {
-            _followRetargetTick = 0;
-            _hook.ExecuteLua($"TargetUnit('{MasterName}') StartAttack()", 200);
-        }
+        // Не спамим CTM если мастер стоит и CTM ещё бежит
+        float dx = master.X - _lastCtmX;
+        float dy = master.Y - _lastCtmY;
+        float masterMoved = MathF.Sqrt(dx * dx + dy * dy);
+        bool ctmIdle = _ctm.GetCurrentAction() == 0;
+
+        if (_isFollowMoving && masterMoved < 3f && !ctmIdle)
+            return;
+
+        // Точка на земле в FollowDistance от мастера, в сторону игрока
+        float dirX = player.X - master.X;
+        float dirY = player.Y - master.Y;
+        float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
+        if (dirLen < 0.1f) { dirX = 1f; dirY = 0f; dirLen = 1f; }
+        dirX /= dirLen;
+        dirY /= dirLen;
+        float goalX = master.X + dirX * FollowDistance;
+        float goalY = master.Y + dirY * FollowDistance;
+
+        _ctm.MoveTo(goalX, goalY, master.Z, 0.5f);
+        _lastCtmX = master.X;
+        _lastCtmY = master.Y;
+        _isFollowMoving = true;
     }
 
     // === Поиск мастера ===
 
     private void FindMasterGuid(string name)
     {
-        // TargetUnit через Lua → читаем GUID
         _hook.ExecuteLua($"TargetUnit('{name}')", 200);
         System.Threading.Thread.Sleep(150);
         _objectManager.Update();
@@ -126,7 +143,6 @@ public class SlaveController
             if (unit != null) return unit;
             _masterGuid = 0;
         }
-        // GUID потерян — ищем заново
         if (!string.IsNullOrEmpty(MasterName))
             FindMasterGuid(MasterName);
         return _masterGuid != 0 ? _objectManager.GetUnitByGuid(_masterGuid) : null;

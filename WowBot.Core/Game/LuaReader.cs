@@ -110,6 +110,15 @@ public class LuaReader
     private int _failCount;
     private const int MAX_FAILS_BEFORE_REINIT = 5;
 
+    /// <summary>
+    /// Выполняет Lua через ExecuteLuaWithResult (Lua C API, без макросов).
+    /// luaCode должен записать результат в WB_R.
+    /// </summary>
+    public string? ExecuteViaCApi(string luaCode, int timeoutMs = 2000)
+    {
+        return _hook.ExecuteLuaWithResult(luaCode, 0, timeoutMs);
+    }
+
     public string? Execute(string luaCode, int timeoutMs = 2000)
     {
         if (!_initialized) return null;

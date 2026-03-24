@@ -89,9 +89,6 @@ public class BotEngine : IDisposable
     public bool IsHealer { get; set; }
     public System.Diagnostics.Process? WowProcess { get; set; }
     public string PlayerClass { get; set; } = "";
-    private bool _isApproaching;
-    private float _lastApproachX, _lastApproachY;
-    private int _approachRetryTick;
     private bool _isMovingForward;
     private int _healerTickCount;
     private int _afkTick;
@@ -152,7 +149,7 @@ public class BotEngine : IDisposable
         _ctm = ctm;
         Hivemind = new Hivemind(hook, objectManager, navigation, ctm);
         Hivemind.SetBotEngine(this);
-        SlaveCtrl = new SlaveController(navigation, hook, objectManager);
+        SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
     }
 
     public LuaReader? LuaReader { get; set; }
@@ -201,7 +198,57 @@ public class BotEngine : IDisposable
     {
         _followEnabled = false;
         _followGuid = 0;
-        _hook.ExecuteLua("MoveForwardStop()", 100);
+        StopFollowMovement();
+    }
+
+    /// <summary>
+    /// CTM follow — считает точку на земле в stopDistance от цели, бежит туда.
+    /// Не спамит CTM если цель стоит и CTM ещё работает.
+    /// </summary>
+    private float _lastCtmX, _lastCtmY;
+    private bool _isFollowMoving;
+    private void FollowViaCTM(WowUnit player, WowUnit target, float stopDistance)
+    {
+        float dist = player.DistanceTo(target);
+
+        if (dist <= stopDistance)
+        {
+            if (_isFollowMoving) { _ctm.Stop(); _isFollowMoving = false; }
+            if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
+            return;
+        }
+
+        // Не спамим если цель стоит и CTM ещё бежит
+        float dx = target.X - _lastCtmX;
+        float dy = target.Y - _lastCtmY;
+        float targetMoved = MathF.Sqrt(dx * dx + dy * dy);
+        bool ctmIdle = _ctm.GetCurrentAction() == 0;
+
+        if (_isFollowMoving && targetMoved < 3f && !ctmIdle)
+            return;
+
+        // Точка на земле в stopDistance от цели, в сторону игрока
+        float dirX = player.X - target.X;
+        float dirY = player.Y - target.Y;
+        float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
+        if (dirLen < 0.1f) { dirX = 1f; dirY = 0f; dirLen = 1f; } // на случай если стоим на цели
+        dirX /= dirLen;
+        dirY /= dirLen;
+        float goalX = target.X + dirX * stopDistance;
+        float goalY = target.Y + dirY * stopDistance;
+
+        Logger.Info($"FollowCTM: dist={dist:F1} stop={stopDistance:F1} player=({player.X:F1},{player.Y:F1}) target=({target.X:F1},{target.Y:F1}) goal=({goalX:F1},{goalY:F1}) ctmIdle={ctmIdle} tgtMoved={targetMoved:F1}");
+        _ctm.MoveTo(goalX, goalY, target.Z, 0.5f);
+        _lastCtmX = target.X;
+        _lastCtmY = target.Y;
+        _isFollowMoving = true;
+    }
+
+    /// <summary>Полная остановка follow</summary>
+    private void StopFollowMovement()
+    {
+        _ctm.Stop();
+        if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
     }
 
     // --- Toggle ---
@@ -212,7 +259,7 @@ public class BotEngine : IDisposable
         if (_followEnabled) EnsureRunning();
         else if (!_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
         if (!_followEnabled)
-            _hook.ExecuteLua("MoveForwardStop()", 100);
+            StopFollowMovement();
         OnStatusChanged?.Invoke(GetStatusText());
     }
 
@@ -230,7 +277,7 @@ public class BotEngine : IDisposable
         _followEnabled = false;
         _rotationEnabled = false;
         StopTimer();
-        _ctm.Stop();
+        StopFollowMovement();
         OnStatusChanged?.Invoke("Stopped");
     }
 
@@ -291,20 +338,21 @@ public class BotEngine : IDisposable
                     }
                 }
 
-                // Читаем команды через LuaReader (макрос #1)
+                // Читаем команды через Lua C API (без макросов!)
                 _hiveCheckTick++;
-                if (_hiveCheckTick >= 3 && LuaReader != null && LuaReader.IsInitialized)
+                if (_hiveCheckTick >= 3)
                 {
                     _hiveCheckTick = 0;
                     string checkLua = Hivemind.GetSlaveReadScript();
-                    string? response = LuaReader.Execute(checkLua);
+                    string? response = _hook.ExecuteLuaWithResult(checkLua);
+                    if (_logTick == 0) Logger.Info($"Hivemind: raw response=[{response ?? "NULL"}]");
                     if (response != null)
                     {
                         var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
                         if (cmd != null && time > LastHiveCheck)
                         {
                             LastHiveCheck = time;
-                            Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg}");
+                            Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
                             Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
                         }
                     }
@@ -371,21 +419,10 @@ public class BotEngine : IDisposable
             // Слейв-хилер: хил + follow к мастеру
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && (Hivemind.WantRotation || _rotationEnabled))
             {
-                // Подбег к мастеру (если есть таргет-игрок)
-                var healerTarget = _objectManager.GetTarget();
-                if (healerTarget != null && healerTarget.Type == WowObjectType.Player)
-                {
-                    float distToMaster = player.DistanceTo2D(healerTarget);
-                    if (distToMaster > _followDistance)
-                    {
-                        _navigation.FaceUnit(player, healerTarget);
-                        if (!_isMovingForward) { _hook.ExecuteLua("MoveForwardStart()", 50); _isMovingForward = true; }
-                    }
-                    else if (_isMovingForward)
-                    {
-                        _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false;
-                    }
-                }
+                // CTM к мастеру
+                var master = Hivemind.GetMasterUnit();
+                if (master != null)
+                    FollowViaCTM(player, master, _followDistance);
 
                 // Хил каждые ~500мс
                 _healerTickCount++;
@@ -398,73 +435,37 @@ public class BotEngine : IDisposable
                 return;
             }
 
-            // Слейв в режиме атаки или follow (подбег к таргету)
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && (Hivemind.WantRotation || Hivemind.IsFollowing))
+            // Слейв в режиме атаки (подбег к таргету + ротация)
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.WantRotation)
             {
                 var slaveTarget = _objectManager.GetTarget();
                 if (slaveTarget != null && slaveTarget.IsAlive)
                 {
-                    float distToTarget = player.DistanceTo2D(slaveTarget); // 2D — WoW проверяет спеллы без учёта высоты
-                    // Дистанция каста: мили ~5 ярдов, рейндж ~30 ярдов
+                    float distToTarget = player.DistanceTo2D(slaveTarget);
                     bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
                                    PlayerClass == "DEATHKNIGHT" ||
                                    (PlayerClass == "PALADIN" && !IsHealer) ||
                                    (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
                                    (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
-                    // Если таргет — игрок (мастер при "ко мне") — дистанция из слайдера Follow
                     bool isFollowingPlayer = slaveTarget.Type == WowObjectType.Player;
                     float castRange = isFollowingPlayer ? _followDistance : (isMelee ? 8f : 30f);
-                    float stopDist = isFollowingPlayer ? Math.Max(_followDistance - 2f, 1f) : (isMelee ? 2f : 23f);
 
                     if (distToTarget > castRange)
                     {
-                        // Далеко — повернуться к цели и бежать вперёд
-                        _navigation.FaceUnit(player, slaveTarget);
-                        if (!_isMovingForward)
-                        {
-                            _hook.ExecuteLua("MoveForwardStart()", 50);
-                            _isMovingForward = true;
-                        }
-                        // Также CTM как запасной вариант
-                        _approachRetryTick++;
-                        float dx = slaveTarget.X - _lastApproachX;
-                        float dy = slaveTarget.Y - _lastApproachY;
-                        float targetMoved = MathF.Sqrt(dx * dx + dy * dy);
-                        if (!_isApproaching || targetMoved > 5f || _approachRetryTick >= 10)
-                        {
-                            _approachRetryTick = 0;
-                            // Бежим прямо к таргету (stopDist от цели)
-                            float dirX = player.X - slaveTarget.X;
-                            float dirY = player.Y - slaveTarget.Y;
-                            float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
-                            if (dirLen > 0.1f)
-                            {
-                                dirX /= dirLen;
-                                dirY /= dirLen;
-                            }
-                            float goalX = slaveTarget.X + dirX * stopDist;
-                            float goalY = slaveTarget.Y + dirY * stopDist;
-                            float goalZ = slaveTarget.Z;
-                            _ctm.MoveTo(goalX, goalY, goalZ, 0.5f);
-                            _lastApproachX = slaveTarget.X;
-                            _lastApproachY = slaveTarget.Y;
-                            _isApproaching = true;
-                            Logger.Info($"Hivemind: CTM approach dist={distToTarget:F1} goal=({goalX:F1},{goalY:F1})");
-                        }
+                        // Далеко — CTM к цели, стоп на castRange
+                        float stopDist = isMelee ? 2f : 23f;
+                        if (isFollowingPlayer) stopDist = Math.Max(_followDistance - 2f, 1f);
+                        _ctm.MoveTo(slaveTarget.X, slaveTarget.Y, slaveTarget.Z, stopDist);
                     }
                     else
                     {
-                        // В дистанции — стоп движение
-                        _isApproaching = false;
-                        if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
-                        _navigation.FaceUnit(player, slaveTarget); // Слейв ВСЕГДА поворачивается к цели
+                        // В дистанции — бьём
+                        _navigation.FaceUnit(player, slaveTarget);
                         if (Hivemind.WantRotation)
                         {
-                            // Бьём без проверки комбата
                             string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
                             _hook.ExecuteLua(script, 500);
                         }
-                        // Если follow без ротации — просто стоим рядом
                     }
                 }
                 return;
@@ -482,30 +483,8 @@ public class BotEngine : IDisposable
             // === ТОЛЬКО FOLLOW ===
             if (_followEnabled && !_rotationEnabled)
             {
-                if (needsToMove)
-                {
-                    // Повернуться к мастеру
-                    _navigation.FaceUnit(player, followTarget!);
-                    if (followDist > 25f)
-                    {
-                        // Далеко — поворот + бег вперёд (CTM ненадёжен на некоторых клиентах)
-                        _hook.ExecuteLua("MoveForwardStart()", 50);
-                        _isMovingForward = true;
-                    }
-                    else
-                    {
-                        // Близко — нативный WoW follow
-                        if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
-                        if (Hivemind.CurrentRole == Hivemind.Role.Slave && !string.IsNullOrEmpty(Hivemind.MasterName))
-                            _hook.ExecuteLua($"FollowUnit('{Hivemind.MasterName}')", 200);
-                        else
-                            _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
-                    }
-                }
-                else
-                {
-                    if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
-                }
+                if (followTarget != null)
+                    FollowViaCTM(player, followTarget, _followDistance);
                 return;
             }
 
@@ -536,13 +515,13 @@ public class BotEngine : IDisposable
 
             if (isCasting)
             {
-                // КАСТУЕМ — не двигаемся, не трогаем facing, ждём
+                // КАСТУЕМ — стоп движения
                 _ctm.Stop();
             }
             else if (needsToMove)
             {
-                // БЕЖИМ к follow — CTM плавно рулит
-                _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
+                // БЕЖИМ к follow — CTM к координатам цели
+                _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, _followDistance);
 
                 // Instants на бегу БЕЗ поворота
                 if (hasTarget)
@@ -550,8 +529,7 @@ public class BotEngine : IDisposable
             }
             else
             {
-                // СТОИМ — полная ротация (CTM сам остановился)
-
+                // В дистанции — полная ротация
                 if (hasTarget)
                 {
                     if (_autoFace) _navigation.FaceUnit(player, target!);

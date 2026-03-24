@@ -396,6 +396,12 @@ public partial class MainWindow : Window
             };
             WowBot.Core.Logger.Info("Loading overlay settings...");
             _overlay.LoadSettings();
+            // Применить сохранённые слайдеры в BotEngine (ValueChanged не стреляет если значение не менялось)
+            float savedDist = _overlay.GetFollowDistance();
+            float savedRange = _overlay.GetMaxTargetRange();
+            WowBot.Core.Logger.Info($"Applying sliders: followDist={savedDist} maxRange={savedRange}");
+            _botEngine.FollowDistance = savedDist;
+            _botEngine.MaxTargetRange = savedRange;
             _overlay.UpdateStatus(specName);
             _overlay.SetPlayerClass(playerClass, specName);
             WowBot.Core.Logger.Info("Showing overlay...");
