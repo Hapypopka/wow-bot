@@ -305,12 +305,11 @@ end
                 _followMaster = true;
                 _followAttack = false;
                 _wantRotation = false;
-                // Находим мастера и ставим как follow target
                 var masterUnit = FindPlayerByName(arg);
                 if (masterUnit != null && _botEngine != null)
                     _botEngine.SetFollowGuid(masterUnit.Guid);
                 OnCommandReceived?.Invoke(cmd, arg);
-                Logger.Info($"Hivemind: SLAVE follow {arg} via BotEngine");
+                Logger.Info($"Hivemind: SLAVE follow master={arg} found={masterUnit != null}");
                 break;
 
             case Command.Attack:

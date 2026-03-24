@@ -4,15 +4,23 @@ namespace WowBot.Core;
 
 public static class Logger
 {
-    private static readonly string LogPath = Path.Combine(
+    private static string _logPath = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory, "wowbot.log");
     private static readonly object Lock = new();
+    private static string _charName = "";
+
+    public static void SetCharName(string name)
+    {
+        _charName = name ?? "";
+        if (!string.IsNullOrEmpty(_charName))
+            _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"wowbot_{_charName}.log");
+    }
 
     public static void Init()
     {
         lock (Lock)
         {
-            File.WriteAllText(LogPath, $"=== WowBot Log — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+            File.WriteAllText(_logPath, $"=== WowBot Log [{_charName}] — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
         }
     }
 
@@ -25,14 +33,12 @@ public static class Logger
     {
         try
         {
+            var prefix = string.IsNullOrEmpty(_charName) ? "" : $"[{_charName}] ";
             lock (Lock)
             {
-                File.AppendAllText(LogPath, $"[{DateTime.Now:HH:mm:ss}] {level} {msg}\n");
+                File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss}] {level} {prefix}{msg}\n");
             }
         }
         catch { }
     }
 }
-// trigger build
-// build trigger
-// trigger

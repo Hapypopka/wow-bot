@@ -238,8 +238,11 @@ public partial class MainWindow : Window
             // Обновляем UI — connected state
             PanelDisconnected.Visibility = Visibility.Collapsed;
             PanelConnected.Visibility = Visibility.Visible;
-            TxtCharName.Text = _objectManager.GetPlayerName() ?? "???";
+            var charName = _objectManager.GetPlayerName() ?? "???";
+            TxtCharName.Text = charName;
             TxtSpecName.Text = specName;
+            WowBot.Core.Logger.SetCharName(charName);
+            WowBot.Core.Logger.Init();
             TxtPidInfo.Text = $"PID: {wow.Id}";
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
             bool isHealer = specName.Contains("Holy") || specName.Contains("Disc") || specName.Contains("Resto");
@@ -345,16 +348,22 @@ public partial class MainWindow : Window
         StartUpdateLoop();
     }
 
-    private void BtnDetach_Click(object sender, RoutedEventArgs e)
+    private async void BtnDetach_Click(object sender, RoutedEventArgs e)
     {
         if (_attachedPid != 0) { UnlockPid(_attachedPid); _attachedPid = 0; }
         StopUpdateLoop();
 
-        // Останавливаем бот и снимаем хук
-        _botEngine?.Dispose();
+        var bot = _botEngine;
+        var hook = _endSceneHook;
         _botEngine = null;
-        _endSceneHook?.Dispose();
         _endSceneHook = null;
+
+        var cleanupTask = Task.Run(() =>
+        {
+            try { bot?.Dispose(); } catch { }
+            try { hook?.Dispose(); } catch { }
+        });
+        await Task.WhenAny(cleanupTask, Task.Delay(2000));
 
         _memory.Detach();
         _objectManager = null;

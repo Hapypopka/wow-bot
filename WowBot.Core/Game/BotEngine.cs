@@ -61,7 +61,7 @@ public class BotEngine : IDisposable
         {
             _buffsEnabled = value;
             if (value) EnsureRunning();
-            else if (!_followEnabled && !_rotationEnabled) StopTimer();
+            else if (!_followEnabled && !_rotationEnabled && !Hivemind.IsActive) StopTimer();
         }
     }
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
@@ -91,6 +91,7 @@ public class BotEngine : IDisposable
     private bool _isApproaching;
     private float _lastApproachX, _lastApproachY;
     private int _approachRetryTick;
+    private bool _isMovingForward;
     private string? _specName;
     public string? SpecName { get => _specName; set => _specName = value; }
 
@@ -170,7 +171,7 @@ public class BotEngine : IDisposable
     {
         _followEnabled = !_followEnabled;
         if (_followEnabled) EnsureRunning();
-        else if (!_rotationEnabled && !_buffsEnabled) StopTimer();
+        else if (!_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
         if (!_followEnabled)
             _hook.ExecuteLua("MoveForwardStop()", 100);
         OnStatusChanged?.Invoke(GetStatusText());
@@ -181,7 +182,7 @@ public class BotEngine : IDisposable
         _rotationEnabled = !_rotationEnabled;
         Logger.Info($"ToggleRotation: {_rotationEnabled}, follow={_followEnabled}, buffs={_buffsEnabled}");
         if (_rotationEnabled) EnsureRunning();
-        else if (!_followEnabled && !_buffsEnabled) StopTimer();
+        else if (!_followEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
         OnStatusChanged?.Invoke(GetStatusText());
     }
 
@@ -369,8 +370,29 @@ public class BotEngine : IDisposable
             if (_followEnabled && !_rotationEnabled)
             {
                 if (needsToMove)
-                    _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
-                // Не вызываем Stop — CTM сам остановится когда дойдёт
+                {
+                    // Повернуться к мастеру
+                    _navigation.FaceUnit(player, followTarget!);
+                    if (followDist > 25f)
+                    {
+                        // Далеко — поворот + бег вперёд (CTM ненадёжен на некоторых клиентах)
+                        _hook.ExecuteLua("MoveForwardStart()", 50);
+                        _isMovingForward = true;
+                    }
+                    else
+                    {
+                        // Близко — нативный WoW follow
+                        if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
+                        if (Hivemind.CurrentRole == Hivemind.Role.Slave && !string.IsNullOrEmpty(Hivemind.MasterName))
+                            _hook.ExecuteLua($"FollowUnit('{Hivemind.MasterName}')", 200);
+                        else
+                            _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, 0.5f);
+                    }
+                }
+                else
+                {
+                    if (_isMovingForward) { _hook.ExecuteLua("MoveForwardStop()", 50); _isMovingForward = false; }
+                }
                 return;
             }
 

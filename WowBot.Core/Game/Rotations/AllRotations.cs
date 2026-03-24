@@ -340,16 +340,22 @@ public static class AllRotations
         if WB_S.BS~=false then CastSpellByName('Кровавый удар') return end
         if WB_S.RS~=false and IsReady('Рунический удар') then CastSpellByName('Рунический удар') end
     elseif t2>=t1 and t2>=t3 then
-        -- FROST
+        -- FROST DK
         if WB_S.IT~=false and not hasFF then CastSpellByName('Ледяное прикосновение') return end
         if WB_S.PS~=false and not hasBP then CastSpellByName('Удар чумы') return end
-        if WB_S.Pest~=false and hasFF and hasBP and IsReady('Мор') then CastSpellByName('Мор') return end
+        if WB_S.Pest~=false and hasFF and hasBP then
+            local ffLeft,bpLeft=0,0
+            for i=1,40 do local n,_,_,_,_,_,ex=UnitDebuff('target',i) if not n then break end if n=='Озноб' then ffLeft=ex-GetTime() end if n=='Кровавая чума' then bpLeft=ex-GetTime() end end
+            if (ffLeft>0 and ffLeft<3) or (bpLeft>0 and bpLeft<3) then if IsReady('Мор') then CastSpellByName('Мор') return end end
+        end
         if WB_S.UA~=false and IsReady('Несокрушимая броня') then CastSpellByName('Несокрушимая броня') return end
-        if WB_S.HB~=false and HasBuff('Морозный жар') and IsReady('Ледяной удар') then CastSpellByName('Ледяной удар') return end
+        if WB_S.HB~=false and HasBuff('Морозный жар') and IsReady('Воющий ветер') then CastSpellByName('Воющий ветер') return end
         if WB_S.Oblit~=false and IsReady('Уничтожение') then CastSpellByName('Уничтожение') return end
         if WB_S.BS~=false then CastSpellByName('Кровавый удар') return end
-        if WB_S.FS~=false and IsReady('Лик смерти') then CastSpellByName('Лик смерти') return end
-        if WB_S.HB2~=false and IsReady('Ледяной удар') then CastSpellByName('Ледяной удар') end
+        if WB_S.FS~=false and IsReady('Ледяной удар') then CastSpellByName('Ледяной удар') return end
+        if WB_S.BT~=false and IsReady('Кровоотвод') then CastSpellByName('Кровоотвод') return end
+        if WB_S.ERW~=false and IsReady('Усиление рунического оружия') then CastSpellByName('Усиление рунического оружия') return end
+        if WB_S.HoW~=false and IsReady('Зимний горн') then CastSpellByName('Зимний горн') end
     else
         -- UNHOLY
         if WB_S.IT~=false and not hasFF then CastSpellByName('Ледяное прикосновение') return end
@@ -511,6 +517,7 @@ public static class AllRotations
         elseif WB_S.Wrath~=false then CastSpellByName('Гнев') end
     elseif t2>=t1 and t2>=t3 then
         -- FERAL (Cat/Bear по форме через GetShapeshiftForm: 1=bear, 3=cat)
+        if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         local form = GetShapeshiftForm()
         local energy = UnitPower and UnitPower('player') or UnitMana('player')

@@ -429,13 +429,15 @@ public partial class OverlayWindow : Window
         {
             ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
             ("PS", "plague_strike.jpg", "Удар чумы", true),
-            ("Pest", "pestilence.jpg", "Мор", true),
+            ("Pest", "pestilence.jpg", "Мор (обновление)", true),
             ("UA", "unbreakable_armor.jpg", "Несокрушимая броня", true),
-            ("HB", "howling_blast.jpg", "Ледяной удар (прок)", true),
+            ("HB", "howling_blast.jpg", "Воющий ветер (Rime прок)", true),
             ("Oblit", "obliterate.jpg", "Уничтожение", true),
             ("BS", "blood_strike.jpg", "Кровавый удар", true),
-            ("FS", "frost_strike.jpg", "Лик смерти", true),
-            ("HB2", "howling_blast.jpg", "Ледяной удар", true),
+            ("FS", "frost_strike.jpg", "Ледяной удар", true),
+            ("BT", "blood_tap.jpg", "Кровоотвод", true),
+            ("ERW", "empower_rune.jpg", "Усиление рунического оружия", true),
+            ("HoW", "horn_winter.jpg", "Зимний горн", true),
         },
         ["Unholy DK"] = new[]
         {
@@ -650,12 +652,7 @@ public partial class OverlayWindow : Window
             ("Дух гадюки", "serpent_sting.jpg", "Дух гадюки", true),
         },
         ["ROGUE"] = Array.Empty<(string, string, string, bool)>(),
-        ["DEATHKNIGHT"] = new[]
-        {
-            ("Власть крови", "blood_strike.jpg", "Власть крови", false),
-            ("Власть льда", "icy_touch.jpg", "Власть льда", false),
-            ("Власть нечестивости", "unholy_blight.jpg", "Власть нечестивости", false),
-        },
+        // DEATHKNIGHT: власти через радио-выбор (PresenceOptions), не здесь
         ["PALADIN"] = Array.Empty<(string, string, string, bool)>(),
     };
 
