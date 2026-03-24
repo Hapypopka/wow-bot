@@ -58,6 +58,11 @@ public static class Offsets
     public const uint EndSceneOffset = 0xA8;
     public const uint LuaDoString = 0x00819210;
     public const uint LuaGetLocalizedText = 0x007225E0;
+    // Lua C API — найдены через дизассемблинг WoWCircle бинарника
+    public const uint LuaState = 0x00D3F78C;
+    public const uint LuaGetField = 0x0084E590;  // index2adr + luaS_new + luaV_gettable + top++ — настоящий lua_getfield
+    public const uint LuaToLString = 0x0084E0E0;
+    public const uint LuaSetTop = 0x0084DBF0;
 
     // --- Имена игроков (Name Store / Name Cache) ---
     public const uint NameStoreBase = 0x00C5D938;

@@ -259,68 +259,134 @@ public class EndSceneHook : IDisposable
         asm.AddRange(BitConverter.GetBytes(_flagAddr));
 
         // --- Проверка flag == 1 (exec only) ---
-        // cmp eax, 1
-        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x01);
-        // je exec_lua
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x01); // cmp eax, 1
         int jeExecPos = asm.Count;
-        asm.Add(0x74); asm.Add(0x00); // placeholder
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
 
         // --- Проверка flag == 3 (exec + read result) ---
-        // cmp eax, 3
-        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x03);
-        // je exec_lua_with_result
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x03); // cmp eax, 3
         int jeExecResultPos = asm.Count;
-        asm.Add(0x74); asm.Add(0x00); // placeholder
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
 
-        // --- Ничего не делаем → skip ---
-        // jmp skip
+        // --- Проверка flag == 4 (read only — lua_getfield без DoString) ---
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x04); // cmp eax, 4
+        int jeReadOnlyPos = asm.Count;
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
+
+        // --- Ничего не делаем → skip (rel32) ---
         int jmpSkipPos = asm.Count;
-        asm.Add(0xEB); asm.Add(0x00); // placeholder
+        asm.Add(0xE9); asm.AddRange(new byte[4]); // jmp rel32 placeholder
 
         // === exec_lua (flag==1): call Lua_DoString, set flag=2 ===
         int execLuaLabel = asm.Count;
-        asm[jeExecPos + 1] = (byte)(execLuaLabel - jeExecPos - 2);
+        { int off = execLuaLabel - jeExecPos - 6; // je rel32 = 6 bytes
+          asm[jeExecPos+2]=(byte)(off&0xFF); asm[jeExecPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeExecPos+4]=(byte)((off>>16)&0xFF); asm[jeExecPos+5]=(byte)((off>>24)&0xFF); }
 
         EmitLuaDoStringCall(asm);
         EmitSetFlag(asm, 2);
-        // jmp skip
+        // jmp skip (rel32)
         int jmpSkip2Pos = asm.Count;
-        asm.Add(0xEB); asm.Add(0x00); // placeholder
+        asm.Add(0xE9); asm.AddRange(new byte[4]); // jmp rel32 placeholder
 
-        // === exec_lua_with_result (flag==3): call Lua_DoString, call GetLocalizedText, store ptr, set flag=2 ===
+        // === exec_lua_with_result (flag==3): Lua_DoString + lua_getfield + lua_tolstring ===
         int execResultLabel = asm.Count;
-        asm[jeExecResultPos + 1] = (byte)(execResultLabel - jeExecResultPos - 2);
+        { int off = execResultLabel - jeExecResultPos - 6;
+          asm[jeExecResultPos+2]=(byte)(off&0xFF); asm[jeExecResultPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeExecResultPos+4]=(byte)((off>>16)&0xFF); asm[jeExecResultPos+5]=(byte)((off>>24)&0xFF); }
 
         EmitLuaDoStringCall(asm);
 
-        // Call GetLocalizedText(playerBase, varName, 0)
-        // push 0
-        asm.Add(0x6A); asm.Add(0x00);
-        // push _varNameAddr
-        asm.Add(0x68);
-        asm.AddRange(BitConverter.GetBytes(_varNameAddr));
-        // push playerBase (placeholder 0xDEADBEEF — патчится из C# перед каждым вызовом)
-        asm.Add(0x68);
-        _playerBasePatchOffset = (uint)asm.Count; // запоминаем смещение для патча
-        asm.AddRange(BitConverter.GetBytes(0xDEADBEEF));
-        // mov eax, GetLocalizedText
-        asm.Add(0xB8);
-        asm.AddRange(BitConverter.GetBytes(Offsets.LuaGetLocalizedText));
-        // call eax
+        // lua_getfield(L, LUA_GLOBALSINDEX, "WB_R") — cdecl
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(_varNameAddr));              // push "WB_R"
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(unchecked((uint)(-10002)))); // push -10002
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(Offsets.LuaState)); // push [LuaState]
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.LuaGetField));
+        asm.Add(0xFF); asm.Add(0xD0);                                                 // call eax
+        asm.Add(0x83); asm.Add(0xC4); asm.Add(0x0C);                                  // add esp,12
+
+        // lua_tolstring(L, -1, 0) — читает строку с верха стека
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes((uint)0));                   // push 0
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(unchecked((uint)(-1))));      // push -1
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(Offsets.LuaState)); // push [LuaState]
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.LuaToLString));
+        asm.Add(0xFF); asm.Add(0xD0);                                                 // call eax
+        asm.Add(0x83); asm.Add(0xC4); asm.Add(0x0C);                                  // add esp,12
+
+        // mov [_returnPtrAddr], eax
+        asm.Add(0xA3); asm.AddRange(BitConverter.GetBytes(_returnPtrAddr));
+
+        // lua_settop(L, 0) — очистка стека
+        asm.Add(0x6A); asm.Add(0x00);                                                 // push 0
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(Offsets.LuaState)); // push [LuaState]
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.LuaSetTop));
+        asm.Add(0xFF); asm.Add(0xD0);                                                 // call eax
+        asm.Add(0x83); asm.Add(0xC4); asm.Add(0x08);                                  // add esp,8
+
+        _playerBasePatchOffset = (uint)(asm.Count); // dummy
+        EmitSetFlag(asm, 2);
+
+        // jmp to skip
+        int jmpSkip3Pos = asm.Count;
+        asm.Add(0xE9); asm.AddRange(new byte[4]);
+
+        // === flag==4: ТОЛЬКО lua_getfield + lua_tolstring (без DoString) ===
+        int readOnlyLabel = asm.Count;
+        { int off = readOnlyLabel - jeReadOnlyPos - 6;
+          asm[jeReadOnlyPos+2]=(byte)(off&0xFF); asm[jeReadOnlyPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeReadOnlyPos+4]=(byte)((off>>16)&0xFF); asm[jeReadOnlyPos+5]=(byte)((off>>24)&0xFF); }
+
+        // lua_getfield([LuaState], -10002, "WB_R")
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(_varNameAddr));
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(unchecked((uint)(-10002))));
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(Offsets.LuaState));
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.LuaGetField));
         asm.Add(0xFF); asm.Add(0xD0);
-        // add esp, 12
         asm.Add(0x83); asm.Add(0xC4); asm.Add(0x0C);
 
-        // mov [_returnPtrAddr], eax — сохраняем указатель на строку результата
-        asm.Add(0xA3);
-        asm.AddRange(BitConverter.GetBytes(_returnPtrAddr));
+        // lua_tolstring([LuaState], -1, 0)
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes((uint)0));
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(unchecked((uint)(-1))));
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(Offsets.LuaState));
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.LuaToLString));
+        asm.Add(0xFF); asm.Add(0xD0);
+        asm.Add(0x83); asm.Add(0xC4); asm.Add(0x0C);
+
+        // mov [_returnPtrAddr], eax
+        asm.Add(0xA3); asm.AddRange(BitConverter.GetBytes(_returnPtrAddr));
+
+        // lua_settop([LuaState], 0)
+        asm.Add(0x6A); asm.Add(0x00);
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(Offsets.LuaState));
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.LuaSetTop));
+        asm.Add(0xFF); asm.Add(0xD0);
+        asm.Add(0x83); asm.Add(0xC4); asm.Add(0x08);
 
         EmitSetFlag(asm, 2);
 
-        // === skip label ===
+        // === skip label — patch jmp rel32 ===
         int skipLabel = asm.Count;
-        asm[jmpSkipPos + 1] = (byte)(skipLabel - jmpSkipPos - 2);
-        asm[jmpSkip2Pos + 1] = (byte)(skipLabel - jmpSkip2Pos - 2);
+        { // jmpSkipPos (E9 rel32)
+            int off = skipLabel - jmpSkipPos - 5;
+            asm[jmpSkipPos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkipPos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkipPos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkipPos + 4] = (byte)((off >> 24) & 0xFF);
+        }
+        { // jmpSkip2Pos (E9 rel32)
+            int off = skipLabel - jmpSkip2Pos - 5;
+            asm[jmpSkip2Pos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkip2Pos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkip2Pos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkip2Pos + 4] = (byte)((off >> 24) & 0xFF);
+        }
+        { // jmpSkip3Pos (E9 rel32)
+            int off = skipLabel - jmpSkip3Pos - 5;
+            asm[jmpSkip3Pos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkip3Pos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkip3Pos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkip3Pos + 4] = (byte)((off >> 24) & 0xFF);
+        }
 
         // popfd / popad
         asm.Add(0x9D);
@@ -375,23 +441,29 @@ public class EndSceneHook : IDisposable
     }
 
     /// <summary>
-    /// Выполняет Lua и читает значение переменной WB_R
+    /// Выполняет Lua и читает значение переменной WB_R через Lua C API
+    /// Шаг 1: ExecuteLua (flag=1) — выполняет Lua код (ставит WB_R)
+    /// Шаг 2: flag=3 — lua_getfield + lua_tolstring (читает WB_R)
     /// </summary>
-    public string? ExecuteLuaWithResult(string luaCode, uint playerBase, int timeoutMs = 2000)
+    public string? ExecuteLuaWithResult(string luaCode, uint playerBase = 0, int timeoutMs = 2000)
     {
         if (!_isHooked) throw new InvalidOperationException("Hook not installed.");
-        if (playerBase == 0) return null;
 
-        // Патчим playerBase прямо в codecave (push imm32)
-        _memory.WriteUInt32(_codecaveAddr + _playerBasePatchOffset, playerBase);
-        _memory.WriteUInt32(_returnPtrAddr, 0);
+        // Шаг 1: DoString (flag=1)
         _memory.WriteString(_luaStringAddr, luaCode);
-        _memory.WriteUInt32(_flagAddr, 3); // flag=3 → exec + read
-
+        _memory.WriteUInt32(_flagAddr, 1);
         if (!WaitForCompletion(timeoutMs))
             return null;
 
-        // Читаем указатель на строку результата
+        // Ждём 1 EndScene кадр чтобы Lua обработал
+        Thread.Sleep(50);
+
+        // Шаг 2: только getfield (flag=4)
+        _memory.WriteUInt32(_returnPtrAddr, 0);
+        _memory.WriteUInt32(_flagAddr, 4);
+        if (!WaitForCompletion(timeoutMs))
+            return null;
+
         uint resultPtr = _memory.ReadUInt32(_returnPtrAddr);
         if (resultPtr == 0) return null;
 

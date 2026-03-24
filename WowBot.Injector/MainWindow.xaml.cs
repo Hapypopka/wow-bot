@@ -584,10 +584,8 @@ public partial class MainWindow : Window
             if (lua.StartsWith("?"))
             {
                 string expr = lua[1..].Trim();
-                // DoString с return → пушит на стек → lua_tolstring читает
-                string luaReturn = $"return tostring({expr})";
-                uint playerBase = _objectManager?.LocalPlayer?.BaseAddress ?? 0;
-                string? result = _endSceneHook.ExecuteLuaWithResult(luaReturn, playerBase);
+                string luaSet = $"WB_R=tostring({expr})";
+                string? result = _endSceneHook.ExecuteLuaWithResult(luaSet);
                 TxtLuaStatus.Text = result != null ? $"= {result}" : "= nil (или краш)";
                 return;
             }
