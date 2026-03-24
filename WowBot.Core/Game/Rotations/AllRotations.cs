@@ -180,7 +180,7 @@ public static class AllRotations
 ");
 
     private static string Hunter() => Wrap(@"
-    if UnitCastingInfo('player') or UnitChannelInfo('player') then if WB_MM and WB_MM.cd and WB_S then if WB_S.Rapid~=false and IsReady('Быстрая стрельба') then CastSpellByName('Быстрая стрельба') end if WB_S.Kill2~=false and IsReady('Команда ""Взять!""') then CastSpellByName('Команда ""Взять!""') end if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end end return end
+    if UnitCastingInfo('player') or UnitChannelInfo('player') then if WB_S then if WB_S.Rapid~=false and IsReady('Быстрая стрельба') then CastSpellByName('Быстрая стрельба') end if WB_S.Kill2~=false and IsReady('Команда ""Взять!""') then CastSpellByName('Команда ""Взять!""') end if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end end return end
     if not WB_S then WB_S={} end
     if WB_S.Pet~=false and UnitExists('pet') and not UnitIsDead('pet') then
         if HasBuffById(5384) or UnitIsDeadOrGhost('player') then WB_FD=GetTime() PetPassiveMode() PetFollow() return end
@@ -190,10 +190,10 @@ public static class AllRotations
     if WB_S.Pet~=false then
         if not UnitExists('pet') then CastSpellByName('Призыв питомца') return end
         if UnitIsDead('pet') then CastSpellByName('Воскрешение питомца') return end
-        if not UnitAffectingCombat('player') then PetPassiveMode() PetFollow() WB_MM=nil return end
+        if not UnitAffectingCombat('player') then PetPassiveMode() PetFollow() return end
         if not WB_FD or GetTime()-WB_FD>=5 then if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') then PetAttack() end end
     end
-    if not UnitAffectingCombat('player') then WB_MM=nil return end
+    if not UnitAffectingCombat('player') then return end
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
@@ -211,40 +211,22 @@ public static class AllRotations
         if WB_S.Arcane~=false and IsReady('Чародейский выстрел') then CastSpellByName('Чародейский выстрел') return end
         if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end
     elseif t2>=t1 and t2>=t3 then
-        -- MM burst+sustain rotation (Криостра)
-        if not WB_MM then WB_MM={p=1,s=1} end
-        local mm=WB_MM
-        if not WB_CHIMERA then WB_CHIMERA=GetSpellInfo(53209) end
-        if not WB_TRAP then WB_TRAP=GetSpellInfo(49067) end
-        local chim=WB_CHIMERA or 'Выстрел химеры'
-        local trap=WB_TRAP or 'Взрывная ловушка'
+        -- MM Hunter priority rotation + trap weaving
         if WB_S.Dragonhawk~=false and not HasBuff('Дух дракондора') and MP()>0.3 then CastSpellByName('Дух дракондора') return end
         if WB_S.Volley~=false and (WB_NE or 0)>1 and IsReady('Залп') then CastSpellByName('Залп') return end
-        if mm.cd then if WB_S.Rapid~=false and IsReady('Быстрая стрельба') then CastSpellByName('Быстрая стрельба') end if WB_S.Kill2~=false and IsReady('Команда ""Взять!""') then CastSpellByName('Команда ""Взять!""') end if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end end
-        if mm.p==1 then
-            -- BURST: Serpent->Aimed+CDs->Chimera->Trap->Steady*5->Chimera->Aimed->Readiness->Chimera+CDs->Aimed->Trap->Steady*5->Chimera->Aimed
-            if mm.s==1 then if WB_S.Serpent~=false and not HasDebuff('target','Укус змеи') then CastSpellByName('Укус змеи') return end mm.s=2 end
-            if mm.s==2 then mm.cd=true if WB_S.Aimed==false then mm.s=3 elseif IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') mm.s=3 return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==3 then mm.cd=nil if WB_S.Chimera==false then mm.s=4 elseif IsReady(chim) then CastSpellByName(chim) mm.s=4 return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==4 then if WB_S.Trap~=false and IsReady(trap) then CastSpellByName(trap) mm.s=5 return end mm.s=5 end
-            if mm.s==5 then if WB_S.Chimera==false or IsReady(chim) then mm.s=6 else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==6 then if WB_S.Chimera==false then mm.s=7 elseif IsReady(chim) then CastSpellByName(chim) mm.s=7 return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==7 then if WB_S.Aimed==false then mm.s=8 elseif IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') mm.s=8 return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==8 then if WB_S.Readiness~=false and IsReady('Готовность') then CastSpellByName('Готовность') end mm.s=9 end
-            if mm.s==9 then mm.cd=true if WB_S.Chimera==false then mm.s=10 elseif IsReady(chim) then CastSpellByName(chim) mm.s=10 return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==10 then if WB_S.Aimed==false then mm.s=11 mm.cd=nil elseif IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') mm.s=11 mm.cd=nil return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==11 then if WB_S.Trap~=false and IsReady(trap) then CastSpellByName(trap) mm.s=12 return end mm.s=12 end
-            if mm.s==12 then if WB_S.Chimera==false or IsReady(chim) then mm.s=13 else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==13 then if WB_S.Chimera==false then mm.s=14 elseif IsReady(chim) then CastSpellByName(chim) mm.s=14 return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-            if mm.s==14 then if WB_S.Aimed==false then mm.p=2 mm.s=1 mm.cd=nil elseif IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') mm.p=2 mm.s=1 mm.cd=nil return else if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end return end end
-        elseif mm.p==2 then
-            -- SUSTAIN: Chimera->Steady/Trap->Aimed->Steady->repeat
-            if WB_S.Serpent~=false and not HasDebuff('target','Укус змеи') then CastSpellByName('Укус змеи') return end
-            if WB_S.Chimera~=false and IsReady(chim) then CastSpellByName(chim) return end
-            if WB_S.Aimed~=false and IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') return end
-            if WB_S.Trap~=false and IsReady(trap) then CastSpellByName(trap) return end
-            if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end
-        end
+        -- CDs: Rapid Fire + Kill Command + pet abilities (off-GCD or weave)
+        if WB_S.Rapid~=false and IsReady('Быстрая стрельба') then CastSpellByName('Быстрая стрельба') end
+        if WB_S.Kill2~=false and IsReady('Команда ""Взять!""') then CastSpellByName('Команда ""Взять!""') end
+        if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end
+        -- Priority: Serpent Sting > Chimera > Silencing > Aimed > Trap > Steady
+        if WB_S.Serpent~=false and not HasDebuff('target','Укус змеи') then CastSpellByName('Укус змеи') return end
+        if WB_S.Chimera~=false and IsReady('Выстрел химеры') then CastSpellByName('Выстрел химеры') return end
+        if WB_S.Silence~=false and IsReady('Глушащий выстрел') then CastSpellByName('Глушащий выстрел') return end
+        if WB_S.Aimed~=false and IsReady('Прицельный выстрел') then CastSpellByName('Прицельный выстрел') return end
+        if WB_S.Trap~=false and IsReady('Взрывная ловушка') then CastSpellByName('Взрывная ловушка') return end
+        -- Readiness: reset CDs when Chimera + Rapid Fire both on CD
+        if WB_S.Readiness~=false and IsReady('Готовность') and not IsReady('Выстрел химеры') and not IsReady('Быстрая стрельба') then CastSpellByName('Готовность') return end
+        if WB_S.Steady~=false then CastSpellByName('Верный выстрел') end
     else
         if WB_S.Explosive~=false and IsReady('Разрывной выстрел') then CastSpellByName('Разрывной выстрел') return end
         if WB_S.Black~=false and not HasDebuff('target','Черная стрела') and IsReady('Черная стрела') then CastSpellByName('Черная стрела') return end
