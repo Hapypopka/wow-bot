@@ -36,7 +36,7 @@ public class SlaveController
     {
         // Стоп всё предыдущее движение
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() TurnLeftStop() TurnRightStop()", 100);
-        _ctm.Stop();
+        _ctm.ClearAction();
         MasterName = masterName;
         CurrentState = State.Following;
         // Находим мастера по имени для GUID
@@ -46,7 +46,8 @@ public class SlaveController
 
     public void CmdStop()
     {
-        _ctm.Stop();
+        _ctm.ClearAction();
+        _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 100);
         CurrentState = State.Stopped;
         _stopTimer = 20; // 3 сек → Idle
         Logger.Info("SlaveCtrl: Stopped");

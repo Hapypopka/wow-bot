@@ -428,6 +428,12 @@ public class BotEngine : IDisposable
                 }
             }
 
+            // === HIVEMIND MASTER: Ctrl+ПКМ → направить слейвов ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Master)
+            {
+                Hivemind.MasterTick();
+            }
+
             // === HIVEMIND SLAVE: хилер всегда хилит ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer)
             {

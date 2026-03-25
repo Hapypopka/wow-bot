@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping }
+    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto }
 
     /// <summary>Режим слейва — каждая команда отменяет предыдущую</summary>
     public enum SlaveMode { Idle, Following, Attacking, Auto }
@@ -29,11 +29,13 @@ public class Hivemind
         get => _currentRole;
         set
         {
+            StopCtmWatch();
             _currentRole = value;
             Mode = SlaveMode.Idle;
             MasterName = "";
             LastCommand = null;
             LastCommandArg = "";
+            if (value == Role.Master) StartCtmWatch();
         }
     }
     public bool IsActive => CurrentRole != Role.None;
@@ -110,6 +112,113 @@ public class Hivemind
 
     /// <summary>Мастер: пинг (проверка связи)</summary>
     public void CmdPing() => SendCommand(Command.Ping);
+
+    /// <summary>Мастер: отправить слейвов в точку (Ctrl+ПКМ)</summary>
+    public void CmdGoto(float x, float y, float z)
+    {
+        string coords = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1};{1:F1};{2:F1}", x, y, z);
+        SendCommand(Command.Goto, coords);
+    }
+
+    // --- Мастер: Ctrl+ПКМ детекция (быстрый поток) ---
+    private float _lastCtmX, _lastCtmY, _lastCtmZ;
+    private Thread? _ctmWatchThread;
+    private volatile bool _ctmWatchRunning;
+    private volatile bool _gotoFired; // флаг для MasterTick — отправить команду
+    private volatile bool _needStopMovement; // флаг — остановить движение через Lua
+    private volatile int _suppressCtmTicks; // счётчик подавления CTM (каждый тик 5мс)
+
+    private float _gotoX, _gotoY, _gotoZ;
+
+    /// <summary>Запустить быстрый поток отслеживания Ctrl+CTM</summary>
+    public void StartCtmWatch()
+    {
+        if (_ctmWatchRunning) return;
+        _ctmWatchRunning = true;
+        _lastCtmX = _ctm.ReadX();
+        _lastCtmY = _ctm.ReadY();
+        _lastCtmZ = _ctm.ReadZ();
+
+        _ctmWatchThread = new Thread(() =>
+        {
+            while (_ctmWatchRunning)
+            {
+                try
+                {
+                    bool ctrlDown = Memory.WinApi.IsKeyDown(Memory.WinApi.VK_LCONTROL);
+
+                    if (ctrlDown)
+                    {
+                        int action = _ctm.GetCurrentAction();
+                        if (action == ClickToMove.ActionMoveTo)
+                        {
+                            float cx = _ctm.ReadX();
+                            float cy = _ctm.ReadY();
+                            float cz = _ctm.ReadZ();
+
+                            float dx = cx - _lastCtmX;
+                            float dy = cy - _lastCtmY;
+                            float moved = MathF.Sqrt(dx * dx + dy * dy);
+
+                            if (moved > 1f)
+                            {
+                                // CTM перебивает CTM — "иди на своё место"
+                                var p = _objectManager.LocalPlayer;
+                                if (p != null)
+                                {
+                                    float facing = p.Facing;
+                                    _ctm.MoveTo(p.X, p.Y, p.Z, 0.5f);
+                                    // Восстановить facing чтобы мастер не повернулся
+                                    _navigation.WriteFacing(p, facing);
+                                }
+
+                                _gotoX = cx;
+                                _gotoY = cy;
+                                _gotoZ = cz;
+                                _gotoFired = true;
+
+                                _lastCtmX = cx;
+                                _lastCtmY = cy;
+                                _lastCtmZ = cz;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Обновляем baseline когда Ctrl не зажат
+                        _lastCtmX = _ctm.ReadX();
+                        _lastCtmY = _ctm.ReadY();
+                        _lastCtmZ = _ctm.ReadZ();
+                    }
+                }
+                catch { /* memory read fail — ignore */ }
+
+                Thread.Sleep(5); // 5мс — ловим клик за 1 кадр WoW
+            }
+        })
+        { IsBackground = true, Name = "CtmWatch" };
+        _ctmWatchThread.Start();
+        Logger.Info("Hivemind: CTM watch thread started");
+    }
+
+    public void StopCtmWatch()
+    {
+        _ctmWatchRunning = false;
+        _ctmWatchThread = null;
+    }
+
+    /// <summary>Мастер тик: отправить Goto если быстрый поток поймал клик</summary>
+    public void MasterTick()
+    {
+        if (CurrentRole != Role.Master) return;
+
+        if (_gotoFired)
+        {
+            _gotoFired = false;
+            CmdGoto(_gotoX, _gotoY, _gotoZ);
+            Logger.Info($"Hivemind: MASTER Ctrl+CTM → Goto({_gotoX:F1}, {_gotoY:F1}, {_gotoZ:F1})");
+        }
+    }
 
     // ==================== СЛЕЙВ: СОСТОЯНИЕ ====================
 
@@ -219,6 +328,7 @@ WB_HIVE_TIME = 0
             "Scatter" => Command.Scatter,
             "Stack" => Command.Stack,
             "Ping" => Command.Ping,
+            "Goto" => Command.Goto,
             _ => null
         };
 
@@ -289,6 +399,20 @@ WB_HIVE_TIME = 0
                 _hook.ExecuteLua("MoveForwardStart() MoveForwardStop() MoveBackwardStart()", 200);
                 Task.Run(async () => { await Task.Delay(1500); _hook.ExecuteLua("MoveBackwardStop()", 100); });
                 Logger.Info($"Hivemind: SLAVE scatter {arg}m");
+                break;
+
+            case Command.Goto:
+                // Направить слейва в точку — парсим координаты
+                var coords = arg.Split(';');
+                if (coords.Length == 3 &&
+                    float.TryParse(coords[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gx) &&
+                    float.TryParse(coords[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gy) &&
+                    float.TryParse(coords[2], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gz))
+                {
+                    Mode = SlaveMode.Following; // чтобы хилер тоже двигался
+                    _ctm.MoveTo(gx, gy, gz, 1f);
+                    Logger.Info($"Hivemind: SLAVE goto ({gx:F1}, {gy:F1}, {gz:F1})");
+                }
                 break;
 
             case Command.Ping:

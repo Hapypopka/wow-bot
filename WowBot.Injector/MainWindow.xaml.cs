@@ -273,11 +273,29 @@ public partial class MainWindow : Window
             // Автодетект класса/спека
             string specName = "Unknown";
             string playerClass = "";
+            // Инициализируем логгер ДО детекта класса чтобы видеть логи
+            var earlyName = _objectManager.GetPlayerName() ?? "???";
+            WowBot.Core.Logger.SetCharName(earlyName);
+            WowBot.Core.Logger.Init();
+
+            WowBot.Core.Logger.Info($"DetectClass: luaReader.IsInitialized={_luaReader.IsInitialized}");
             if (_luaReader.IsInitialized)
             {
-                // Простой Lua — без анонимных функций
-                string lua = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) EditMacro(1,'WB',1,c..'|'..t1..'|'..t2..'|'..t3)";
-                string? classInfo = _luaReader.Execute(lua);
+                // Через Lua C API — надёжнее чем макросы
+                string lua = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) WB_R=c..'|'..t1..'|'..t2..'|'..t3";
+                string? classInfo = _endSceneHook.ExecuteLuaWithResult(lua);
+                WowBot.Core.Logger.Info($"DetectClass: capi=[{classInfo ?? "NULL"}]");
+
+                // Fallback на макрос если C API не дал результата
+                if (classInfo == null || !classInfo.Contains("|"))
+                {
+                    WowBot.Core.Logger.Info("DetectClass: C API failed, trying macro...");
+                    System.Threading.Thread.Sleep(500);
+                    string luaMacro = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) EditMacro(1,'WB',1,c..'|'..t1..'|'..t2..'|'..t3)";
+                    classInfo = _luaReader.Execute(luaMacro);
+                    WowBot.Core.Logger.Info($"DetectClass: macro=[{classInfo ?? "NULL"}]");
+                }
+
                 if (classInfo != null && classInfo.Contains("|"))
                 {
                     specName = DetectSpec(classInfo);
@@ -290,8 +308,6 @@ public partial class MainWindow : Window
             var charName = _objectManager.GetPlayerName() ?? "???";
             TxtCharName.Text = charName;
             TxtSpecName.Text = specName;
-            WowBot.Core.Logger.SetCharName(charName);
-            WowBot.Core.Logger.Init();
             TxtPidInfo.Text = $"PID: {wow.Id}";
             TxtStatus.Text = $"Hooked (PID: {wow.Id}) | {specName}";
             bool isHealer = specName.Contains("Holy") || specName.Contains("Disc") || specName.Contains("Resto");
@@ -791,11 +807,10 @@ public partial class MainWindow : Window
 
     private void BtnScanSpells_Click(object sender, RoutedEventArgs e)
     {
-        if (_luaReader == null || !_luaReader.IsInitialized) return;
+        if (_endSceneHook == null || !_endSceneHook.IsHooked) return;
 
-        // Определяем класс
-        string lua = "local _,c=UnitClass('player') EditMacro(1,'WB',1,c)";
-        string? cls = _luaReader.Execute(lua);
+        // Определяем класс через C API
+        string? cls = _endSceneHook.ExecuteLuaWithResult("local _,c=UnitClass('player') WB_R=c");
         if (cls == null || !ClassSpells.ContainsKey(cls))
         {
             TxtStatus.Text = $"Unknown class: {cls}";
@@ -808,7 +823,7 @@ public partial class MainWindow : Window
 
         foreach (var (id, eng) in spells)
         {
-            string? name = _luaReader.Eval($"GetSpellInfo({id})");
+            string? name = _endSceneHook.ExecuteLuaWithResult($"WB_R=tostring(GetSpellInfo({id}))");
             results.Add($"{id} = {name ?? "nil"} ({eng})");
         }
 

@@ -169,6 +169,12 @@ public class Navigation
         }
     }
 
+    /// <summary>Записать facing напрямую в память (без серверного поворота)</summary>
+    public void WriteFacing(Entities.WowUnit unit, float facing)
+    {
+        _memory.WriteFloat(unit.BaseAddress + Offsets.UnitRotation, facing);
+    }
+
     /// <summary>
     /// Полная остановка всего движения
     /// </summary>

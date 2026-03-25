@@ -96,4 +96,10 @@ public static class WinApi
 
     [DllImport("user32.dll")]
     public static extern bool DestroyWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+
+    public const int VK_LCONTROL = 0xA2;
+    public static bool IsKeyDown(int vKey) => (GetAsyncKeyState(vKey) & 0x8000) != 0;
 }

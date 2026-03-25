@@ -69,4 +69,11 @@ public class ClickToMove
     {
         return _memory.ReadInt32(CTM_Action);
     }
+
+    public float ReadX() => _memory.ReadFloat(CTM_X);
+    public float ReadY() => _memory.ReadFloat(CTM_Y);
+    public float ReadZ() => _memory.ReadFloat(CTM_Z);
+
+    /// <summary>Обнулить CTM action (персонаж не двигается)</summary>
+    public void ClearAction() => _memory.WriteInt32(CTM_Action, ActionNone);
 }
