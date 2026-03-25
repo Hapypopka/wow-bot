@@ -46,7 +46,11 @@ public class SlaveController
 
     public void CmdStop()
     {
-        _ctm.ClearAction();
+        // CTM на свою позицию — мгновенная остановка (CTM перебивает CTM)
+        var player = _objectManager.LocalPlayer;
+        if (player != null)
+            _ctm.MoveTo(player.X, player.Y, player.Z, 0.5f);
+        // НЕ вызываем ClearAction — иначе отменим свой же CTM-стоп
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 100);
         CurrentState = State.Stopped;
         _stopTimer = 20; // 3 сек → Idle
