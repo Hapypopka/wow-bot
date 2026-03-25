@@ -29,11 +29,13 @@ public class Hivemind
         public bool IgnoreGlobal { get; set; } = false; // игнорирует общие команды
         public double LastSeen { get; set; }
         public Command? ActiveCommand { get; set; } = null; // последняя команда
+        public string FollowTargetName { get; set; } = ""; // за кем бежит (пусто = мастер)
     }
 
     /// <summary>Список подключённых слейвов (мастер)</summary>
     public List<SlaveInfo> ConnectedSlaves { get; } = new();
     public event Action? OnSlavesChanged;
+    public void NotifySlavesChanged() => OnSlavesChanged?.Invoke();
 
     /// <summary>Режим слейва — каждая команда отменяет предыдущую</summary>
     public enum SlaveMode { Idle, Following, Attacking, Auto }
@@ -216,6 +218,37 @@ public class Hivemind
         if (string.IsNullOrEmpty(targetName)) return;
         SendCommand(Command.RefreshGuid, targetName);
         Logger.Info($"Hivemind: MASTER GuidByTarget → {targetName}");
+    }
+
+    /// <summary>Мастер: задать бафф конкретному слейву</summary>
+    public void CmdSetBuffToSlave(string slaveName, string buffType, string buffKey)
+    {
+        if (CurrentRole != Role.Master) return;
+        string msg = $"SetBuff:{buffType}={buffKey}~{slaveName}";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        _hook.ExecuteLua(lua, 200);
+        Logger.Info($"Hivemind: MASTER SetBuff {buffType}={buffKey} → {slaveName}");
+    }
+
+    /// <summary>Получить имя таргета мастера</summary>
+    public string? GetMasterTargetName()
+    {
+        var target = _objectManager.GetTarget();
+        if (target == null) return null;
+        string? name = target.Name;
+        if (string.IsNullOrEmpty(name))
+            name = _hook.ExecuteLuaWithResult("WB_R=UnitName('target')");
+        return string.IsNullOrEmpty(name) ? null : name;
+    }
+
+    /// <summary>Мастер: конкретному слейву — обновить GUID на указанное имя</summary>
+    public void CmdRefreshGuidToSlave(string slaveName, string targetName)
+    {
+        if (CurrentRole != Role.Master) return;
+        string msg = $"RefreshGuid:{targetName}~{slaveName}";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        _hook.ExecuteLua(lua, 200);
+        Logger.Info($"Hivemind: MASTER RefreshGuid {slaveName} → {targetName}");
     }
 
     public void CmdSetBuff(string buffType, string buffKey)

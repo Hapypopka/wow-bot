@@ -345,10 +345,10 @@ public partial class MasterPanel : Window
             bool isIdle = slave.ActiveCommand == null || slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Stop;
 
             var row = new Grid { Margin = new Thickness(0, 1, 0, 0), Height = 26 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // ник
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // кнопки
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // Левая часть: фон + иконка класса + ник
+            // Левая часть: иконка + ник + за кем бежит
             var namePanel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -363,29 +363,41 @@ public partial class MasterPanel : Window
             {
                 try
                 {
-                    var img = new System.Windows.Controls.Image
+                    namePanel.Children.Add(new System.Windows.Controls.Image
                     {
                         Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath)),
                         Width = 18, Height = 18,
                         Margin = new Thickness(4, 0, 4, 0),
                         VerticalAlignment = VerticalAlignment.Center,
-                    };
-                    namePanel.Children.Add(img);
+                    });
                 }
                 catch { }
             }
 
+            // Ник слейва
             namePanel.Children.Add(new TextBlock
             {
                 Text = slave.Name,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isIdle ? "#ff8888" : "#ccc")),
-                FontSize = 10,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c8aa6e")),
+                FontSize = 10, FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
             });
+
+            // За кем бежит: → M или → ИмяТаргета
+            string followLabel = string.IsNullOrEmpty(slave.FollowTargetName) ? "М" : slave.FollowTargetName;
+            namePanel.Children.Add(new TextBlock
+            {
+                Text = $" → {followLabel}",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(
+                    string.IsNullOrEmpty(slave.FollowTargetName) ? "#4a6741" : "#6688cc")),
+                FontSize = 9,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+
             Grid.SetColumn(namePanel, 0);
             row.Children.Add(namePanel);
 
-            // Правая часть: мини-кнопки команд
+            // Правая часть: кнопки команд + 🎯 + 🔒
             var cmdPanel = new StackPanel { Orientation = Orientation.Horizontal };
             var commands = new (string cmd, string icon, string tip)[]
             {
@@ -400,54 +412,49 @@ public partial class MasterPanel : Window
                 bool isActive = slave.ActiveCommand?.ToString().ToLower() == cmd;
                 var cmdBtn = new Button
                 {
-                    Content = icon,
-                    FontSize = 12,
+                    Content = icon, FontSize = 12,
                     Width = 26, Height = 26,
-                    Background = isActive
-                        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"))
-                        : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isActive ? "#4a6741" : "#1a1a28")),
                     Foreground = Brushes.White,
-                    BorderThickness = new Thickness(0),
-                    Padding = new Thickness(0),
+                    BorderThickness = new Thickness(0), Padding = new Thickness(0),
                     Margin = new Thickness(1, 0, 0, 0),
-                    Cursor = System.Windows.Input.Cursors.Hand,
-                    ToolTip = tip,
-                    Style = null!,
+                    Cursor = System.Windows.Input.Cursors.Hand, ToolTip = tip, Style = null!,
                 };
-
-                string slaveName = slave.Name;
-                string cmdName = cmd;
-                cmdBtn.PreviewMouseLeftButtonDown += (s, e) =>
-                {
-                    OnSlaveCommand?.Invoke(slaveName, cmdName);
-                    e.Handled = true;
-                };
+                string sn = slave.Name; string cn = cmd;
+                cmdBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(sn, cn); e.Handled = true; };
                 cmdPanel.Children.Add(cmdBtn);
             }
 
-            // Кнопка "Игнорировать общие" 🔒
+            // 🎯 GUID по таргету (индивидуальный)
+            var targetBtn = new Button
+            {
+                Content = "🎯", FontSize = 10,
+                Width = 22, Height = 26,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6688cc")),
+                BorderThickness = new Thickness(0), Padding = new Thickness(0),
+                Margin = new Thickness(1, 0, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Бежать за моим таргетом", Style = null!,
+            };
+            string tn = slave.Name;
+            targetBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(tn, "guidbytarget"); e.Handled = true; };
+            cmdPanel.Children.Add(targetBtn);
+
+            // 🔒 Игнорировать общие
             var lockBtn = new Button
             {
-                Content = slave.IgnoreGlobal ? "🔒" : "🔓",
-                FontSize = 10,
+                Content = slave.IgnoreGlobal ? "🔒" : "🔓", FontSize = 10,
                 Width = 22, Height = 26,
-                Background = slave.IgnoreGlobal
-                    ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6b3a3a"))
-                    : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(slave.IgnoreGlobal ? "#6b3a3a" : "#1a1a28")),
                 Foreground = Brushes.White,
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(0),
-                Margin = new Thickness(2, 0, 0, 0),
+                BorderThickness = new Thickness(0), Padding = new Thickness(0),
+                Margin = new Thickness(1, 0, 0, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = slave.IgnoreGlobal ? "Игнорирует общие команды" : "Слушает общие команды",
-                Style = null!,
+                ToolTip = slave.IgnoreGlobal ? "Игнорирует общие" : "Слушает общие", Style = null!,
             };
-            string lockName = slave.Name;
-            lockBtn.PreviewMouseLeftButtonDown += (s, e) =>
-            {
-                OnSlaveCommand?.Invoke(lockName, "toggle_ignore");
-                e.Handled = true;
-            };
+            string ln = slave.Name;
+            lockBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(ln, "toggle_ignore"); e.Handled = true; };
             cmdPanel.Children.Add(lockBtn);
 
             Grid.SetColumn(cmdPanel, 1);

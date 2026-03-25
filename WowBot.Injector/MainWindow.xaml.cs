@@ -161,8 +161,17 @@ public partial class MainWindow : Window
                 case "autopve:on": _botEngine.AutoPveEnabled = true; break;
                 case "autopve:off": _botEngine.AutoPveEnabled = false; break;
                 case "wipe": hive.CmdWipe(); break;
-                case "refreshguid": hive.CmdRefreshGuid(); break;
-                case "guidbytarget": hive.CmdGuidByTarget(); break;
+                case "refreshguid":
+                    foreach (var s in hive.ConnectedSlaves) s.FollowTargetName = "";
+                    hive.NotifySlavesChanged();
+                    hive.CmdRefreshGuid();
+                    break;
+                case "guidbytarget":
+                    string? tName = hive.GetMasterTargetName();
+                    foreach (var s in hive.ConnectedSlaves) s.FollowTargetName = tName ?? "";
+                    hive.NotifySlavesChanged();
+                    hive.CmdGuidByTarget();
+                    break;
             }
         };
         _masterPanel.OnToggleSlave += (name) =>
@@ -177,6 +186,16 @@ public partial class MainWindow : Window
             if (cmd == "toggle_ignore")
             {
                 hive.ToggleIgnoreGlobal(slaveName);
+                return;
+            }
+            if (cmd == "guidbytarget")
+            {
+                string? targetName = hive.GetMasterTargetName();
+                if (string.IsNullOrEmpty(targetName)) return;
+                var si = hive.ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
+                if (si != null) si.FollowTargetName = targetName;
+                hive.NotifySlavesChanged();
+                hive.CmdRefreshGuidToSlave(slaveName, targetName);
                 return;
             }
             var command = cmd switch
