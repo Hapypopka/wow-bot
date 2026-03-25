@@ -265,6 +265,8 @@ public partial class OverlayWindow : Window
     public bool UseDisp => IsSpellEnabled("Disp");
     public string SelectedSeal => _selectedSeal;
     public string SelectedBlessing => _selectedBlessing;
+    public void SetSelectedBlessing(string key) { _selectedBlessing = key; SaveSettings(); }
+    public void SetSelectedAura(string key) { _selectedAura = key; SaveSettings(); }
     public string SelectedAura => _selectedAura;
     public string SelectedShout => _selectedShout;
     public string SelectedStance => _selectedStance;

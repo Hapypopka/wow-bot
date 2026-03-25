@@ -70,6 +70,15 @@ public partial class MasterPanel : Window
 
     private void BtnAuto_Click(object sender, RoutedEventArgs e) => SendCommand("auto");
 
+    private bool _wipeOn;
+    private void BtnWipe_Click(object sender, RoutedEventArgs e)
+    {
+        _wipeOn = !_wipeOn;
+        BtnWipe.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_wipeOn ? "#6b2222" : "#1a1a28"));
+        BtnWipe.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_wipeOn ? "#ff4444" : "#888"));
+        OnCommand?.Invoke("wipe");
+    }
+
     private bool _autoPveOn;
     private void BtnAutoPve_Click(object sender, RoutedEventArgs e)
     {
@@ -234,6 +243,88 @@ public partial class MasterPanel : Window
             handled = true;
         }
         return IntPtr.Zero;
+    }
+
+    // --- Paladin buff selection ---
+    public event Action<string, string>? OnPaladinBuffChanged; // ("blessing", "BoM") или ("aura", "AuRet")
+    private string _masterBlessing = "BoM";
+    private string _masterAura = "AuRet";
+
+    public void InitPaladinBuffs(bool hasPaladins)
+    {
+        PaladinBuffPanel.Visibility = hasPaladins ? Visibility.Visible : Visibility.Collapsed;
+        if (!hasPaladins) return;
+
+        BlessingWrap.Children.Clear();
+        AuraWrap.Children.Clear();
+
+        var blessings = new (string key, string label)[]
+        {
+            ("BoM", "Мощь"), ("BoK", "Короли"), ("BoW", "Мудр"), ("BoS", "Неприк"),
+        };
+        var auras = new (string key, string label)[]
+        {
+            ("AuRet", "Возд"), ("AuDev", "Благ"), ("AuConc", "Соср"),
+            ("AuFrost", "Лёд"), ("AuFire", "Огонь"),
+        };
+
+        foreach (var (key, label) in blessings)
+        {
+            var btn = MakeBuffBtn(label, key == _masterBlessing);
+            string k = key;
+            btn.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                _masterBlessing = k;
+                RefreshBuffBtns(BlessingWrap, blessings, _masterBlessing);
+                OnPaladinBuffChanged?.Invoke("blessing", k);
+                e.Handled = true;
+            };
+            BlessingWrap.Children.Add(btn);
+        }
+
+        foreach (var (key, label) in auras)
+        {
+            var btn = MakeBuffBtn(label, key == _masterAura);
+            string k = key;
+            btn.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                _masterAura = k;
+                RefreshBuffBtns(AuraWrap, auras, _masterAura);
+                OnPaladinBuffChanged?.Invoke("aura", k);
+                e.Handled = true;
+            };
+            AuraWrap.Children.Add(btn);
+        }
+    }
+
+    private static Button MakeBuffBtn(string label, bool active)
+    {
+        return new Button
+        {
+            Content = label,
+            FontSize = 9,
+            MinWidth = 36, Height = 20,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#4a6741" : "#1a1a28")),
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#fff" : "#888")),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(3, 0, 3, 0),
+            Margin = new Thickness(1, 0, 0, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Style = null!,
+        };
+    }
+
+    private static void RefreshBuffBtns(System.Windows.Controls.WrapPanel wrap, (string key, string label)[] items, string selected)
+    {
+        for (int i = 0; i < wrap.Children.Count && i < items.Length; i++)
+        {
+            if (wrap.Children[i] is Button btn)
+            {
+                bool active = items[i].key == selected;
+                btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#4a6741" : "#1a1a28"));
+                btn.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#fff" : "#888"));
+            }
+        }
     }
 
     // --- Slave panel ---

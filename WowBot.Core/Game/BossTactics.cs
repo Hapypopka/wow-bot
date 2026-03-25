@@ -14,7 +14,8 @@ public class BossTactics
     private int _tacticTick;
     private int _coldflameMoveTicks;
     private bool _boneStormActive;
-    private bool _isMelee; // мили или рдд (определяется по классу)
+    private bool _isMelee;
+    private bool _marrowgarAnnounced; // один раз за сеанс
 
     // NPC IDs
     public const int NPC_MARROWGAR = 36612;
@@ -53,7 +54,15 @@ public class BossTactics
             try
             {
                 if (unit.NpcId == NPC_MARROWGAR)
+                {
+                    if (!_marrowgarAnnounced)
+                    {
+                        _marrowgarAnnounced = true;
+                        _hook.ExecuteLua("SendChatMessage('Я вижу Лорда Ребрада!','SAY')", 100);
+                        Logger.Info("BossTactics: Marrowgar detected — announced in chat");
+                    }
                     return TickMarrowgar(player, unit);
+                }
             }
             catch { }
         }

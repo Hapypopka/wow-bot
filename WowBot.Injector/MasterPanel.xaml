@@ -41,6 +41,12 @@
                     Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
                     Height="24" Margin="1,2,1,2" Cursor="Hand" ToolTip="Follow + авто-ассист в бою"/>
 
+            <!-- Wipe (stop heals) -->
+            <Button x:Name="BtnWipe" Content="💀 Вайп" FontSize="10"
+                    Click="BtnWipe_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#888" BorderThickness="0"
+                    Height="24" Margin="1,0,1,2" Cursor="Hand" ToolTip="Хилы перестают хилить"/>
+
             <!-- AutoPve toggle -->
             <Button x:Name="BtnAutoPve" Content="⚔ Автопве" FontSize="10"
                     Click="BtnAutoPve_Click" Style="{x:Null}"
@@ -49,6 +55,25 @@
 
             <!-- Slave panel -->
             <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>
+
+            <!-- Paladin buffs -->
+            <StackPanel x:Name="PaladinBuffPanel" Visibility="Collapsed" Margin="0,4,0,0">
+                <TextBlock Text="Бафы палов" FontSize="9" Foreground="#C8A84E" Margin="2,0,0,2"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="45"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Благо:" FontSize="9" Foreground="#888" VerticalAlignment="Center" Grid.Row="0"/>
+                    <WrapPanel x:Name="BlessingWrap" Grid.Row="0" Grid.Column="1" Margin="0,1,0,1"/>
+                    <TextBlock Text="Аура:" FontSize="9" Foreground="#888" VerticalAlignment="Center" Grid.Row="1"/>
+                    <WrapPanel x:Name="AuraWrap" Grid.Row="1" Grid.Column="1" Margin="0,1,0,1"/>
+                </Grid>
+            </StackPanel>
 
             <!-- Hotkey labels -->
             <UniformGrid Columns="3">

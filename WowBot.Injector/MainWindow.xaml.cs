@@ -160,6 +160,7 @@ public partial class MainWindow : Window
                 case "auto": hive.CmdAuto(); break;
                 case "autopve:on": _botEngine.AutoPveEnabled = true; break;
                 case "autopve:off": _botEngine.AutoPveEnabled = false; break;
+                case "wipe": hive.CmdWipe(); break;
             }
         };
         _masterPanel.OnToggleSlave += (name) =>
@@ -185,6 +186,10 @@ public partial class MainWindow : Window
                 _ => WowBot.Core.Game.Hivemind.Command.Stop
             };
             hive.SendCommandToSlave(slaveName, command);
+        };
+        _masterPanel.OnPaladinBuffChanged += (type, key) =>
+        {
+            _botEngine?.Hivemind.CmdSetBuff(type, key);
         };
         _masterPanel.Show();
 
@@ -386,12 +391,30 @@ public partial class MainWindow : Window
                 var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
                 _overlay?.UpdateSlaveList(slaves);
                 _masterPanel?.UpdateSlaves(slaves);
+                _masterPanel?.InitPaladinBuffs(slaves.Any(s => s.ClassName == "PALADIN"));
                 _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
             });
             _botEngine.Hivemind.OnNavChanged += () => Dispatcher.Invoke(() =>
             {
                 var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
                 _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
+            });
+
+            // Мастер задал бафф → слейв обновляет свои настройки
+            _botEngine.Hivemind.OnBuffChanged += (type, key) => Dispatcher.Invoke(() =>
+            {
+                if (_botEngine == null) return;
+                switch (type)
+                {
+                    case "blessing":
+                        _botEngine.SelectedBlessing = key;
+                        _overlay?.SetSelectedBlessing(key);
+                        break;
+                    case "aura":
+                        _botEngine.SelectedAura = key;
+                        _overlay?.SetSelectedAura(key);
+                        break;
+                }
             });
 
             // Авто-переключение UI от Hivemind команд

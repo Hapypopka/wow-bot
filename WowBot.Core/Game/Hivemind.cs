@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register }
+    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -58,6 +58,8 @@ public class Hivemind
 
     /// <summary>Текущий режим слейва</summary>
     public SlaveMode Mode { get; private set; } = SlaveMode.Idle;
+    /// <summary>Хилы не хилят (вайп)</summary>
+    public bool WipeMode { get; set; } = false;
 
     // Слейв: последняя полученная команда
     public Command? LastCommand { get; private set; }
@@ -67,6 +69,8 @@ public class Hivemind
     public event Action<Command, string>? OnCommandReceived;
     /// <summary>Авто-включение UI: ("rotation",true), ("buffs",true)</summary>
     public event Action<string, bool>? OnAutoToggle;
+    /// <summary>Мастер задал бафф: ("blessing","BoM"), ("aura","AuRet")</summary>
+    public event Action<string, string>? OnBuffChanged;
 
     public Hivemind(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
     {
@@ -185,6 +189,20 @@ public class Hivemind
 
     /// <summary>Мастер: пинг (проверка связи)</summary>
     public void CmdPing() => SendCommand(Command.Ping);
+
+    /// <summary>Мастер: задать бафф слейвам (blessing=BoM, aura=AuRet)</summary>
+    /// <summary>Мастер: хилы стоп хилить (вайп)</summary>
+    public void CmdWipe() => SendCommand(Command.Wipe);
+
+    public void CmdSetBuff(string buffType, string buffKey)
+    {
+        // Шлём напрямую, без адресации — все палы получат
+        if (CurrentRole != Role.Master) return;
+        string msg = $"SetBuff:{buffType}={buffKey}";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        _hook.ExecuteLua(lua, 200);
+        Logger.Info($"Hivemind: MASTER SetBuff {buffType}={buffKey}");
+    }
 
     /// <summary>Мастер: отправить слейвов в точку (Ctrl+ПКМ)</summary>
     public void CmdGoto(float x, float y, float z)
@@ -494,6 +512,8 @@ WB_HIVE_REG_TIME = 0
             "Stack" => Command.Stack,
             "Ping" => Command.Ping,
             "Goto" => Command.Goto,
+            "SetBuff" => Command.SetBuff,
+            "Wipe" => Command.Wipe,
             "Register" => Command.Register,
             _ => null
         };
@@ -518,6 +538,27 @@ WB_HIVE_REG_TIME = 0
 
     public void ExecuteSlaveCommand(Command cmd, string arg)
     {
+        // Wipe — хилы стоп
+        if (cmd == Command.Wipe)
+        {
+            WipeMode = !WipeMode;
+            Logger.Info($"Hivemind: SLAVE wipe mode = {WipeMode}");
+            return;
+        }
+
+        // SetBuff — не отменяет текущую команду
+        if (cmd == Command.SetBuff)
+        {
+            string cleanArg2 = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
+            if (cleanArg2.Contains('='))
+            {
+                var bParts = cleanArg2.Split('=', 2);
+                OnBuffChanged?.Invoke(bParts[0], bParts[1]);
+                Logger.Info($"Hivemind: SLAVE SetBuff {bParts[0]}={bParts[1]}");
+            }
+            return;
+        }
+
         // Register от слейва → мастер запоминает (не выполняет как команду)
         if (cmd == Command.Register)
         {
@@ -587,8 +628,10 @@ WB_HIVE_REG_TIME = 0
                 break;
 
             case Command.Stop:
-                // Стоп — всё отменено в ResetMode()
-                Logger.Info("Hivemind: SLAVE stop");
+                // Стоп движения — но ротация продолжается
+                OnAutoToggle?.Invoke("rotation", true);
+                OnAutoToggle?.Invoke("buffs", true);
+                Logger.Info("Hivemind: SLAVE stop (rotation continues)");
                 break;
 
             case Command.Scatter:

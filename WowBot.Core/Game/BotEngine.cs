@@ -532,8 +532,8 @@ public class BotEngine : IDisposable
                 }
             }
 
-            // === HIVEMIND SLAVE: хилер всегда хилит ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer)
+            // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
             {
                 // Follow к мастеру если есть команда follow/auto
                 if (Hivemind.Mode == Hivemind.SlaveMode.Following || Hivemind.Mode == Hivemind.SlaveMode.Auto)
@@ -553,15 +553,23 @@ public class BotEngine : IDisposable
             }
 
             // === HIVEMIND SLAVE: выполнение режима (DPS) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && Hivemind.Mode != Hivemind.SlaveMode.Idle)
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave)
             {
                 SlaveCtrl.FollowDistance = _followDistance;
 
                 switch (Hivemind.Mode)
                 {
                     case Hivemind.SlaveMode.Following:
-                        // Ко мне — только follow
+                        // Ко мне — follow + продолжать бить
                         SlaveCtrl.Tick();
+                        // Ротация продолжается если есть таргет
+                        var fTarget = _objectManager.GetTarget();
+                        if (fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player && fTarget.InCombat)
+                        {
+                            _navigation.FaceUnit(player, fTarget);
+                            string fScript = enemyCountLua + SpellFlagsLua + _fullScript;
+                            _hook.ExecuteLua(fScript, 500);
+                        }
                         break;
 
                     case Hivemind.SlaveMode.Attacking:
@@ -598,6 +606,17 @@ public class BotEngine : IDisposable
                                 SlaveAttackTick(player, enemyCountLua);
                             else
                                 SlaveCtrl.Tick();
+                        }
+                        break;
+
+                    case Hivemind.SlaveMode.Idle:
+                        // Стоп — не двигаемся, но бьём таргет если есть
+                        var idleTarget = _objectManager.GetTarget();
+                        if (idleTarget != null && idleTarget.IsAlive && idleTarget.Type != WowObjectType.Player && idleTarget.InCombat)
+                        {
+                            _navigation.FaceUnit(player, idleTarget);
+                            string idleScript = enemyCountLua + SpellFlagsLua + _fullScript;
+                            _hook.ExecuteLua(idleScript, 500);
                         }
                         break;
                 }
