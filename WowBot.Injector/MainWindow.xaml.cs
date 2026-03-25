@@ -208,10 +208,6 @@ public partial class MainWindow : Window
             };
             hive.SendCommandToSlave(slaveName, command);
         };
-        _masterPanel.OnPaladinBuffChanged += (type, key) =>
-        {
-            _botEngine?.Hivemind.CmdSetBuff(type, key);
-        };
         _masterPanel.Show();
 
         // NavPanel
@@ -412,7 +408,6 @@ public partial class MainWindow : Window
                 var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
                 _overlay?.UpdateSlaveList(slaves);
                 _masterPanel?.UpdateSlaves(slaves);
-                _masterPanel?.InitPaladinBuffs(slaves.Any(s => s.ClassName == "PALADIN"));
                 _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
             });
             _botEngine.Hivemind.OnNavChanged += () => Dispatcher.Invoke(() =>

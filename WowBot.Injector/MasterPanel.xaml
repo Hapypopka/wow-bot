@@ -1,7 +1,7 @@
 <Window x:Class="WowBot.Injector.MasterPanel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Master" Width="260" SizeToContent="Height"
+        Title="Master" Width="300" SizeToContent="Height"
         ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False"
         Background="Transparent"
@@ -69,24 +69,6 @@
             <!-- Slave panel -->
             <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>
 
-            <!-- Paladin buffs -->
-            <StackPanel x:Name="PaladinBuffPanel" Visibility="Collapsed" Margin="0,4,0,0">
-                <TextBlock Text="Бафы палов" FontSize="9" Foreground="#C8A84E" Margin="2,0,0,2"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="45"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Text="Благо:" FontSize="9" Foreground="#888" VerticalAlignment="Center" Grid.Row="0"/>
-                    <WrapPanel x:Name="BlessingWrap" Grid.Row="0" Grid.Column="1" Margin="0,1,0,1"/>
-                    <TextBlock Text="Аура:" FontSize="9" Foreground="#888" VerticalAlignment="Center" Grid.Row="1"/>
-                    <WrapPanel x:Name="AuraWrap" Grid.Row="1" Grid.Column="1" Margin="0,1,0,1"/>
-                </Grid>
-            </StackPanel>
 
             <!-- Hotkey labels -->
             <UniformGrid Columns="3">

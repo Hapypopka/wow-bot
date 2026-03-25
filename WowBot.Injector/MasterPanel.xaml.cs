@@ -248,87 +248,6 @@ public partial class MasterPanel : Window
         return IntPtr.Zero;
     }
 
-    // --- Paladin buff selection ---
-    public event Action<string, string>? OnPaladinBuffChanged; // ("blessing", "BoM") или ("aura", "AuRet")
-    private string _masterBlessing = "BoM";
-    private string _masterAura = "AuRet";
-
-    public void InitPaladinBuffs(bool hasPaladins)
-    {
-        PaladinBuffPanel.Visibility = hasPaladins ? Visibility.Visible : Visibility.Collapsed;
-        if (!hasPaladins) return;
-
-        BlessingWrap.Children.Clear();
-        AuraWrap.Children.Clear();
-
-        var blessings = new (string key, string label)[]
-        {
-            ("BoM", "Мощь"), ("BoK", "Короли"), ("BoW", "Мудр"), ("BoS", "Неприк"),
-        };
-        var auras = new (string key, string label)[]
-        {
-            ("AuRet", "Возд"), ("AuDev", "Благ"), ("AuConc", "Соср"),
-            ("AuFrost", "Лёд"), ("AuFire", "Огонь"),
-        };
-
-        foreach (var (key, label) in blessings)
-        {
-            var btn = MakeBuffBtn(label, key == _masterBlessing);
-            string k = key;
-            btn.PreviewMouseLeftButtonDown += (s, e) =>
-            {
-                _masterBlessing = k;
-                RefreshBuffBtns(BlessingWrap, blessings, _masterBlessing);
-                OnPaladinBuffChanged?.Invoke("blessing", k);
-                e.Handled = true;
-            };
-            BlessingWrap.Children.Add(btn);
-        }
-
-        foreach (var (key, label) in auras)
-        {
-            var btn = MakeBuffBtn(label, key == _masterAura);
-            string k = key;
-            btn.PreviewMouseLeftButtonDown += (s, e) =>
-            {
-                _masterAura = k;
-                RefreshBuffBtns(AuraWrap, auras, _masterAura);
-                OnPaladinBuffChanged?.Invoke("aura", k);
-                e.Handled = true;
-            };
-            AuraWrap.Children.Add(btn);
-        }
-    }
-
-    private static Button MakeBuffBtn(string label, bool active)
-    {
-        return new Button
-        {
-            Content = label,
-            FontSize = 9,
-            MinWidth = 36, Height = 20,
-            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#4a6741" : "#1a1a28")),
-            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#fff" : "#888")),
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(3, 0, 3, 0),
-            Margin = new Thickness(1, 0, 0, 0),
-            Cursor = System.Windows.Input.Cursors.Hand,
-            Style = null!,
-        };
-    }
-
-    private static void RefreshBuffBtns(System.Windows.Controls.WrapPanel wrap, (string key, string label)[] items, string selected)
-    {
-        for (int i = 0; i < wrap.Children.Count && i < items.Length; i++)
-        {
-            if (wrap.Children[i] is Button btn)
-            {
-                bool active = items[i].key == selected;
-                btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#4a6741" : "#1a1a28"));
-                btn.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#fff" : "#888"));
-            }
-        }
-    }
 
     // --- Slave panel ---
     public event Action<string>? OnToggleSlave;
@@ -343,19 +262,36 @@ public partial class MasterPanel : Window
         foreach (var slave in slaves)
         {
             bool isIdle = slave.ActiveCommand == null || slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Stop;
+            string bgColor = isIdle ? "#3d1f1f" : "#1a1a28";
 
-            var row = new Grid { Margin = new Thickness(0, 1, 0, 0), Height = 26 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // Строка 1: [🎯][иконка] Ник → За кем  [⚔][🏃][🔄][⏹][🔒]
+            var row = new Grid { Margin = new Thickness(0, 1, 0, 0), Height = 28 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 🎯
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // ник
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // команды
 
-            // Левая часть: иконка + ник + за кем бежит
+            // 🎯 слева
+            var targetBtn = new Button
+            {
+                Content = "🎯", FontSize = 9, Width = 22, Height = 28,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(
+                    string.IsNullOrEmpty(slave.FollowTargetName) ? "#1a1a28" : "#2a3a5a")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6688cc")),
+                BorderThickness = new Thickness(0), Padding = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand, ToolTip = "Бежать за моим таргетом", Style = null!,
+            };
+            string tn = slave.Name;
+            targetBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(tn, "guidbytarget"); e.Handled = true; };
+            Grid.SetColumn(targetBtn, 0);
+            row.Children.Add(targetBtn);
+
+            // Середина: иконка + ник + follow target
             var namePanel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Background = isIdle
-                    ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3d1f1f"))
-                    : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgColor)),
                 VerticalAlignment = VerticalAlignment.Stretch,
+                Margin = new Thickness(1, 0, 1, 0),
             };
 
             string iconPath = GetClassIconPath(slave.ClassName);
@@ -367,53 +303,54 @@ public partial class MasterPanel : Window
                     {
                         Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath)),
                         Width = 18, Height = 18,
-                        Margin = new Thickness(4, 0, 4, 0),
+                        Margin = new Thickness(3, 0, 3, 0),
                         VerticalAlignment = VerticalAlignment.Center,
                     });
                 }
                 catch { }
             }
 
-            // Ник слейва
+            // Ник
             namePanel.Children.Add(new TextBlock
             {
                 Text = slave.Name,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c8aa6e")),
                 FontSize = 10, FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 70,
             });
 
-            // За кем бежит: → M или → ИмяТаргета
+            // → За кем
             string followLabel = string.IsNullOrEmpty(slave.FollowTargetName) ? "М" : slave.FollowTargetName;
+            bool isCustomFollow = !string.IsNullOrEmpty(slave.FollowTargetName);
             namePanel.Children.Add(new TextBlock
             {
-                Text = $" → {followLabel}",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(
-                    string.IsNullOrEmpty(slave.FollowTargetName) ? "#4a6741" : "#6688cc")),
-                FontSize = 9,
+                Text = $"→{followLabel}",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isCustomFollow ? "#6688cc" : "#4a6741")),
+                FontSize = 8,
                 VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(2, 0, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 50,
             });
 
-            Grid.SetColumn(namePanel, 0);
+            Grid.SetColumn(namePanel, 1);
             row.Children.Add(namePanel);
 
-            // Правая часть: кнопки команд + 🎯 + 🔒
+            // Правая часть: [⚔][🏃][🔄][⏹][🔒]
             var cmdPanel = new StackPanel { Orientation = Orientation.Horizontal };
             var commands = new (string cmd, string icon, string tip)[]
             {
-                ("attack", "⚔", "Бейте таргет"),
-                ("follow", "🏃", "Ко мне"),
-                ("auto", "🔄", "Авто"),
-                ("stop", "⏹", "Стоп"),
+                ("attack", "⚔", "Бейте"), ("follow", "🏃", "Ко мне"),
+                ("auto", "🔄", "Авто"), ("stop", "⏹", "Стоп"),
             };
-
             foreach (var (cmd, icon, tip) in commands)
             {
                 bool isActive = slave.ActiveCommand?.ToString().ToLower() == cmd;
                 var cmdBtn = new Button
                 {
-                    Content = icon, FontSize = 12,
-                    Width = 26, Height = 26,
+                    Content = icon, FontSize = 11, Width = 24, Height = 28,
                     Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isActive ? "#4a6741" : "#1a1a28")),
                     Foreground = Brushes.White,
                     BorderThickness = new Thickness(0), Padding = new Thickness(0),
@@ -425,27 +362,11 @@ public partial class MasterPanel : Window
                 cmdPanel.Children.Add(cmdBtn);
             }
 
-            // 🎯 GUID по таргету (индивидуальный)
-            var targetBtn = new Button
-            {
-                Content = "🎯", FontSize = 10,
-                Width = 22, Height = 26,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6688cc")),
-                BorderThickness = new Thickness(0), Padding = new Thickness(0),
-                Margin = new Thickness(1, 0, 0, 0),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = "Бежать за моим таргетом", Style = null!,
-            };
-            string tn = slave.Name;
-            targetBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(tn, "guidbytarget"); e.Handled = true; };
-            cmdPanel.Children.Add(targetBtn);
-
-            // 🔒 Игнорировать общие
+            // 🔒
             var lockBtn = new Button
             {
-                Content = slave.IgnoreGlobal ? "🔒" : "🔓", FontSize = 10,
-                Width = 22, Height = 26,
+                Content = slave.IgnoreGlobal ? "🔒" : "🔓", FontSize = 9,
+                Width = 20, Height = 28,
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(slave.IgnoreGlobal ? "#6b3a3a" : "#1a1a28")),
                 Foreground = Brushes.White,
                 BorderThickness = new Thickness(0), Padding = new Thickness(0),
@@ -457,7 +378,7 @@ public partial class MasterPanel : Window
             lockBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(ln, "toggle_ignore"); e.Handled = true; };
             cmdPanel.Children.Add(lockBtn);
 
-            Grid.SetColumn(cmdPanel, 1);
+            Grid.SetColumn(cmdPanel, 2);
             row.Children.Add(cmdPanel);
             SlavePanel.Children.Add(row);
         }
