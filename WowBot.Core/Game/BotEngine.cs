@@ -96,6 +96,7 @@ public class BotEngine : IDisposable
     private bool _isMovingForward;
     private int _healerTickCount;
     private int _registerTick;
+    private int _blessingCooldown; // пропустить N баф-чеков после каста благословения
     private double _lastRegisterTime;
     private uint _hiveMacroAddr;
     private int _hiveAddrRetry;
@@ -407,6 +408,9 @@ public class BotEngine : IDisposable
                 return;
             }
 
+            // Глобальный декремент кулдаунов
+            if (_blessingCooldown > 0) _blessingCooldown--;
+
             // Считаем мобов рядом для AoE (Залп охотника и т.п.)
             int nearbyEnemies = CountNearbyEnemies(player);
             string enemyCountLua = $"WB_NE={nearbyEnemies} ";
@@ -571,8 +575,6 @@ public class BotEngine : IDisposable
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
             {
                 _buffCheckTick++;
-                // Классовые баффы (стойка/форма/власть/аура/печать) — каждые 3 тика (~0.5 сек)
-                // Обычные баффы (self-buffs) — каждые 20 тиков (~3 сек)
                 bool classBuffCheck = _buffCheckTick % 3 == 0;
                 bool fullBuffCheck = _buffCheckTick >= 20;
                 if (fullBuffCheck) _buffCheckTick = 0;
@@ -583,6 +585,7 @@ public class BotEngine : IDisposable
                     {
                         if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal}");
                         _hook.ExecuteLua(buffScript, 500);
+                        if (fullBuffCheck) _blessingCooldown = 40;
                         // Хилер-слейв: не прерываем — должен хилить после баффов
                         if (!(Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer))
                             return;
@@ -815,7 +818,7 @@ WB_AoE()
         { "Молитва стойкости", ("Свеча благочестия", "Слово силы: Стойкость") },
         { "Молитва духа", ("Свеча благочестия", "Божественный дух") },
         { "Молитва защиты от темной магии", ("Свеча благочестия", "Защита от темной магии") },
-        { "Дар дикой природы", ("Дикий шиповник", "Знак дикой природы") },
+        { "Дар дикой природы", ("Дикий шиполист", "Знак дикой природы") },
         { "Чародейская гениальность", ("Чародейский порошок", "Чародейский интеллект") },
     };
 
@@ -1002,8 +1005,8 @@ WB_AoE()
             {
                 var bs = blessSpell.Replace("'", "\\'");
                 var gs = greatSpell.Replace("'", "\\'");
-                // Сначала себя
-                sb.Append($"if not HasB('player','{bs}') and not HasB('player','{gs}') then if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end return end ");
+                // Сначала себя (TargetUnit('player') чтобы Великое благословение бафнуло свой класс)
+                sb.Append($"if not HasB('player','{bs}') and not HasB('player','{gs}') then TargetUnit('player') if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end ");
                 // Потом пати/рейд в радиусе 30 ярдов
                 sb.Append($"local nr=GetNumRaidMembers() ");
                 sb.Append($"if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{bs}') and not HasB(u,'{gs}') then TargetUnit(u) if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end end ");
@@ -1161,27 +1164,39 @@ WB_AoE()
             sb.Append($"if not HasB('player','{s}') then CastSpellByName('{s}') return end ");
         }
 
-        // Рейд-баффы: если есть реагент → Prayer, иначе → одиночная версия
+        // Рейд-баффы: проверяем себя + пати/рейд
         foreach (var buff in raidBuffs)
         {
             var s = buff.Replace("'", "\\'");
-            string aliasP = "";
+            string singleBuff = s;
             if (BuffAliases.TryGetValue(buff, out var alias))
+                singleBuff = alias.Replace("'", "\\'");
+
+            string reagent = "", fallback = "";
+            bool hasReagent = BuffReagents.TryGetValue(buff, out var reagentInfo);
+            if (hasReagent)
             {
-                var a = alias.Replace("'", "\\'");
-                aliasP = $" and not HasB('player','{a}')";
+                reagent = reagentInfo.reagent.Replace("'", "\\'");
+                fallback = reagentInfo.fallback.Replace("'", "\\'");
             }
 
-            if (BuffReagents.TryGetValue(buff, out var reagentInfo))
-            {
-                var r = reagentInfo.reagent.Replace("'", "\\'");
-                var fb = reagentInfo.fallback.Replace("'", "\\'");
-                sb.Append($"if not HasB('player','{s}'){aliasP} then if GetItemCount('{r}')>0 then CastSpellByName('{s}') else CastSpellByName('{fb}') end return end ");
-            }
+            // Проверить: нужен ли кому бафф? Ищем первого без бафа
+            // Себя
+            sb.Append($"if not HasB('player','{s}') and not HasB('player','{singleBuff}') then ");
+            if (hasReagent)
+                sb.Append($"if GetItemCount('{reagent}')>0 then CastSpellByName('{s}') else CastSpellByName('{fallback}') end ");
             else
-            {
-                sb.Append($"if not HasB('player','{s}'){aliasP} then CastSpellByName('{s}') return end ");
-            }
+                sb.Append($"CastSpellByName('{s}') ");
+            sb.Append("return end ");
+
+            // Пати/рейд
+            string castLogic = hasReagent
+                ? $"if GetItemCount('{reagent}')>0 then CastSpellByName('{s}') else TargetUnit(u) CastSpellByName('{fallback}') TargetLastTarget() end"
+                : $"TargetUnit(u) CastSpellByName('{s}') TargetLastTarget()";
+
+            sb.Append($"local nr=GetNumRaidMembers() ");
+            sb.Append($"if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{s}') and not HasB(u,'{singleBuff}') then {castLogic} return end end ");
+            sb.Append($"else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{s}') and not HasB(u,'{singleBuff}') then {castLogic} return end end end ");
         }
 
         sb.Append("end WB_Buff()");
