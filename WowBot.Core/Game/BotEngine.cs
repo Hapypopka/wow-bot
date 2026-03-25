@@ -79,6 +79,18 @@ public class BotEngine : IDisposable
         }
         return count;
     }
+    private int CountNearbyCombatEnemies(WowPlayer player, float range = 10f)
+    {
+        int count = 0;
+        foreach (var unit in _objectManager.Units)
+        {
+            if (!unit.IsAlive) continue;
+            if (!unit.InCombat) continue;
+            if (player.DistanceTo(unit) > range) continue;
+            count++;
+        }
+        return count;
+    }
     public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
     public string SelectedAura { get; set; } = "AuRet";
@@ -86,6 +98,7 @@ public class BotEngine : IDisposable
     public string SelectedStance { get; set; } = "";
     public string SelectedPresence { get; set; } = "";
     public string SelectedFeralForm { get; set; } = "";
+    public bool AoeSealSwap { get; set; } = false;
     public bool AutoPveEnabled { get; set; } = false;
     public BossTactics BossTactics { get; private set; }
     private int _autoPveTick;
@@ -192,6 +205,16 @@ public class BotEngine : IDisposable
             .Replace("not UnitAffectingCombat('player') and not UnitAffectingCombat('target')", "false")
             .Replace("not UnitAffectingCombat('target')", "false")
             .Replace("not UnitAffectingCombat('player')", "false");
+    }
+
+    /// <summary>Перечитать скрипты с диска (hot-reload без перезапуска)</summary>
+    public void ReloadScripts()
+    {
+        if (string.IsNullOrEmpty(PlayerClass)) return;
+        var fullScript = Rotations.AllRotations.GetFullScript(PlayerClass);
+        var instantScript = Rotations.AllRotations.GetInstantScript(PlayerClass);
+        LoadRotation(instantScript, fullScript);
+        Logger.Info($"Scripts reloaded for {PlayerClass}");
     }
 
     // --- Follow target ---
@@ -417,7 +440,8 @@ public class BotEngine : IDisposable
 
             // Считаем мобов рядом для AoE (Залп охотника и т.п.)
             int nearbyEnemies = CountNearbyEnemies(player);
-            string enemyCountLua = $"WB_NE={nearbyEnemies} ";
+            int combatEnemies = CountNearbyCombatEnemies(player);
+            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} ";
 
             // === HIVEMIND: слушаем addon messages (и мастер, и слейв) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave || Hivemind.CurrentRole == Hivemind.Role.Master)
@@ -963,21 +987,27 @@ WB_AoE()
         // Печать паладина (быстрая проверка)
         if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedSeal))
         {
-            string sealSpell = SelectedSeal switch
+            if (!hasAnything)
+                sb.Append("local function HasB(u,n) for i=1,40 do local b=UnitBuff(u,i) if not b then return false end if b==n then return true end end return false end ");
+            if (AoeEnabled && AoeSealSwap && (SelectedSeal == "SoV" || SelectedSeal == "SoC"))
             {
-                "SoV" => "Печать мщения",
-                "SoC" => "Печать повиновения",
-                "SoW" => "Печать мудрости",
-                "SoL" => "Печать Света",
-                _ => ""
-            };
-            if (!string.IsNullOrEmpty(sealSpell))
-            {
-                if (!hasAnything)
-                    sb.Append("local function HasB(u,n) for i=1,40 do local b=UnitBuff(u,i) if not b then return false end if b==n then return true end end return false end ");
-                sb.Append($"if not HasB('player','{sealSpell}') then CastSpellByName('{sealSpell}') return end ");
-                hasAnything = true;
+                sb.Append("if WB_NCE>=2 then if not HasB('player','Печать повиновения') then CastSpellByName('Печать повиновения') end ");
+                sb.Append("else if not HasB('player','Печать мщения') then CastSpellByName('Печать мщения') end end ");
             }
+            else
+            {
+                string sealSpell = SelectedSeal switch
+                {
+                    "SoV" => "Печать мщения",
+                    "SoC" => "Печать повиновения",
+                    "SoW" => "Печать мудрости",
+                    "SoL" => "Печать Света",
+                    _ => ""
+                };
+                if (!string.IsNullOrEmpty(sealSpell))
+                    sb.Append($"if not HasB('player','{sealSpell}') then CastSpellByName('{sealSpell}') return end ");
+            }
+            hasAnything = true;
         }
 
         if (!hasAnything) return "";
@@ -1032,18 +1062,27 @@ WB_AoE()
         // Печать паладина (только для PALADIN)
         if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedSeal))
         {
-            string sealSpell = SelectedSeal switch
+            // AoE свап: SoV↔SoC при 2+ врагах (только для рет/прот)
+            if (AoeEnabled && AoeSealSwap && (SelectedSeal == "SoV" || SelectedSeal == "SoC"))
             {
-                "SoV" => "Печать мщения",
-                "SoC" => "Печать повиновения",
-                "SoW" => "Печать мудрости",
-                "SoL" => "Печать Света",
-                _ => ""
-            };
-            if (!string.IsNullOrEmpty(sealSpell))
+                sb.Append("if WB_NCE>=2 then if not HasB('player','Печать повиновения') then CastSpellByName('Печать повиновения') return end ");
+                sb.Append("else if not HasB('player','Печать мщения') then CastSpellByName('Печать мщения') return end end ");
+            }
+            else
             {
-                var ss = sealSpell.Replace("'", "\\'");
-                sb.Append($"if not HasB('player','{ss}') then CastSpellByName('{ss}') return end ");
+                string sealSpell = SelectedSeal switch
+                {
+                    "SoV" => "Печать мщения",
+                    "SoC" => "Печать повиновения",
+                    "SoW" => "Печать мудрости",
+                    "SoL" => "Печать Света",
+                    _ => ""
+                };
+                if (!string.IsNullOrEmpty(sealSpell))
+                {
+                    var ss = sealSpell.Replace("'", "\\'");
+                    sb.Append($"if not HasB('player','{ss}') then CastSpellByName('{ss}') return end ");
+                }
             }
         }
 

@@ -493,6 +493,12 @@ public partial class MainWindow : Window
                     case "Воздух": _botEngine.SelectedTotemAir = key; break;
                 }
             };
+            _overlay.OnReloadScripts += () =>
+            {
+                if (_botEngine == null) return;
+                _botEngine.ReloadScripts();
+                _overlay.UpdateInfo("Scripts reloaded!");
+            };
             _overlay.OnHivemindCommand += (cmd) =>
             {
                 if (_botEngine == null) return;
@@ -538,8 +544,10 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.Info($"Applying sliders: followDist={savedDist} maxRange={savedRange}");
             _botEngine.FollowDistance = savedDist;
             _botEngine.MaxTargetRange = savedRange;
+            // Экспортировать встроенные скрипты в scripts/ (если ещё нет)
+            WowBot.Core.Game.Rotations.AllRotations.ExportScripts();
             _overlay.UpdateStatus(specName);
-            _overlay.SetPlayerClass(playerClass, specName);
+            _overlay.SetPlayerClass(playerClass, specName, charName);
             WowBot.Core.Logger.Info("Showing overlay...");
             _overlay.Show();
             WowBot.Core.Logger.Info("Overlay shown OK");
@@ -868,6 +876,7 @@ public partial class MainWindow : Window
                 _botEngine.BuffsEnabled = _overlay.BuffsEnabled;
                 _botEngine.SpellFlagsLua = _overlay.GetSpellFlagsLua();
                 _botEngine.EnabledBuffs = _overlay.GetEnabledBuffs();
+                _botEngine.AoeSealSwap = _overlay.AoeSealSwap;
                 _botEngine.SelectedSeal = _overlay.SelectedSeal;
                 _botEngine.SelectedBlessing = _overlay.SelectedBlessing;
                 _botEngine.SelectedAura = _overlay.SelectedAura;

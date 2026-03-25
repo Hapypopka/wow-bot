@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace WowBot.Core.Game.Rotations;
 
 public static class AllRotations
@@ -477,6 +479,11 @@ public static class AllRotations
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
+    -- Возрождение (боевой рес) — если кто-то в пати/рейде мертв
+    if WB_S.Rebirth~=false and UnitAffectingCombat('player') and IsReady('Возрождение') then
+        local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) then TargetUnit(u) CastSpellByName('Возрождение') return end end
+        else for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) then TargetUnit(u) CastSpellByName('Возрождение') return end end end
+    end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
@@ -581,7 +588,31 @@ public static class AllRotations
 
     // ==================== PUBLIC API ====================
 
-    public static string GetFullScript(string playerClass = "") => playerClass switch
+    private static readonly string ScriptsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts");
+
+    /// <summary>Загрузить скрипт из файла scripts/{class}.lua, fallback на встроенный</summary>
+    public static string GetFullScript(string playerClass = "")
+    {
+        // Попытка загрузить из файла
+        var filePath = Path.Combine(ScriptsDir, $"{playerClass.ToLower()}.lua");
+        if (File.Exists(filePath))
+        {
+            try
+            {
+                var script = File.ReadAllText(filePath);
+                if (!string.IsNullOrWhiteSpace(script))
+                {
+                    Logger.Info($"Loaded script from file: {filePath}");
+                    return script;
+                }
+            }
+            catch { /* fallback to built-in */ }
+        }
+
+        return GetBuiltInScript(playerClass);
+    }
+
+    public static string GetBuiltInScript(string playerClass) => playerClass switch
     {
         "WARRIOR" => Warrior(),
         "PALADIN" => Paladin(),
@@ -595,6 +626,20 @@ public static class AllRotations
         "DRUID" => Druid(),
         _ => Mage(), // fallback
     };
+
+    /// <summary>Экспортировать все встроенные скрипты в папку scripts/</summary>
+    public static void ExportScripts()
+    {
+        Directory.CreateDirectory(ScriptsDir);
+        var classes = new[] { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "DRUID" };
+        foreach (var cls in classes)
+        {
+            var path = Path.Combine(ScriptsDir, $"{cls.ToLower()}.lua");
+            if (!File.Exists(path))
+                File.WriteAllText(path, GetBuiltInScript(cls));
+        }
+        Logger.Info($"Exported {classes.Length} scripts to {ScriptsDir}");
+    }
 
     public static string GetInstantScript(string playerClass = "") => @"
 local function WB_Inst()

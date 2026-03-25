@@ -168,6 +168,12 @@
                     </DockPanel>
                 </Border>
 
+                <Border Style="{StaticResource MenuItem}" MouseLeftButtonDown="MenuReload_Click">
+                    <DockPanel>
+                        <TextBlock Text="🔄 Reload" Foreground="#7a8b5e" FontSize="11" FontWeight="SemiBold"/>
+                    </DockPanel>
+                </Border>
+
                 <!-- Info -->
                 <Border Background="#16181e" Padding="8,4" Margin="0,2,0,0" CornerRadius="3">
                     <StackPanel>

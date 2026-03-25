@@ -74,6 +74,7 @@ public partial class OverlayWindow : Window
     };
 
     // AoE toggles
+    private ToggleButton? _aoeSocToggle;
     private ToggleButton _chkMultiDot = null!, _chkMindSear = null!;
     private Slider _sliderMaxDots = null!, _sliderMindSear = null!;
 
@@ -263,6 +264,7 @@ public partial class OverlayWindow : Window
     public bool UseMF => IsSpellEnabled("MF");
     public bool UseSF => IsSpellEnabled("SF");
     public bool UseDisp => IsSpellEnabled("Disp");
+    public bool AoeSealSwap => _aoeSocToggle?.IsChecked == true;
     public string SelectedSeal => _selectedSeal;
     public string SelectedBlessing => _selectedBlessing;
     public void SetSelectedBlessing(string key) { _selectedBlessing = key; SaveSettings(); }
@@ -524,6 +526,7 @@ public partial class OverlayWindow : Window
         // ==================== DRUID ====================
         ["Balance Druid"] = new[]
         {
+            ("Rebirth", "rebirth.jpg", "Возрождение", true),
             ("Moonkin", "moonkin.jpg", "Облик лунного совуха", true),
             ("Starfall", "starfall.jpg", "Звездопад", true),
             ("Treants", "treants.jpg", "Сила Природы", true),
@@ -536,6 +539,7 @@ public partial class OverlayWindow : Window
         },
         ["Feral Druid"] = new[]
         {
+            ("Rebirth", "rebirth.jpg", "Возрождение", true),
             // Кот
             ("Roar", "savage_roar.jpg", "Дикий рев", true),
             ("TF", "tigers_fury.jpg", "Тигриное неистовство", true),
@@ -555,6 +559,7 @@ public partial class OverlayWindow : Window
         },
         ["Resto Druid"] = new[]
         {
+            ("Rebirth", "rebirth.jpg", "Возрождение", true),
             ("ToL", "tree_life.jpg", "Древо Жизни", true),
             ("WG", "wild_growth.jpg", "Буйный рост", true),
             ("NS", "natures_swift.jpg", "Природная стремительность", true),
@@ -642,7 +647,11 @@ public partial class OverlayWindow : Window
     private Point _dragStart;
 
     // --- Persistent settings ---
-    private static readonly string SettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+    private static readonly string SettingsDir = AppDomain.CurrentDomain.BaseDirectory;
+    private string _charName = "";
+    private string SettingsPath => string.IsNullOrEmpty(_charName)
+        ? Path.Combine(SettingsDir, "settings.json")
+        : Path.Combine(SettingsDir, $"settings_{_charName}.json");
     private Dictionary<string, JsonElement> _saved = new();
 
     public List<string> GetEnabledBuffs()
@@ -749,6 +758,8 @@ public partial class OverlayWindow : Window
     private void MenuFollow_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Follow");
     private void MenuTarget_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Target");
     private void MenuHivemind_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Hivemind");
+    private void MenuReload_Click(object s, MouseButtonEventArgs e) => OnReloadScripts?.Invoke();
+    public event Action? OnReloadScripts;
 
     private void ShowSubmenu(string name)
     {
@@ -899,6 +910,16 @@ public partial class OverlayWindow : Window
             var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
             AddSpellIcon(wrap, "starfall.jpg", "Звездопад (авто)", true);
             AddSpellIcon(wrap, "hurricane.jpg", "Гроза (в разработке)", false);
+            SubContent.Children.Add(wrap);
+        }
+        else if (specKey == "Ret Paladin" || specKey == "Prot Paladin")
+        {
+            AddLabel("AoE печати");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            var btn = AddSpellIcon(wrap, "seal_command.jpg", "Печать повиновения (2+ врагов)", GetSavedBool("aoe_SoC", true));
+            btn.Checked += (s, e) => SaveSettings();
+            btn.Unchecked += (s, e) => SaveSettings();
+            _aoeSocToggle = btn;
             SubContent.Children.Add(wrap);
         }
         else if (specKey == "Demonology Lock")
@@ -1527,10 +1548,13 @@ public partial class OverlayWindow : Window
     }
 
     // --- Buff setup ---
-    public void SetPlayerClass(string playerClass, string specName = "")
+    public void SetPlayerClass(string playerClass, string specName = "", string charName = "")
     {
         _playerClass = playerClass;
         _playerSpec = specName;
+        _charName = charName;
+        // Перегружаем настройки из файла этого персонажа
+        LoadSettings();
         _spellToggles.Clear();
         _buffToggles.Clear();
 
@@ -1766,6 +1790,10 @@ public partial class OverlayWindow : Window
             else if (_saved.ContainsKey("slider_defHP")) data["slider_defHP"] = GetSavedDouble("slider_defHP", 40);
             if (_chkDefAll != null) data["chk_defAll"] = _chkDefAll.IsChecked == true;
             else if (_saved.ContainsKey("chk_defAll")) data["chk_defAll"] = GetSavedBool("chk_defAll", false);
+
+            // AoE toggles
+            if (_aoeSocToggle != null) data["aoe_SoC"] = _aoeSocToggle.IsChecked == true;
+            else if (_saved.ContainsKey("aoe_SoC")) data["aoe_SoC"] = GetSavedBool("aoe_SoC", true);
 
             // Checkboxes — если UI не создан, сохраняем предыдущее значение из _saved
             data["chk_autoFace"] = _chkAutoFace != null ? _chkAutoFace.IsChecked == true : GetSavedBool("chk_autoFace", true);
