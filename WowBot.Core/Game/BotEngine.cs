@@ -91,6 +91,7 @@ public class BotEngine : IDisposable
     public string PlayerClass { get; set; } = "";
     private bool _isMovingForward;
     private int _healerTickCount;
+    private int _registerTick;
     private uint _hiveMacroAddr;
     private int _hiveAddrRetry;
 
@@ -156,13 +157,14 @@ public class BotEngine : IDisposable
     private Timer? _afkTimer;
     private void AfkTick(object? state)
     {
-        if (WowProcess == null || WowProcess.HasExited) return;
-        var hwnd = WowProcess.MainWindowHandle;
-        if (hwnd != IntPtr.Zero)
+        try
         {
-            Memory.WinApi.PostMessage(hwnd, 0x0100, 0x28, 0); // WM_KEYDOWN, VK_DOWN
-            Memory.WinApi.PostMessage(hwnd, 0x0101, 0x28, 0); // WM_KEYUP, VK_DOWN
+            if (_hook == null || !_hook.IsHooked) return;
+            // ResetAfk() — сбрасывает таймер AFK внутри WoW
+            _hook.ExecuteLua("ResetAfk()", 100);
+            Logger.Info("AntiAFK: ResetAfk() sent");
         }
+        catch { /* hook может быть занят */ }
     }
 
     public LuaReader? LuaReader { get; set; }
@@ -389,8 +391,8 @@ public class BotEngine : IDisposable
             int nearbyEnemies = CountNearbyEnemies(player);
             string enemyCountLua = $"WB_NE={nearbyEnemies} ";
 
-            // === HIVEMIND SLAVE: слушаем команды мастера ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave)
+            // === HIVEMIND: слушаем addon messages (и мастер, и слейв) ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave || Hivemind.CurrentRole == Hivemind.Role.Master)
             {
                 // Устанавливаем слушатель (один раз)
                 if (!Hivemind._slaveListenerInstalled)
@@ -424,7 +426,23 @@ public class BotEngine : IDisposable
                             Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
                             Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
                         }
+                        // Register всегда обработать (даже если time == LastHiveCheck)
+                        else if (cmd == Hivemind.Command.Register && Hivemind.CurrentRole == Hivemind.Role.Master)
+                        {
+                            Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
+                        }
                     }
+                }
+            }
+
+            // === HIVEMIND SLAVE: периодический Register (каждые ~10 сек) ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave)
+            {
+                _registerTick++;
+                if (_registerTick >= 66) // 66 * 150мс ≈ 10 сек
+                {
+                    _registerTick = 0;
+                    Hivemind.SendRegister(PlayerClass);
                 }
             }
 

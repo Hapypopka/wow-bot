@@ -18,7 +18,20 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto }
+    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register }
+
+    /// <summary>Информация о подключённом слейве</summary>
+    public class SlaveInfo
+    {
+        public string Name { get; set; } = "";
+        public string ClassName { get; set; } = "";
+        public bool Selected { get; set; } = false; // выбран для адресных команд
+        public double LastSeen { get; set; }
+    }
+
+    /// <summary>Список подключённых слейвов (мастер)</summary>
+    public List<SlaveInfo> ConnectedSlaves { get; } = new();
+    public event Action? OnSlavesChanged;
 
     /// <summary>Режим слейва — каждая команда отменяет предыдущую</summary>
     public enum SlaveMode { Idle, Following, Attacking, Auto }
@@ -63,12 +76,23 @@ public class Hivemind
 
     // ==================== МАСТЕР ====================
 
-    /// <summary>Отправить команду всем слейвам</summary>
+    /// <summary>Получить список выбранных слейвов (пусто = все)</summary>
+    private string GetTargetList()
+    {
+        var selected = ConnectedSlaves.Where(s => s.Selected).Select(s => s.Name).ToList();
+        return selected.Count > 0 ? string.Join(",", selected) : "";
+    }
+
+    /// <summary>Отправить команду слейвам (адресно или всем)</summary>
     public void SendCommand(Command cmd, string arg = "")
     {
         if (CurrentRole != Role.Master) return;
 
-        string msg = $"{cmd}:{arg}";
+        // Если есть выбранные слейвы — добавляем |список
+        string targets = GetTargetList();
+        string fullArg = string.IsNullOrEmpty(targets) ? arg : $"{arg}~{targets}";
+
+        string msg = $"{cmd}:{fullArg}";
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
@@ -220,6 +244,39 @@ public class Hivemind
         }
     }
 
+    /// <summary>Мастер: зарегистрировать слейва (или обновить)</summary>
+    public void RegisterSlave(string name, string className)
+    {
+        var existing = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
+        if (existing != null)
+        {
+            existing.ClassName = className;
+            existing.LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        }
+        else
+        {
+            ConnectedSlaves.Add(new SlaveInfo
+            {
+                Name = name,
+                ClassName = className,
+                LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            });
+            Logger.Info($"Hivemind: slave registered — {name} ({className})");
+        }
+        OnSlavesChanged?.Invoke();
+    }
+
+    /// <summary>Мастер: тогл выбора слейва</summary>
+    public void ToggleSlaveSelection(string name)
+    {
+        var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
+        if (slave != null)
+        {
+            slave.Selected = !slave.Selected;
+            OnSlavesChanged?.Invoke();
+        }
+    }
+
     // ==================== СЛЕЙВ: СОСТОЯНИЕ ====================
 
     /// <summary>Сбросить при включении слейва</summary>
@@ -230,6 +287,16 @@ public class Hivemind
         _slaveListenerInstalled = false;
         if (_botEngine != null) _botEngine.LastHiveCheck = 0;
         Logger.Info("Hivemind: slave state reset");
+    }
+
+    /// <summary>Слейв: отправить Register мастеру (имя + класс)</summary>
+    public void SendRegister(string playerClass)
+    {
+        string name = _objectManager.GetPlayerName() ?? "unknown";
+        string msg = $"Register:{name};{playerClass}";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        _hook.ExecuteLua(lua, 200);
+        Logger.Info($"Hivemind: SLAVE sent Register — {name} ({playerClass})");
     }
 
     internal bool _slaveListenerInstalled;
@@ -329,6 +396,7 @@ WB_HIVE_TIME = 0
             "Stack" => Command.Stack,
             "Ping" => Command.Ping,
             "Goto" => Command.Goto,
+            "Register" => Command.Register,
             _ => null
         };
 
@@ -352,8 +420,38 @@ WB_HIVE_TIME = 0
 
     public void ExecuteSlaveCommand(Command cmd, string arg)
     {
+        // Register от слейва → мастер запоминает (не выполняет как команду)
+        if (cmd == Command.Register)
+        {
+            if (CurrentRole == Role.Master)
+            {
+                var regParts = arg.Split(';');
+                if (regParts.Length >= 2)
+                    RegisterSlave(regParts[0], regParts[1]);
+            }
+            return;
+        }
+
+        // Мастер не выполняет команды слейвов
+        if (CurrentRole != Role.Slave) return;
+
+        // Фильтр адресации: если в arg есть ~список — проверяем своё имя
+        string cleanArg = arg;
+        if (arg.Contains('~'))
+        {
+            var split = arg.Split('~', 2);
+            cleanArg = split[0];
+            string targetList = split[1];
+            string myName = _objectManager.GetPlayerName() ?? "";
+            if (!string.IsNullOrEmpty(targetList) && !targetList.Split(',').Contains(myName))
+            {
+                Logger.Info($"Hivemind: SLAVE skipping {cmd} — not in target list [{targetList}]");
+                return; // команда не для нас
+            }
+        }
+
         LastCommand = cmd;
-        LastCommandArg = arg;
+        LastCommandArg = cleanArg;
 
         // Каждая команда отменяет предыдущую
         ResetMode();
@@ -363,31 +461,31 @@ WB_HIVE_TIME = 0
             case Command.Follow:
             case Command.Stack:
                 // Ко мне — только следовать, не бить
-                MasterName = arg;
+                MasterName = cleanArg;
                 Mode = SlaveMode.Following;
-                _botEngine?.SlaveCtrl.CmdFollow(arg);
+                _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
                 OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"Hivemind: SLAVE follow master={arg}");
+                Logger.Info($"Hivemind: SLAVE follow master={cleanArg}");
                 break;
 
             case Command.Attack:
                 // Бейте таргет — ассистим мастера, ротация, подбег к цели
-                MasterName = arg;
+                MasterName = cleanArg;
                 Mode = SlaveMode.Attacking;
-                _hook.ExecuteLua($"AssistUnit('{arg}') StartAttack()", 200);
+                _hook.ExecuteLua($"AssistUnit('{cleanArg}') StartAttack()", 200);
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"Hivemind: SLAVE attack target of {arg}");
+                Logger.Info($"Hivemind: SLAVE attack target of {cleanArg}");
                 break;
 
             case Command.Auto:
                 // Авторежим — follow + auto-assist в бою
-                MasterName = arg;
+                MasterName = cleanArg;
                 Mode = SlaveMode.Auto;
-                _botEngine?.SlaveCtrl.CmdFollow(arg);
+                _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"Hivemind: SLAVE auto mode, master={arg}");
+                Logger.Info($"Hivemind: SLAVE auto mode, master={cleanArg}");
                 break;
 
             case Command.Stop:
@@ -398,12 +496,12 @@ WB_HIVE_TIME = 0
             case Command.Scatter:
                 _hook.ExecuteLua("MoveForwardStart() MoveForwardStop() MoveBackwardStart()", 200);
                 Task.Run(async () => { await Task.Delay(1500); _hook.ExecuteLua("MoveBackwardStop()", 100); });
-                Logger.Info($"Hivemind: SLAVE scatter {arg}m");
+                Logger.Info($"Hivemind: SLAVE scatter {cleanArg}m");
                 break;
 
             case Command.Goto:
                 // Направить слейва в точку — парсим координаты
-                var coords = arg.Split(';');
+                var coords = cleanArg.Split(';');
                 if (coords.Length == 3 &&
                     float.TryParse(coords[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gx) &&
                     float.TryParse(coords[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gy) &&

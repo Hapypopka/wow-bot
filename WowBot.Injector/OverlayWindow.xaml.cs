@@ -1124,6 +1124,36 @@ public partial class OverlayWindow : Window
     }
     private bool _autoSwitch = true;
     private bool _alwaysAssist = false;
+    private List<WowBot.Core.Game.Hivemind.SlaveInfo> _slaveList = new();
+
+    /// <summary>Обновить список слейвов из Hivemind</summary>
+    public void UpdateSlaveList(List<WowBot.Core.Game.Hivemind.SlaveInfo> slaves)
+    {
+        _slaveList = slaves;
+        if (_activeSubmenu == "Hivemind") ShowSubmenu("Hivemind");
+    }
+
+    private static string GetClassIcon(string className)
+    {
+        string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+        string iconName = className.ToUpperInvariant() switch
+        {
+            "WARRIOR" => "warrior.jpg",
+            "PALADIN" => "paladin.jpg",
+            "HUNTER" => "hunter.jpg",
+            "ROGUE" => "rogue.jpg",
+            "PRIEST" => "priest.jpg",
+            "DEATHKNIGHT" => "dk.jpg",
+            "SHAMAN" => "shaman.jpg",
+            "MAGE" => "mage.jpg",
+            "WARLOCK" => "warlock.jpg",
+            "DRUID" => "druid.jpg",
+            _ => ""
+        };
+        if (string.IsNullOrEmpty(iconName)) return "";
+        string path = System.IO.Path.Combine(basePath, "Icons", iconName);
+        return System.IO.File.Exists(path) ? path : "";
+    }
 
     private void BuildHivemindSubmenu()
     {
@@ -1177,7 +1207,75 @@ public partial class OverlayWindow : Window
 
             AddHiveButton("⚔ Бейте таргет", "attack");
             AddHiveButton("🏃 Ко мне", "follow");
+            AddHiveButton("🔄 Авто", "auto");
             AddHiveButton("⏹ Стоп", "stop");
+
+            // Панель слейвов
+            if (_slaveList.Count > 0)
+            {
+                AddLabel("Слейвы");
+                var hint = new TextBlock
+                {
+                    Text = "Клик = выбрать. Пусто = команды для всех.",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666")),
+                    FontSize = 9, Margin = new Thickness(5, 0, 0, 4),
+                };
+                SubContent.Children.Add(hint);
+
+                foreach (var slave in _slaveList)
+                {
+                    var slaveBtn = new Button
+                    {
+                        Background = slave.Selected
+                            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"))
+                            : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252830")),
+                        Foreground = slave.Selected
+                            ? Brushes.White
+                            : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888")),
+                        BorderThickness = new Thickness(0),
+                        Padding = new Thickness(6, 4, 6, 4),
+                        Cursor = Cursors.Hand,
+                        FontSize = 11,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        Margin = new Thickness(0, 1, 0, 1),
+                        HorizontalContentAlignment = HorizontalAlignment.Left,
+                    };
+
+                    // Иконка класса + имя
+                    var sp = new StackPanel { Orientation = Orientation.Horizontal };
+                    string classIcon = GetClassIcon(slave.ClassName);
+                    if (!string.IsNullOrEmpty(classIcon))
+                    {
+                        try
+                        {
+                            var img = new System.Windows.Controls.Image
+                            {
+                                Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(classIcon)),
+                                Width = 18, Height = 18,
+                                Margin = new Thickness(0, 0, 6, 0),
+                            };
+                            sp.Children.Add(img);
+                        }
+                        catch { }
+                    }
+                    sp.Children.Add(new TextBlock { Text = slave.Name, VerticalAlignment = VerticalAlignment.Center });
+                    slaveBtn.Content = sp;
+
+                    string slaveName = slave.Name;
+                    slaveBtn.Click += (s, e) => { OnHivemindCommand?.Invoke($"toggle_slave:{slaveName}"); ShowSubmenu("Hivemind"); };
+                    SubContent.Children.Add(slaveBtn);
+                }
+            }
+            else
+            {
+                var noSlaves = new TextBlock
+                {
+                    Text = "Слейвы не подключены",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#555")),
+                    FontSize = 10, Margin = new Thickness(5, 6, 0, 0),
+                };
+                SubContent.Children.Add(noSlaves);
+            }
         }
         else if (_hivemindRole == "slave")
         {

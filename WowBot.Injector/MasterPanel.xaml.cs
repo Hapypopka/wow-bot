@@ -211,6 +211,86 @@ public partial class MasterPanel : Window
         return IntPtr.Zero;
     }
 
+    // --- Slave panel ---
+    public event Action<string>? OnToggleSlave;
+
+    public void UpdateSlaves(List<WowBot.Core.Game.Hivemind.SlaveInfo> slaves)
+    {
+        SlavePanel.Children.Clear();
+        if (slaves.Count == 0) return;
+
+        foreach (var slave in slaves)
+        {
+            var btn = new Button
+            {
+                Background = slave.Selected
+                    ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"))
+                    : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                BorderThickness = new Thickness(0),
+                Height = 28, Margin = new Thickness(1, 1, 1, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(6, 0, 6, 0),
+                Style = null!,
+            };
+
+            var sp = new StackPanel { Orientation = Orientation.Horizontal };
+
+            // Иконка класса
+            string iconPath = GetClassIconPath(slave.ClassName);
+            if (!string.IsNullOrEmpty(iconPath))
+            {
+                try
+                {
+                    var img = new System.Windows.Controls.Image
+                    {
+                        Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath)),
+                        Width = 20, Height = 20,
+                        Margin = new Thickness(0, 0, 6, 0),
+                    };
+                    sp.Children.Add(img);
+                }
+                catch { }
+            }
+
+            // Ник
+            sp.Children.Add(new TextBlock
+            {
+                Text = slave.Name,
+                Foreground = slave.Selected ? Brushes.White : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#aaa")),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+
+            btn.Content = sp;
+            string name = slave.Name;
+            btn.PreviewMouseLeftButtonDown += (s, e) => { OnToggleSlave?.Invoke(name); e.Handled = true; };
+            SlavePanel.Children.Add(btn);
+        }
+    }
+
+    private static string GetClassIconPath(string className)
+    {
+        string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+        string iconName = className.ToUpperInvariant() switch
+        {
+            "WARRIOR" => "mortal_strike.jpg",
+            "PALADIN" => "seal_vengeance.jpg",
+            "HUNTER" => "steady_shot.jpg",
+            "ROGUE" => "backstab.jpg",
+            "PRIEST" => "holy_light.jpg",
+            "DEATHKNIGHT" => "frost_strike.jpg",
+            "SHAMAN" => "chain_lightning.jpg",
+            "MAGE" => "fireball.jpg",
+            "WARLOCK" => "shadow_bolt.jpg",
+            "DRUID" => "moonkin.jpg",
+            _ => ""
+        };
+        if (string.IsNullOrEmpty(iconName)) return "";
+        string path = System.IO.Path.Combine(basePath, "Icons", iconName);
+        return System.IO.File.Exists(path) ? path : "";
+    }
+
     // --- Save/Load hotkeys ---
     public Dictionary<string, string> GetHotkeySettings()
     {

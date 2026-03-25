@@ -40,6 +40,9 @@
                     Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
                     Height="24" Margin="1,2,1,2" Cursor="Hand" ToolTip="Follow + авто-ассист в бою"/>
 
+            <!-- Slave panel -->
+            <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>
+
             <!-- Hotkey labels -->
             <UniformGrid Columns="3">
                 <TextBlock x:Name="TxtHkAttack" Text="" FontSize="9" Foreground="#555"

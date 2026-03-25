@@ -61,6 +61,7 @@ public partial class MainWindow : Window
     private ObjectManager? _objectManager;
     private EndSceneHook? _endSceneHook;
     private BotEngine? _botEngine;
+    private string _playerClass = "";
     private LuaReader? _luaReader;
     private DispatcherTimer? _updateTimer;
     private OverlayWindow? _overlay;
@@ -157,6 +158,11 @@ public partial class MainWindow : Window
                 case "stop": hive.CmdStop(); break;
                 case "auto": hive.CmdAuto(); break;
             }
+        };
+        _masterPanel.OnToggleSlave += (name) =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.ToggleSlaveSelection(name);
         };
         // Загрузить хоткеи из settings
         _masterPanel.Show();
@@ -278,28 +284,28 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.SetCharName(earlyName);
             WowBot.Core.Logger.Init();
 
-            WowBot.Core.Logger.Info($"DetectClass: luaReader.IsInitialized={_luaReader.IsInitialized}");
-            if (_luaReader.IsInitialized)
+            // Через Lua C API — не зависит от LuaReader
             {
-                // Через Lua C API — надёжнее чем макросы
                 string lua = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) WB_R=c..'|'..t1..'|'..t2..'|'..t3";
                 string? classInfo = _endSceneHook.ExecuteLuaWithResult(lua);
                 WowBot.Core.Logger.Info($"DetectClass: capi=[{classInfo ?? "NULL"}]");
-
-                // Fallback на макрос если C API не дал результата
-                if (classInfo == null || !classInfo.Contains("|"))
-                {
-                    WowBot.Core.Logger.Info("DetectClass: C API failed, trying macro...");
-                    System.Threading.Thread.Sleep(500);
-                    string luaMacro = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) EditMacro(1,'WB',1,c..'|'..t1..'|'..t2..'|'..t3)";
-                    classInfo = _luaReader.Execute(luaMacro);
-                    WowBot.Core.Logger.Info($"DetectClass: macro=[{classInfo ?? "NULL"}]");
-                }
 
                 if (classInfo != null && classInfo.Contains("|"))
                 {
                     specName = DetectSpec(classInfo);
                     playerClass = classInfo.Split('|')[0];
+                }
+                else
+                {
+                    WowBot.Core.Logger.Info("DetectClass: FAILED, retrying in 500ms...");
+                    System.Threading.Thread.Sleep(500);
+                    classInfo = _endSceneHook.ExecuteLuaWithResult(lua);
+                    WowBot.Core.Logger.Info($"DetectClass: retry=[{classInfo ?? "NULL"}]");
+                    if (classInfo != null && classInfo.Contains("|"))
+                    {
+                        specName = DetectSpec(classInfo);
+                        playerClass = classInfo.Split('|')[0];
+                    }
                 }
             }
             // Обновляем UI — connected state
@@ -320,6 +326,7 @@ public partial class MainWindow : Window
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
             _botEngine.WowProcess = wow;
+            _playerClass = playerClass;
             _botEngine.PlayerClass = playerClass;
             _botEngine.SpecName = specName;
             _botEngine.LuaReader = _luaReader;
@@ -329,6 +336,13 @@ public partial class MainWindow : Window
             _botEngine.LoadRotation(instantScript, fullScript);
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
+
+            // Слейвы подключились — обновить панели
+            _botEngine.Hivemind.OnSlavesChanged += () => Dispatcher.Invoke(() =>
+            {
+                _overlay?.UpdateSlaveList(_botEngine.Hivemind.ConnectedSlaves.ToList());
+                _masterPanel?.UpdateSlaves(_botEngine.Hivemind.ConnectedSlaves.ToList());
+            });
 
             // Авто-переключение UI от Hivemind команд
             _botEngine.Hivemind.OnAutoToggle += (what, on) => Dispatcher.Invoke(() =>
@@ -393,6 +407,8 @@ public partial class MainWindow : Window
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Slave;
                         hive.ResetSlaveState();
                         _botEngine.EnsureRunning();
+                        // Отправить Register мастеру
+                        Task.Run(() => { System.Threading.Thread.Sleep(1000); hive.SendRegister(_playerClass); });
                         break;
                     case "role:none":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.None;
@@ -405,6 +421,13 @@ public partial class MainWindow : Window
                     case "stack": hive.CmdStack(); break;
                     case "ping": hive.CmdPing(); break;
                     case "auto": hive.CmdAuto(); break;
+                    default:
+                        if (cmd.StartsWith("toggle_slave:"))
+                        {
+                            string slaveName = cmd["toggle_slave:".Length..];
+                            hive.ToggleSlaveSelection(slaveName);
+                        }
+                        break;
                 }
             };
             WowBot.Core.Logger.Info("Loading overlay settings...");
@@ -438,6 +461,8 @@ public partial class MainWindow : Window
                         hive.ResetSlaveState();
                         _botEngine.EnsureRunning();
                         _overlay.SetHivemindRole("slave");
+                        // Отправить Register мастеру через 1 сек (слушатель должен успеть)
+                        Task.Run(() => { System.Threading.Thread.Sleep(1000); hive.SendRegister(_playerClass); });
                         WowBot.Core.Logger.Info("AutoConnect: role=Slave");
                         break;
                 }
