@@ -449,8 +449,20 @@ public class BotEngine : IDisposable
                         if (cmd != null && time > LastHiveCheck)
                         {
                             LastHiveCheck = time;
-                            Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
-                            Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
+                            // Слейв: игнорировать команды от чужих мастеров
+                            if (Hivemind.CurrentRole == Hivemind.Role.Slave &&
+                                !string.IsNullOrEmpty(Hivemind.MasterName) &&
+                                !string.IsNullOrEmpty(sender) &&
+                                sender != Hivemind.MasterName)
+                            {
+                                if (_logTick == 0) Logger.Info($"Hivemind: IGNORED {cmd} from {sender} (my master={Hivemind.MasterName})");
+                                // не выполняем
+                            }
+                            else
+                            {
+                                Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
+                                Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
+                            }
                         }
                     }
 
