@@ -190,8 +190,39 @@ public class Hivemind
     public void CmdGoto(float x, float y, float z)
     {
         string coords = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1};{1:F1};{2:F1}", x, y, z);
+
+        // Навигация: если выбраны конкретные слейвы — только им
+        if (NavSelectedSlaves.Count > 0)
+        {
+            string targets = string.Join(",", NavSelectedSlaves);
+            string fullArg = $"{coords}~{targets}";
+            string msg2 = $"Goto:{fullArg}";
+            string lua2 = $"SendAddonMessage('{CHANNEL}','{msg2}','PARTY')";
+            _hook.ExecuteLua(lua2, 200);
+
+            foreach (var name in NavSelectedSlaves)
+            {
+                var sl = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
+                if (sl != null) sl.ActiveCommand = Command.Goto;
+            }
+
+            Logger.Info($"Hivemind: MASTER Goto → [{targets}]");
+
+            // Автоснятие: убрать незакреплённых, оставить закреплённых
+            NavSelectedSlaves.RemoveWhere(n => !NavPinnedSlaves.Contains(n));
+            OnNavChanged?.Invoke();
+            OnSlavesChanged?.Invoke();
+            return;
+        }
+
         SendCommand(Command.Goto, coords);
     }
+
+    // --- Навигация: выбор слейвов для Ctrl+ПКМ ---
+    public HashSet<string> NavSelectedSlaves { get; } = new();
+    public HashSet<string> NavPinnedSlaves { get; } = new(); // закреплённые — не снимаются после Goto
+    public event Action? OnNavChanged;
+    public void NotifyNavChanged() => OnNavChanged?.Invoke();
 
     // --- Мастер: Ctrl+ПКМ детекция (быстрый поток) ---
     private float _lastCtmX, _lastCtmY, _lastCtmZ;

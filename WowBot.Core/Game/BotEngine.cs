@@ -396,6 +396,13 @@ public class BotEngine : IDisposable
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
 
+            // Авто-принятие реса для слейвов
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && player.IsDead)
+            {
+                _hook.ExecuteLua("AcceptResurrect()", 100);
+                return;
+            }
+
             // Считаем мобов рядом для AoE (Залп охотника и т.п.)
             int nearbyEnemies = CountNearbyEnemies(player);
             string enemyCountLua = $"WB_NE={nearbyEnemies} ";

@@ -1,0 +1,20 @@
+<Window x:Class="WowBot.Injector.NavPanel"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Nav" Width="180" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        Background="Transparent"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border CornerRadius="8" Background="#CC0a0a0f" BorderBrush="#40C8A84E" BorderThickness="1" Padding="6">
+        <StackPanel>
+            <TextBlock Text="Навигация" FontSize="10" FontWeight="Bold"
+                       Foreground="#C8A84E" Margin="0,0,0,4"/>
+            <StackPanel x:Name="SlaveList"/>
+            <TextBlock x:Name="TxtHint" Text="Ctrl+ПКМ → все"
+                       FontSize="9" Foreground="#555" Margin="0,4,0,0"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+</Window>

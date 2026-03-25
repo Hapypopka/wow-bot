@@ -66,6 +66,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _updateTimer;
     private OverlayWindow? _overlay;
     private MasterPanel? _masterPanel;
+    private NavPanel? _navPanel;
 
     private int _autoConnectPid;
     private string _autoConnectRole = "";
@@ -185,12 +186,39 @@ public partial class MainWindow : Window
         };
         // Загрузить хоткеи из settings
         _masterPanel.Show();
+        if (_botEngine?.WowProcess != null)
+            _masterPanel.SetOwnerHwnd(_botEngine.WowProcess.MainWindowHandle);
+
+        // NavPanel
+        _navPanel = new NavPanel();
+        _navPanel.OnSlaveToggled += (name) =>
+        {
+            if (_botEngine == null) return;
+            var nav = _botEngine.Hivemind.NavSelectedSlaves;
+            if (nav.Contains(name)) nav.Remove(name); else nav.Add(name);
+            _botEngine.Hivemind.NotifyNavChanged();
+        };
+        _navPanel.OnSlavePinToggled += (name) =>
+        {
+            if (_botEngine == null) return;
+            var pins = _botEngine.Hivemind.NavPinnedSlaves;
+            if (pins.Contains(name)) pins.Remove(name); else pins.Add(name);
+            // Закреплённый автоматически выбирается
+            if (pins.Contains(name)) _botEngine.Hivemind.NavSelectedSlaves.Add(name);
+            _botEngine.Hivemind.NotifyNavChanged();
+        };
+        _navPanel.Show();
+        // Привязать к окну WoW чтобы не плавала поверх всех окон
+        if (_botEngine?.WowProcess != null)
+            _navPanel.SetOwnerHwnd(_botEngine.WowProcess.MainWindowHandle);
     }
 
     private void CloseMasterPanel()
     {
         _masterPanel?.Close();
         _masterPanel = null;
+        _navPanel?.Close();
+        _navPanel = null;
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
@@ -359,8 +387,15 @@ public partial class MainWindow : Window
             // Слейвы подключились — обновить панели
             _botEngine.Hivemind.OnSlavesChanged += () => Dispatcher.Invoke(() =>
             {
-                _overlay?.UpdateSlaveList(_botEngine.Hivemind.ConnectedSlaves.ToList());
-                _masterPanel?.UpdateSlaves(_botEngine.Hivemind.ConnectedSlaves.ToList());
+                var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
+                _overlay?.UpdateSlaveList(slaves);
+                _masterPanel?.UpdateSlaves(slaves);
+                _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
+            });
+            _botEngine.Hivemind.OnNavChanged += () => Dispatcher.Invoke(() =>
+            {
+                var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
+                _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
             });
 
             // Авто-переключение UI от Hivemind команд

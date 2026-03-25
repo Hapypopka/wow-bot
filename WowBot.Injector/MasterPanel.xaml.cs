@@ -16,6 +16,8 @@ public partial class MasterPanel : Window
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_NOACTIVATE = 0x08000000;
@@ -43,6 +45,14 @@ public partial class MasterPanel : Window
         };
         Loaded += (s, e) => RegisterAll();
         Closed += (s, e) => UnregisterAll();
+    }
+
+    /// <summary>Привязать к окну WoW</summary>
+    public void SetOwnerHwnd(IntPtr wowHwnd)
+    {
+        if (wowHwnd == IntPtr.Zero) return;
+        var myHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        SetParent(myHwnd, wowHwnd);
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
