@@ -32,15 +32,20 @@ public class SlaveController
 
     // === Команды ===
 
+    /// <summary>Один раз при старте слейва — найти GUID мастера через TargetUnit</summary>
+    public void InitMasterGuid(string masterName)
+    {
+        if (_masterGuid != 0) return; // уже найден
+        MasterName = masterName;
+        FindMasterGuid(masterName);
+    }
+
     public void CmdFollow(string masterName)
     {
-        // Стоп всё предыдущее движение
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() TurnLeftStop() TurnRightStop()", 100);
         _ctm.ClearAction();
         MasterName = masterName;
         CurrentState = State.Following;
-        // Находим мастера по имени для GUID
-        FindMasterGuid(masterName);
         Logger.Info($"SlaveCtrl: Following {masterName}");
     }
 
@@ -129,6 +134,7 @@ public class SlaveController
 
     private void FindMasterGuid(string name)
     {
+        // TargetUnit для точного поиска по имени, потом TargetLastTarget чтобы не сломать таргет
         _hook.ExecuteLua($"TargetUnit('{name}')", 200);
         System.Threading.Thread.Sleep(150);
         _objectManager.Update();
@@ -138,6 +144,7 @@ public class SlaveController
             _masterGuid = target.Guid;
             Logger.Info($"SlaveCtrl: master GUID=0x{_masterGuid:X}");
         }
+        _hook.ExecuteLua("TargetLastTarget()", 100);
     }
 
     private WowUnit? FindMaster()

@@ -590,6 +590,10 @@ WB_HIVE_REG_TIME = 0
         LastCommand = cmd;
         LastCommandArg = cleanArg;
 
+        // Один раз — найти GUID мастера (при первой команде)
+        if (!string.IsNullOrEmpty(cleanArg) && cmd != Command.Stop && cmd != Command.Scatter)
+            _botEngine?.SlaveCtrl.InitMasterGuid(cleanArg);
+
         // Каждая команда отменяет предыдущую
         ResetMode();
 
