@@ -26,7 +26,9 @@ public class Hivemind
         public string Name { get; set; } = "";
         public string ClassName { get; set; } = "";
         public bool Selected { get; set; } = false; // выбран для адресных команд
+        public bool IgnoreGlobal { get; set; } = false; // игнорирует общие команды
         public double LastSeen { get; set; }
+        public Command? ActiveCommand { get; set; } = null; // последняя команда
     }
 
     /// <summary>Список подключённых слейвов (мастер)</summary>
@@ -88,16 +90,63 @@ public class Hivemind
     {
         if (CurrentRole != Role.Master) return;
 
-        // Если есть выбранные слейвы — добавляем |список
-        string targets = GetTargetList();
-        string fullArg = string.IsNullOrEmpty(targets) ? arg : $"{arg}~{targets}";
+        // Определяем получателей
+        var selected = ConnectedSlaves.Where(s => s.Selected).ToList();
+        bool isTargeted = selected.Count > 0;
 
+        // Для общей команды — исключить IgnoreGlobal слейвов, адресовать остальным
+        string targets;
+        List<SlaveInfo> affected;
+        if (isTargeted)
+        {
+            targets = string.Join(",", selected.Select(s => s.Name));
+            affected = selected;
+        }
+        else
+        {
+            var nonIgnored = ConnectedSlaves.Where(s => !s.IgnoreGlobal).ToList();
+            if (nonIgnored.Count > 0 && nonIgnored.Count < ConnectedSlaves.Count)
+            {
+                // Есть игнорирующие — адресуем только неигнорирующим
+                targets = string.Join(",", nonIgnored.Select(s => s.Name));
+            }
+            else
+            {
+                targets = ""; // все получат (или игнорирующих нет)
+            }
+            affected = nonIgnored.Count > 0 ? nonIgnored : ConnectedSlaves;
+        }
+
+        string fullArg = string.IsNullOrEmpty(targets) ? arg : $"{arg}~{targets}";
         string msg = $"{cmd}:{fullArg}";
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
+        foreach (var slave in affected)
+            slave.ActiveCommand = cmd;
+        OnSlavesChanged?.Invoke();
+
         Logger.Info($"Hivemind: MASTER sent {cmd} {arg}");
         OnStatusChanged?.Invoke($"Sent: {cmd}");
+    }
+
+    /// <summary>Мастер: отправить команду конкретному слейву</summary>
+    public void SendCommandToSlave(string slaveName, Command cmd)
+    {
+        if (CurrentRole != Role.Master) return;
+        string masterName = _objectManager.GetPlayerName() ?? "master";
+        string arg = cmd == Command.Stop ? "" : masterName;
+        string fullArg = $"{arg}~{slaveName}";
+        string msg = $"{cmd}:{fullArg}";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        _hook.ExecuteLua(lua, 200);
+
+        // Обновить ActiveCommand
+        var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
+        if (slave != null) slave.ActiveCommand = cmd;
+        OnSlavesChanged?.Invoke();
+
+        Logger.Info($"Hivemind: MASTER sent {cmd} to {slaveName}");
     }
 
     /// <summary>Мастер: бейте мой таргет</summary>
@@ -277,6 +326,17 @@ public class Hivemind
         }
     }
 
+    /// <summary>Мастер: тогл игнорирования общих команд</summary>
+    public void ToggleIgnoreGlobal(string name)
+    {
+        var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
+        if (slave != null)
+        {
+            slave.IgnoreGlobal = !slave.IgnoreGlobal;
+            OnSlavesChanged?.Invoke();
+        }
+    }
+
     // ==================== СЛЕЙВ: СОСТОЯНИЕ ====================
 
     /// <summary>Сбросить при включении слейва</summary>
@@ -366,19 +426,29 @@ WB_HIVE_FRAME:SetScript('OnEvent', function(self, event, prefix, msg, channel, s
     if prefix ~= '{CHANNEL}' then return end
     if sender == UnitName('player') then return end
     local cmd, arg = strsplit(':', msg, 2)
-    WB_HIVE_CMD = cmd or ''
-    WB_HIVE_ARG = arg or ''
-    WB_HIVE_SENDER = sender or ''
-    WB_HIVE_TIME = GetTime()
-    WB_HIVE_NEW=1
+    if cmd == 'Register' then
+        WB_HIVE_REG = arg or ''
+        WB_HIVE_REG_SENDER = sender or ''
+        WB_HIVE_REG_TIME = GetTime()
+    else
+        WB_HIVE_CMD = cmd or ''
+        WB_HIVE_ARG = arg or ''
+        WB_HIVE_SENDER = sender or ''
+        WB_HIVE_TIME = GetTime()
+    end
 end)
 WB_HIVE_REGISTERED = true
 WB_HIVE_CMD = ''
 WB_HIVE_TIME = 0
+WB_HIVE_REG = ''
+WB_HIVE_REG_TIME = 0
 ";
 
     public static string GetSlaveReadScript() =>
         "WB_R=(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0')";
+
+    public static string GetRegisterReadScript() =>
+        "WB_R=(WB_HIVE_REG or '')..'|'..(WB_HIVE_REG_SENDER or '')..'|'..(WB_HIVE_REG_TIME or '0')";
 
     public static (Command? cmd, string arg, string sender, double time) ParseSlaveResponse(string? response)
     {

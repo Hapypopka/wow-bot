@@ -87,6 +87,39 @@ public partial class OverlayWindow : Window
         ("CoE", "curse_elements.jpg", "Проклятие стихий"),
     };
 
+    // Totem selection (radio-style, 4 elements) — SHAMAN only
+    private string _selectedTotemEarth = "";
+    private string _selectedTotemFire = "";
+    private string _selectedTotemWater = "";
+    private string _selectedTotemAir = "";
+    private readonly Dictionary<string, ToggleButton> _totemEarthToggles = new();
+    private readonly Dictionary<string, ToggleButton> _totemFireToggles = new();
+    private readonly Dictionary<string, ToggleButton> _totemWaterToggles = new();
+    private readonly Dictionary<string, ToggleButton> _totemAirToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] TotemEarthOptions =
+    {
+        ("Stoneskin", "stoneskin_totem.jpg", "Тотем каменной кожи"),
+        ("SoE", "strength_of_earth.jpg", "Тотем силы земли"),
+        ("Tremor", "tremor_totem.jpg", "Тотем трепета"),
+    };
+    private static readonly (string key, string icon, string tooltip)[] TotemFireOptions =
+    {
+        ("Flametongue", "flametongue_totem.jpg", "Тотем языка пламени"),
+        ("FireRes", "fire_resistance.jpg", "Тотем защиты от огня"),
+        ("FrostRes", "frost_resistance.jpg", "Тотем защиты от магии льда"),
+    };
+    private static readonly (string key, string icon, string tooltip)[] TotemWaterOptions =
+    {
+        ("ManaSpring", "mana_spring.jpg", "Тотем источника маны"),
+        ("HealStream", "healing_stream.jpg", "Тотем исцеляющего потока"),
+        ("Cleansing", "cleansing_totem.jpg", "Тотем очищения"),
+    };
+    private static readonly (string key, string icon, string tooltip)[] TotemAirOptions =
+    {
+        ("WrathOfAir", "wrath_of_air.jpg", "Тотем гнева воздуха"),
+        ("Windfury", "windfury_totem.jpg", "Тотем неистовства ветра"),
+    };
+
     // Seal selection (radio-style, only one at a time)
     private string _selectedSeal = ""; // Только для PALADIN
     private readonly Dictionary<string, ToggleButton> _sealToggles = new();
@@ -237,6 +270,10 @@ public partial class OverlayWindow : Window
     public string SelectedStance => _selectedStance;
     public string SelectedPresence => _selectedPresence;
     public string SelectedFeralForm => _selectedFeralForm;
+    public string SelectedTotemEarth => _selectedTotemEarth;
+    public string SelectedTotemFire => _selectedTotemFire;
+    public string SelectedTotemWater => _selectedTotemWater;
+    public string SelectedTotemAir => _selectedTotemAir;
     private bool _autoFaceDefault = true;
     public bool AutoFace => _chkAutoFace != null ? (_chkAutoFace.IsChecked == true) : _autoFaceDefault;
     public bool AutoSelectTarget => _chkAutoTarget?.IsChecked == true;
@@ -1081,6 +1118,44 @@ public partial class OverlayWindow : Window
             }
             SubContent.Children.Add(presenceWrap);
         }
+
+        // Тотемы шамана (4 стихии, радио)
+        if (_playerClass == "SHAMAN")
+        {
+            void AddTotemRadio(string label, (string key, string icon, string tooltip)[] options,
+                ref string selected, Dictionary<string, ToggleButton> toggles)
+            {
+                AddLabel(label);
+                var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+                toggles.Clear();
+                string sel = selected; // capture for lambda
+                foreach (var (key, icon, tooltip) in options)
+                {
+                    bool isSelected = sel == key;
+                    var toggle = AddSpellIcon(wrap, icon, tooltip, isSelected);
+                    toggles[key] = toggle;
+
+                    var tKey = key;
+                    toggle.Checked += (s, e) =>
+                    {
+                        foreach (var (k, btn) in toggles)
+                            if (k != tKey) btn.IsChecked = false;
+                        SaveSettings();
+                        OnTotemChanged?.Invoke(label, tKey);
+                    };
+                    toggle.Unchecked += (s, e) =>
+                    {
+                        OnTotemChanged?.Invoke(label, "");
+                    };
+                }
+                SubContent.Children.Add(wrap);
+            }
+
+            AddTotemRadio("Земля", TotemEarthOptions, ref _selectedTotemEarth, _totemEarthToggles);
+            AddTotemRadio("Огонь", TotemFireOptions, ref _selectedTotemFire, _totemFireToggles);
+            AddTotemRadio("Вода", TotemWaterOptions, ref _selectedTotemWater, _totemWaterToggles);
+            AddTotemRadio("Воздух", TotemAirOptions, ref _selectedTotemAir, _totemAirToggles);
+        }
     }
 
     private void BuildFollowSubmenu()
@@ -1112,6 +1187,7 @@ public partial class OverlayWindow : Window
     }
 
     // --- Hivemind ---
+    public event Action<string, string>? OnTotemChanged; // (element, key)
     public event Action<string>? OnHivemindCommand;
     private string _hivemindRole = "none"; // "none", "master", "slave"
 
@@ -1515,6 +1591,22 @@ public partial class OverlayWindow : Window
         }
         _selectedCurse = playerClass == "WARLOCK" ? GetSavedString("curse", "CoA") : "";
 
+        // Тотемы шамана: дефолты для рестора
+        if (playerClass == "SHAMAN")
+        {
+            _selectedTotemEarth = GetSavedString("totemEarth", "Stoneskin");
+            _selectedTotemFire = GetSavedString("totemFire", "Flametongue");
+            _selectedTotemWater = GetSavedString("totemWater", "ManaSpring");
+            _selectedTotemAir = GetSavedString("totemAir", "WrathOfAir");
+        }
+        else
+        {
+            _selectedTotemEarth = "";
+            _selectedTotemFire = "";
+            _selectedTotemWater = "";
+            _selectedTotemAir = "";
+        }
+
         // Pre-create spell toggles from SpecSpells (для GetSpellFlagsLua)
         string specKey = specName;
         if (SpecSpells.TryGetValue(specKey, out var spells))
@@ -1637,6 +1729,10 @@ public partial class OverlayWindow : Window
             data["feralForm"] = _selectedFeralForm;
             data["stance"] = _selectedStance;
             data["presence"] = _selectedPresence;
+            data["totemEarth"] = _selectedTotemEarth;
+            data["totemFire"] = _selectedTotemFire;
+            data["totemWater"] = _selectedTotemWater;
+            data["totemAir"] = _selectedTotemAir;
 
             // Main toggles
             data["aoe"] = BtnAoe.IsChecked == true;

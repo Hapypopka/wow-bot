@@ -86,12 +86,17 @@ public class BotEngine : IDisposable
     public string SelectedStance { get; set; } = "";
     public string SelectedPresence { get; set; } = "";
     public string SelectedFeralForm { get; set; } = "";
+    public string SelectedTotemEarth { get; set; } = "";
+    public string SelectedTotemFire { get; set; } = "";
+    public string SelectedTotemWater { get; set; } = "";
+    public string SelectedTotemAir { get; set; } = "";
     public bool IsHealer { get; set; }
     public System.Diagnostics.Process? WowProcess { get; set; }
     public string PlayerClass { get; set; } = "";
     private bool _isMovingForward;
     private int _healerTickCount;
     private int _registerTick;
+    private double _lastRegisterTime;
     private uint _hiveMacroAddr;
     private int _hiveAddrRetry;
 
@@ -418,6 +423,8 @@ public class BotEngine : IDisposable
                 if (_hiveCheckTick >= 3)
                 {
                     _hiveCheckTick = 0;
+
+                    // Команды мастера (для слейвов)
                     string checkLua = Hivemind.GetSlaveReadScript();
                     string? response = _hook.ExecuteLuaWithResult(checkLua);
                     if (_logTick == 0) Logger.Info($"Hivemind: raw response=[{response ?? "NULL"}]");
@@ -430,10 +437,26 @@ public class BotEngine : IDisposable
                             Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
                             Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
                         }
-                        // Register всегда обработать (даже если time == LastHiveCheck)
-                        else if (cmd == Hivemind.Command.Register && Hivemind.CurrentRole == Hivemind.Role.Master)
+                    }
+
+                    // Register от слейвов (для мастера) — отдельные Lua переменные
+                    if (Hivemind.CurrentRole == Hivemind.Role.Master)
+                    {
+                        string regLua = Hivemind.GetRegisterReadScript();
+                        string? regResponse = _hook.ExecuteLuaWithResult(regLua);
+                        if (regResponse != null)
                         {
-                            Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
+                            var regParts = regResponse.Split('|');
+                            if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
+                            {
+                                double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
+                                    System.Globalization.CultureInfo.InvariantCulture, out double regTime);
+                                if (regTime > _lastRegisterTime)
+                                {
+                                    _lastRegisterTime = regTime;
+                                    Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
+                                }
+                            }
                         }
                     }
                 }
@@ -852,7 +875,7 @@ WB_AoE()
     private string BuildBuffScript()
     {
         // Аура/печать/благословение кастуются даже если нет обычных баффов
-        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence) && string.IsNullOrEmpty(SelectedFeralForm)) return "";
+        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence) && string.IsNullOrEmpty(SelectedFeralForm) && string.IsNullOrEmpty(SelectedTotemEarth) && string.IsNullOrEmpty(SelectedTotemFire) && string.IsNullOrEmpty(SelectedTotemWater) && string.IsNullOrEmpty(SelectedTotemAir)) return "";
 
         var selfBuffs = new List<string>();
         var raidBuffs = new List<string>();
@@ -995,6 +1018,46 @@ WB_AoE()
                 var fs = formSpell.Replace("'", "\\'");
                 sb.Append($"if GetShapeshiftForm()~={formId} then CastSpellByName('{fs}') return end ");
             }
+        }
+
+        // Тотемы шамана (4 стихии, проверяем через GetTotemInfo)
+        if (PlayerClass == "SHAMAN")
+        {
+            void AddTotem(int slot, string selectedKey, Dictionary<string, string> map)
+            {
+                if (string.IsNullOrEmpty(selectedKey) || !map.ContainsKey(selectedKey)) return;
+                string spellName = map[selectedKey].Replace("'", "\\'");
+                sb.Append($"local _,tn{slot}=GetTotemInfo({slot}) if tn{slot}~='{spellName}' then CastSpellByName('{spellName}') return end ");
+            }
+
+            var earthMap = new Dictionary<string, string>
+            {
+                ["Stoneskin"] = "Тотем каменной кожи",
+                ["SoE"] = "Тотем силы земли",
+                ["Tremor"] = "Тотем трепета",
+            };
+            var fireMap = new Dictionary<string, string>
+            {
+                ["Flametongue"] = "Тотем языка пламени",
+                ["FireRes"] = "Тотем защиты от огня",
+                ["FrostRes"] = "Тотем защиты от магии льда",
+            };
+            var waterMap = new Dictionary<string, string>
+            {
+                ["ManaSpring"] = "Тотем источника маны",
+                ["HealStream"] = "Тотем исцеляющего потока",
+                ["Cleansing"] = "Тотем очищения",
+            };
+            var airMap = new Dictionary<string, string>
+            {
+                ["WrathOfAir"] = "Тотем гнева воздуха",
+                ["Windfury"] = "Тотем неистовства ветра",
+            };
+
+            AddTotem(2, SelectedTotemEarth, earthMap);   // Earth = slot 2
+            AddTotem(1, SelectedTotemFire, fireMap);      // Fire = slot 1
+            AddTotem(3, SelectedTotemWater, waterMap);     // Water = slot 3
+            AddTotem(4, SelectedTotemAir, airMap);         // Air = slot 4
         }
 
         // Аспект охотника (авто-переключение по мане: дракондор/гадюка)

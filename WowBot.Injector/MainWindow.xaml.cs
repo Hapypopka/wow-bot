@@ -164,6 +164,25 @@ public partial class MainWindow : Window
             if (_botEngine == null) return;
             _botEngine.Hivemind.ToggleSlaveSelection(name);
         };
+        _masterPanel.OnSlaveCommand += (slaveName, cmd) =>
+        {
+            if (_botEngine == null) return;
+            var hive = _botEngine.Hivemind;
+            if (cmd == "toggle_ignore")
+            {
+                hive.ToggleIgnoreGlobal(slaveName);
+                return;
+            }
+            var command = cmd switch
+            {
+                "attack" => WowBot.Core.Game.Hivemind.Command.Attack,
+                "follow" => WowBot.Core.Game.Hivemind.Command.Follow,
+                "auto" => WowBot.Core.Game.Hivemind.Command.Auto,
+                "stop" => WowBot.Core.Game.Hivemind.Command.Stop,
+                _ => WowBot.Core.Game.Hivemind.Command.Stop
+            };
+            hive.SendCommandToSlave(slaveName, command);
+        };
         // Загрузить хоткеи из settings
         _masterPanel.Show();
     }
@@ -392,6 +411,17 @@ public partial class MainWindow : Window
             {
                 if (_botEngine != null)
                     _botEngine.FollowDistance = dist;
+            };
+            _overlay.OnTotemChanged += (element, key) =>
+            {
+                if (_botEngine == null) return;
+                switch (element)
+                {
+                    case "Земля": _botEngine.SelectedTotemEarth = key; break;
+                    case "Огонь": _botEngine.SelectedTotemFire = key; break;
+                    case "Вода": _botEngine.SelectedTotemWater = key; break;
+                    case "Воздух": _botEngine.SelectedTotemAir = key; break;
+                }
             };
             _overlay.OnHivemindCommand += (cmd) =>
             {
@@ -773,6 +803,10 @@ public partial class MainWindow : Window
                 _botEngine.SelectedStance = _overlay.SelectedStance;
                 _botEngine.SelectedPresence = _overlay.SelectedPresence;
                 _botEngine.SelectedFeralForm = _overlay.SelectedFeralForm;
+                _botEngine.SelectedTotemEarth = _overlay.SelectedTotemEarth;
+                _botEngine.SelectedTotemFire = _overlay.SelectedTotemFire;
+                _botEngine.SelectedTotemWater = _overlay.SelectedTotemWater;
+                _botEngine.SelectedTotemAir = _overlay.SelectedTotemAir;
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;
