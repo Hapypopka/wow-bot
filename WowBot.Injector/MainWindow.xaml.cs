@@ -161,6 +161,8 @@ public partial class MainWindow : Window
                 case "autopve:on": _botEngine.AutoPveEnabled = true; break;
                 case "autopve:off": _botEngine.AutoPveEnabled = false; break;
                 case "wipe": hive.CmdWipe(); break;
+                case "refreshguid": hive.CmdRefreshGuid(); break;
+                case "guidbytarget": hive.CmdGuidByTarget(); break;
             }
         };
         _masterPanel.OnToggleSlave += (name) =>

@@ -41,6 +41,19 @@
                     Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
                     Height="24" Margin="1,2,1,2" Cursor="Hand" ToolTip="Follow + авто-ассист в бою"/>
 
+            <!-- GUID tools -->
+            <WrapPanel Margin="1,0,1,2">
+                <Button x:Name="BtnRefreshGuid" Content="🔄 GUID" FontSize="9"
+                        Click="BtnRefreshGuid_Click" Style="{x:Null}"
+                        Background="#1a1a28" Foreground="#555" BorderThickness="0"
+                        Height="20" Cursor="Hand" ToolTip="Слейвы перенаходят мастера" Padding="4,0"/>
+                <Button x:Name="BtnGuidByTarget" Content="🎯 GUID→таргет" FontSize="9"
+                        Click="BtnGuidByTarget_Click" Style="{x:Null}"
+                        Background="#1a1a28" Foreground="#555" BorderThickness="0"
+                        Height="20" Margin="2,0,0,0" Cursor="Hand"
+                        ToolTip="Слейвы следуют за таргетом мастера" Padding="4,0"/>
+            </WrapPanel>
+
             <!-- Wipe (stop heals) -->
             <Button x:Name="BtnWipe" Content="💀 Вайп" FontSize="10"
                     Click="BtnWipe_Click" Style="{x:Null}"

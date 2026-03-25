@@ -70,6 +70,9 @@ public partial class MasterPanel : Window
 
     private void BtnAuto_Click(object sender, RoutedEventArgs e) => SendCommand("auto");
 
+    private void BtnRefreshGuid_Click(object sender, RoutedEventArgs e) => OnCommand?.Invoke("refreshguid");
+    private void BtnGuidByTarget_Click(object sender, RoutedEventArgs e) => OnCommand?.Invoke("guidbytarget");
+
     private bool _wipeOn;
     private void BtnWipe_Click(object sender, RoutedEventArgs e)
     {

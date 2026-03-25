@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe }
+    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -193,6 +193,30 @@ public class Hivemind
     /// <summary>Мастер: задать бафф слейвам (blessing=BoM, aura=AuRet)</summary>
     /// <summary>Мастер: хилы стоп хилить (вайп)</summary>
     public void CmdWipe() => SendCommand(Command.Wipe);
+
+    /// <summary>Мастер: слейвы обновляют GUID мастера</summary>
+    public void CmdRefreshGuid()
+    {
+        string name = _objectManager.GetPlayerName() ?? "master";
+        SendCommand(Command.RefreshGuid, name);
+    }
+
+    /// <summary>Мастер: слейвы берут таргет мастера как нового "мастера" для follow</summary>
+    public void CmdGuidByTarget()
+    {
+        var target = _objectManager.GetTarget();
+        if (target == null) { Logger.Info("Hivemind: CmdGuidByTarget — no target"); return; }
+        string? targetName = target.Name;
+        if (string.IsNullOrEmpty(targetName))
+        {
+            // Для игроков Name может не работать — используем Lua
+            string? luaName = _hook.ExecuteLuaWithResult("WB_R=UnitName('target')");
+            targetName = luaName;
+        }
+        if (string.IsNullOrEmpty(targetName)) return;
+        SendCommand(Command.RefreshGuid, targetName);
+        Logger.Info($"Hivemind: MASTER GuidByTarget → {targetName}");
+    }
 
     public void CmdSetBuff(string buffType, string buffKey)
     {
@@ -513,6 +537,7 @@ WB_HIVE_REG_TIME = 0
             "Ping" => Command.Ping,
             "Goto" => Command.Goto,
             "SetBuff" => Command.SetBuff,
+            "RefreshGuid" => Command.RefreshGuid,
             "Wipe" => Command.Wipe,
             "Register" => Command.Register,
             _ => null
@@ -541,6 +566,19 @@ WB_HIVE_REG_TIME = 0
         {
             WipeMode = !WipeMode;
             Logger.Info($"Hivemind: SLAVE wipe mode = {WipeMode}");
+            return;
+        }
+
+        // RefreshGuid — сброс GUID мастера, повторный поиск
+        if (cmd == Command.RefreshGuid)
+        {
+            string cleanName = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
+            if (_botEngine?.SlaveCtrl != null)
+            {
+                _botEngine.SlaveCtrl.ResetMasterGuid();
+                _botEngine.SlaveCtrl.InitMasterGuid(cleanName);
+                Logger.Info($"Hivemind: SLAVE refreshed master GUID for {cleanName}");
+            }
             return;
         }
 

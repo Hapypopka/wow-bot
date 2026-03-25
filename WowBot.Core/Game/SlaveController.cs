@@ -32,6 +32,8 @@ public class SlaveController
 
     // === Команды ===
 
+    public void ResetMasterGuid() => _masterGuid = 0;
+
     /// <summary>Один раз при старте слейва — найти GUID мастера через TargetUnit</summary>
     public void InitMasterGuid(string masterName)
     {
