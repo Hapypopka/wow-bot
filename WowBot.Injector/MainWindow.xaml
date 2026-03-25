@@ -224,6 +224,11 @@
                             <Button x:Name="BtnLaunchAll" Content="🚀 Запустить всех" Style="{StaticResource GoldButton}"
                                     Click="BtnLaunchAll_Click" Margin="0,8,0,0" HorizontalAlignment="Stretch"
                                     Visibility="Collapsed"/>
+                            <Button x:Name="BtnCloseAll" Content="✖ Закрыть всех"
+                                    Click="BtnCloseAll_Click" Margin="0,4,0,0" HorizontalAlignment="Stretch"
+                                    Visibility="Collapsed"
+                                    Background="#4d2d1515" Foreground="#ff6666" BorderThickness="0"
+                                    FontSize="13" Padding="0,8,0,8" Cursor="Hand"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>

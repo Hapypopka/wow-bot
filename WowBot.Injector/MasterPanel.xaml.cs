@@ -57,6 +57,12 @@ public partial class MasterPanel : Window
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
 
+    private void ResizeGrip_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        double newW = Width + e.HorizontalChange;
+        if (newW >= MinWidth) Width = newW;
+    }
+
     // --- Buttons ---
     private void BtnAttack_Click(object sender, RoutedEventArgs e) => SendCommand("attack");
     private void BtnFollow_Click(object sender, RoutedEventArgs e) => SendCommand("follow");

@@ -184,10 +184,7 @@ public partial class MainWindow : Window
             };
             hive.SendCommandToSlave(slaveName, command);
         };
-        // Загрузить хоткеи из settings
         _masterPanel.Show();
-        if (_botEngine?.WowProcess != null)
-            _masterPanel.SetOwnerHwnd(_botEngine.WowProcess.MainWindowHandle);
 
         // NavPanel
         _navPanel = new NavPanel();
@@ -208,9 +205,6 @@ public partial class MainWindow : Window
             _botEngine.Hivemind.NotifyNavChanged();
         };
         _navPanel.Show();
-        // Привязать к окну WoW чтобы не плавала поверх всех окон
-        if (_botEngine?.WowProcess != null)
-            _navPanel.SetOwnerHwnd(_botEngine.WowProcess.MainWindowHandle);
     }
 
     private void CloseMasterPanel()
@@ -743,6 +737,8 @@ public partial class MainWindow : Window
                 _overlay.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
                 if (_masterPanel != null)
                     _masterPanel.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
+                if (_navPanel != null)
+                    _navPanel.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
             }
 
             if (_memory.Process?.HasExited == true)
@@ -1196,6 +1192,7 @@ public partial class MainWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Center,
             });
             BtnLaunchAll.Visibility = Visibility.Collapsed;
+            BtnCloseAll.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -1279,6 +1276,7 @@ public partial class MainWindow : Window
         }
 
         BtnLaunchAll.Visibility = Visibility.Visible;
+        BtnCloseAll.Visibility = Visibility.Visible;
     }
 
 
@@ -1308,6 +1306,17 @@ public partial class MainWindow : Window
                 WowBot.Core.Logger.Error($"Launch failed for PID {pid}", ex);
             }
             launched++;
+        }
+    }
+
+    private void BtnCloseAll_Click(object sender, RoutedEventArgs e)
+    {
+        // Убить все дочерние WowBot.Injector процессы (кроме себя)
+        int myPid = Environment.ProcessId;
+        foreach (var proc in Process.GetProcessesByName("WowBot.Injector"))
+        {
+            if (proc.Id == myPid) continue;
+            try { proc.Kill(); } catch { }
         }
     }
 

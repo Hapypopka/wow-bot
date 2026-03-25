@@ -1673,7 +1673,7 @@ public partial class OverlayWindow : Window
     {
         if (!_saved.TryGetValue(key, out var v)) return defaultVal;
         var s = v.GetString();
-        return string.IsNullOrEmpty(s) ? defaultVal : s;
+        return s ?? defaultVal; // пустая строка = осознанный выбор "ничего"
     }
 
     public void LoadSettings()

@@ -396,6 +396,10 @@ public class BotEngine : IDisposable
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
 
+            // Кэш позиции для быстрого потока CTM watch
+            if (Hivemind.CurrentRole == Hivemind.Role.Master)
+                Hivemind.UpdateCachedPosition(player.X, player.Y, player.Z, player.Facing);
+
             // Авто-принятие реса для слейвов
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && player.IsDead)
             {
@@ -484,6 +488,28 @@ public class BotEngine : IDisposable
             if (Hivemind.CurrentRole == Hivemind.Role.Master)
             {
                 Hivemind.MasterTick();
+            }
+
+            // === БАФФЫ ДЛЯ СЛЕЙВОВ (до return из слейв-блоков) ===
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && _buffsEnabled &&
+                (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) ||
+                 !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) ||
+                 !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm) ||
+                 !string.IsNullOrEmpty(SelectedTotemEarth) || !string.IsNullOrEmpty(SelectedTotemFire) ||
+                 !string.IsNullOrEmpty(SelectedTotemWater) || !string.IsNullOrEmpty(SelectedTotemAir)))
+            {
+                _buffCheckTick++;
+                bool classBuffCheck = _buffCheckTick % 3 == 0;
+                bool fullBuffCheck = _buffCheckTick >= 20;
+                if (fullBuffCheck) _buffCheckTick = 0;
+                if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
+                {
+                    string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
+                    if (!string.IsNullOrEmpty(buffScript))
+                    {
+                        _hook.ExecuteLua(buffScript, 500);
+                    }
+                }
             }
 
             // === HIVEMIND SLAVE: хилер всегда хилит ===
@@ -874,6 +900,26 @@ WB_AoE()
             }
         }
 
+        // Печать паладина (быстрая проверка)
+        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedSeal))
+        {
+            string sealSpell = SelectedSeal switch
+            {
+                "SoV" => "Печать мщения",
+                "SoC" => "Печать повиновения",
+                "SoW" => "Печать мудрости",
+                "SoL" => "Печать Света",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(sealSpell))
+            {
+                if (!hasAnything)
+                    sb.Append("local function HasB(u,n) for i=1,40 do local b=UnitBuff(u,i) if not b then return false end if b==n then return true end end return false end ");
+                sb.Append($"if not HasB('player','{sealSpell}') then CastSpellByName('{sealSpell}') return end ");
+                hasAnything = true;
+            }
+        }
+
         if (!hasAnything) return "";
         sb.Append("end WB_CB()");
         return sb.ToString();
@@ -941,7 +987,7 @@ WB_AoE()
             }
         }
 
-        // Благословение паладина (только для PALADIN)
+        // Благословение паладина (только для PALADIN) — проверяем пати/рейд
         if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedBlessing))
         {
             var (blessSpell, greatSpell) = SelectedBlessing switch
@@ -956,7 +1002,12 @@ WB_AoE()
             {
                 var bs = blessSpell.Replace("'", "\\'");
                 var gs = greatSpell.Replace("'", "\\'");
+                // Сначала себя
                 sb.Append($"if not HasB('player','{bs}') and not HasB('player','{gs}') then if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end return end ");
+                // Потом пати/рейд в радиусе 30 ярдов
+                sb.Append($"local nr=GetNumRaidMembers() ");
+                sb.Append($"if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{bs}') and not HasB(u,'{gs}') then TargetUnit(u) if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end end ");
+                sb.Append($"else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{bs}') and not HasB(u,'{gs}') then TargetUnit(u) if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end end end ");
             }
         }
 

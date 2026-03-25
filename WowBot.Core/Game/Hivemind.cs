@@ -233,6 +233,12 @@ public class Hivemind
     private volatile int _suppressCtmTicks; // счётчик подавления CTM (каждый тик 5мс)
 
     private float _gotoX, _gotoY, _gotoZ;
+    // Кэш позиции мастера (обновляется из основного тика, читается из быстрого потока)
+    private volatile float _cachedPlayerX, _cachedPlayerY, _cachedPlayerZ, _cachedPlayerFacing;
+    public void UpdateCachedPosition(float x, float y, float z, float facing)
+    {
+        _cachedPlayerX = x; _cachedPlayerY = y; _cachedPlayerZ = z; _cachedPlayerFacing = facing;
+    }
 
     /// <summary>Запустить быстрый поток отслеживания Ctrl+CTM</summary>
     public void StartCtmWatch()
@@ -266,15 +272,8 @@ public class Hivemind
 
                             if (moved > 1f)
                             {
-                                // CTM перебивает CTM — "иди на своё место"
-                                var p = _objectManager.LocalPlayer;
-                                if (p != null)
-                                {
-                                    float facing = p.Facing;
-                                    _ctm.MoveTo(p.X, p.Y, p.Z, 0.5f);
-                                    // Восстановить facing чтобы мастер не повернулся
-                                    _navigation.WriteFacing(p, facing);
-                                }
+                                // CTM перебивает CTM — "иди на своё место" (из кэша, thread-safe)
+                                _ctm.MoveTo(_cachedPlayerX, _cachedPlayerY, _cachedPlayerZ, 0.5f);
 
                                 _gotoX = cx;
                                 _gotoY = cy;
@@ -330,19 +329,17 @@ public class Hivemind
         var existing = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
         if (existing != null)
         {
-            existing.ClassName = className;
             existing.LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            return; // уже зарегистрирован — не перерисовываем
         }
-        else
+
+        ConnectedSlaves.Add(new SlaveInfo
         {
-            ConnectedSlaves.Add(new SlaveInfo
-            {
-                Name = name,
-                ClassName = className,
-                LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-            });
-            Logger.Info($"Hivemind: slave registered — {name} ({className})");
-        }
+            Name = name,
+            ClassName = className,
+            LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        });
+        Logger.Info($"Hivemind: slave registered — {name} ({className})");
         OnSlavesChanged?.Invoke();
     }
 

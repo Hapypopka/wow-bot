@@ -1,13 +1,14 @@
 <Window x:Class="WowBot.Injector.MasterPanel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Master" Width="200" SizeToContent="Height"
-        WindowStyle="None" AllowsTransparency="True"
+        Title="Master" Width="260" SizeToContent="Height"
+        ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False"
         Background="Transparent"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
     <Border CornerRadius="10" Background="#CC0a0a0f" BorderBrush="#40C8A84E" BorderThickness="1" Padding="8">
+        <Grid>
         <StackPanel>
             <!-- Header -->
             <Grid Margin="0,0,0,6">
@@ -97,5 +98,6 @@
                 </StackPanel>
             </Border>
         </StackPanel>
+        </Grid>
     </Border>
 </Window>
