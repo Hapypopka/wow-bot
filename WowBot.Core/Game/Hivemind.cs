@@ -201,6 +201,13 @@ public class Hivemind
     {
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.RefreshGuid, name);
+        Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            SendCommand(Command.RefreshGuid, name);
+            await Task.Delay(500);
+            SendCommand(Command.RefreshGuid, name);
+        });
     }
 
     /// <summary>Мастер: слейвы берут таргет мастера как нового "мастера" для follow</summary>
@@ -216,8 +223,16 @@ public class Hivemind
             targetName = luaName;
         }
         if (string.IsNullOrEmpty(targetName)) return;
+        // Шлём 3 раза с задержкой — чтобы все слейвы получили
         SendCommand(Command.RefreshGuid, targetName);
         Logger.Info($"Hivemind: MASTER GuidByTarget → {targetName}");
+        Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            SendCommand(Command.RefreshGuid, targetName);
+            await Task.Delay(500);
+            SendCommand(Command.RefreshGuid, targetName);
+        });
     }
 
     /// <summary>Мастер: задать бафф конкретному слейву</summary>
@@ -605,7 +620,20 @@ WB_HIVE_REG_TIME = 0
         // RefreshGuid — сброс GUID мастера, повторный поиск
         if (cmd == Command.RefreshGuid)
         {
-            string cleanName = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
+            string cleanName = arg;
+            // Проверяем адресацию: если есть ~список — только для указанных слейвов
+            if (arg.Contains('~'))
+            {
+                var split = arg.Split('~', 2);
+                cleanName = split[0];
+                string targetList = split[1];
+                string myName = _objectManager.GetPlayerName() ?? "";
+                if (!string.IsNullOrEmpty(targetList) && !targetList.Split(',').Contains(myName))
+                {
+                    Logger.Info($"Hivemind: SLAVE skipping RefreshGuid — not in [{targetList}]");
+                    return;
+                }
+            }
             if (_botEngine?.SlaveCtrl != null)
             {
                 _botEngine.SlaveCtrl.ResetMasterGuid();
