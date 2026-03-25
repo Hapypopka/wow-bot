@@ -285,23 +285,23 @@ public static class AllRotations
         -- DISC
 " + HealerFindTarget + @"
         if bestHP>=1.0 then return end
-        if WB_S.PW~=false and bestHP<0.9 and IsReady('Слово силы: Щит') then TargetUnit(best) CastSpellByName('Слово силы: Щит') return end
-        if WB_S.Penance~=false and bestHP<0.85 and IsReady('Исповедь') then TargetUnit(best) CastSpellByName('Исповедь') return end
+        if WB_S.PW~=false and bestHP<0.99 and IsReady('Слово силы: Щит') then TargetUnit(best) CastSpellByName('Слово силы: Щит') return end
+        if WB_S.Penance~=false and bestHP<0.95 and IsReady('Исповедь') then TargetUnit(best) CastSpellByName('Исповедь') return end
         if WB_S.PS~=false and bestHP<0.4 and IsReady('Подавление боли') then TargetUnit(best) CastSpellByName('Подавление боли') return end
-        if WB_S.Flash~=false and bestHP<0.7 then TargetUnit(best) CastSpellByName('Быстрое исцеление') return end
+        if WB_S.Flash~=false and bestHP<0.99 then TargetUnit(best) CastSpellByName('Быстрое исцеление') return end
         if WB_S.PoM~=false and IsReady('Молитва восстановления') then TargetUnit(best) CastSpellByName('Молитва восстановления') return end
-        if WB_S.Renew~=false and bestHP<0.9 then TargetUnit(best) CastSpellByName('Обновление') return end
+        if WB_S.Renew~=false and bestHP<0.99 then TargetUnit(best) CastSpellByName('Обновление') return end
     else
         -- HOLY
 " + HealerFindTarget + @"
         if bestHP>=1.0 then return end
-        if WB_S.CoH~=false and bestHP<0.85 and IsReady('Круг исцеления') then CastSpellByName('Круг исцеления') return end
+        if WB_S.CoH~=false and bestHP<0.95 and IsReady('Круг исцеления') then CastSpellByName('Круг исцеления') return end
         if WB_S.Guardian~=false and bestHP<0.2 and IsReady('Оберегающий дух') then TargetUnit(best) CastSpellByName('Оберегающий дух') return end
         if WB_S.PoM~=false and IsReady('Молитва восстановления') then TargetUnit(best) CastSpellByName('Молитва восстановления') return end
-        if WB_S.Renew~=false and bestHP<0.9 then TargetUnit(best) CastSpellByName('Обновление') return end
-        if WB_S.Flash~=false and bestHP<0.7 then TargetUnit(best) CastSpellByName('Быстрое исцеление') return end
-        if WB_S.GHeal~=false and bestHP<0.5 then TargetUnit(best) CastSpellByName('Великое исцеление') return end
-        if WB_S.Binding~=false and bestHP<0.8 then TargetUnit(best) CastSpellByName('Связующее исцеление') return end
+        if WB_S.Renew~=false and bestHP<0.99 then TargetUnit(best) CastSpellByName('Обновление') return end
+        if WB_S.Flash~=false and bestHP<0.95 then TargetUnit(best) CastSpellByName('Быстрое исцеление') return end
+        if WB_S.GHeal~=false and bestHP<0.6 then TargetUnit(best) CastSpellByName('Великое исцеление') return end
+        if WB_S.Binding~=false and bestHP<0.95 then TargetUnit(best) CastSpellByName('Связующее исцеление') return end
     end
 ");
 
@@ -363,11 +363,11 @@ public static class AllRotations
         -- RESTO
 " + HealerFindTarget + @"
         if bestHP>=1.0 then return end
-        if WB_S.RT~=false and bestHP<0.9 and IsReady('Быстрина') then TargetUnit(best) CastSpellByName('Быстрина') return end
+        if WB_S.RT~=false and bestHP<0.99 and IsReady('Быстрина') then TargetUnit(best) CastSpellByName('Быстрина') return end
         if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') return end
-        if WB_S.CH~=false and bestHP<0.75 and IsReady('Цепное исцеление') then TargetUnit(best) CastSpellByName('Цепное исцеление') return end
-        if WB_S.LHW~=false and bestHP<0.7 then TargetUnit(best) CastSpellByName('Малая волна исцеления') return end
-        if WB_S.HW~=false and bestHP<0.5 then TargetUnit(best) CastSpellByName('Волна исцеления') return end
+        if WB_S.CH~=false and bestHP<0.95 and IsReady('Цепное исцеление') then TargetUnit(best) CastSpellByName('Цепное исцеление') return end
+        if WB_S.LHW~=false and bestHP<0.99 then TargetUnit(best) CastSpellByName('Малая волна исцеления') return end
+        if WB_S.HW~=false and bestHP<0.6 then TargetUnit(best) CastSpellByName('Волна исцеления') return end
         if WB_S.ES~=false and UnitExists('focus') and IsReady('Щит земли') then
             local hasES=false for i=1,40 do local n=UnitBuff('focus',i) if not n then break end if n=='Щит земли' then hasES=true break end end
             if not hasES then TargetUnit('focus') CastSpellByName('Щит земли') TargetLastTarget() return end
@@ -556,14 +556,14 @@ public static class AllRotations
         -- Экстренный хил: NS + целительное прикосновение (инстант)
         if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') TargetUnit(best) CastSpellByName('Покровительство Природы') return end
         -- Быстрое восстановление (Swiftmend) — требует Омоложение или Восстановление на цели
-        if WB_S.SM~=false and bestHP<0.5 and IsReady('Быстрое восстановление') then
+        if WB_S.SM~=false and bestHP<0.7 and IsReady('Быстрое восстановление') then
             local hasHot=false for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n=='Омоложение' or n=='Восстановление' then hasHot=true break end end
             if hasHot then TargetUnit(best) CastSpellByName('Быстрое восстановление') return end
         end
         -- Буйный рост (Wild Growth) — АоЕ хил при нескольких раненых
-        if WB_S.WG~=false and bestHP<0.8 and IsReady('Буйный рост') then TargetUnit(best) CastSpellByName('Буйный рост') return end
+        if WB_S.WG~=false and bestHP<0.95 and IsReady('Буйный рост') then TargetUnit(best) CastSpellByName('Буйный рост') return end
         -- Омоложение (Rejuv) — поддерживать на раненых
-        if WB_S.Rejuv~=false and bestHP<0.9 then
+        if WB_S.Rejuv~=false and bestHP<0.99 then
             local hasRejuv=false for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n=='Омоложение' then hasRejuv=true break end end
             if not hasRejuv then TargetUnit(best) CastSpellByName('Омоложение') return end
         end
@@ -573,9 +573,9 @@ public static class AllRotations
             if lbCount<3 then TargetUnit('focus') CastSpellByName('Жизнецвет') TargetLastTarget() return end
         end
         -- Восстановление (Regrowth) — при сильном уроне
-        if WB_S.Regrowth~=false and bestHP<0.5 then TargetUnit(best) CastSpellByName('Восстановление') return end
+        if WB_S.Regrowth~=false and bestHP<0.7 then TargetUnit(best) CastSpellByName('Восстановление') return end
         -- Покровительство Природы (Nourish) — филлер (сильнее если HoT на цели)
-        if WB_S.Nourish~=false and bestHP<0.8 then TargetUnit(best) CastSpellByName('Покровительство Природы') return end
+        if WB_S.Nourish~=false and bestHP<0.95 then TargetUnit(best) CastSpellByName('Покровительство Природы') return end
     end
 ");
 
