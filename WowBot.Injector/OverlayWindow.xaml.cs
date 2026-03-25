@@ -1014,6 +1014,8 @@ public partial class OverlayWindow : Window
             var blessWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
             foreach (var (key, icon, tooltip) in BlessingOptions)
             {
+                // Благословение неприкосновенности только для прот паладина (талант)
+                if (key == "BoS" && _playerSpec != "Prot Paladin") continue;
                 bool isSelected = _selectedBlessing == key;
                 var toggle = AddSpellIcon(blessWrap, icon, tooltip, isSelected);
                 _blessingToggles[key] = toggle;

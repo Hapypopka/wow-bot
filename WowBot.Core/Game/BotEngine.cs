@@ -300,7 +300,7 @@ public class BotEngine : IDisposable
     private void SlaveAttackTick(Entities.WowPlayer player, string enemyCountLua)
     {
         var slaveTarget = _objectManager.GetTarget();
-        if (slaveTarget == null || !slaveTarget.IsAlive) return;
+        if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat) return;
 
         float distToTarget = player.DistanceTo2D(slaveTarget);
         bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
@@ -693,18 +693,20 @@ public class BotEngine : IDisposable
                 return;
             }
 
-            // === Автовыбор таргета ===
+            // === Автовыбор таргета (только в бою) ===
             bool targetTooFar = hasTarget && player.DistanceTo(target!) > _maxTargetRange;
-            if (_autoSelectTarget && (!hasTarget || targetTooFar))
+            bool playerInCombat = player.InCombat;
+            if (_autoSelectTarget && playerInCombat && (!hasTarget || targetTooFar))
             {
                 _hook.ExecuteLua("TargetNearestEnemy()", 200);
                 return;
             }
 
             // === ТОЛЬКО ROTATION ===
+            bool targetInCombat = hasTarget && target!.InCombat;
             if (!_followEnabled && _rotationEnabled)
             {
-                if (hasTarget || IsHealer)
+                if ((hasTarget && targetInCombat) || IsHealer)
                 {
                     if (hasTarget && _autoFace && !IsHealer) _navigation.FaceUnit(player, target!);
                     string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
@@ -728,14 +730,14 @@ public class BotEngine : IDisposable
                 // БЕЖИМ к follow — CTM к координатам цели
                 _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, _followDistance);
 
-                // Instants на бегу БЕЗ поворота
-                if (hasTarget)
+                // Instants на бегу БЕЗ поворота (только в бою)
+                if (hasTarget && targetInCombat)
                     _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
             }
             else
             {
-                // В дистанции — полная ротация
-                if (hasTarget)
+                // В дистанции — полная ротация (только в бою)
+                if ((hasTarget && targetInCombat) || IsHealer)
                 {
                     if (_autoFace) _navigation.FaceUnit(player, target!);
                     string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
