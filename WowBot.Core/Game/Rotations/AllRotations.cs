@@ -555,8 +555,11 @@ public static class AllRotations
         if bestHP>=1.0 then return end
         -- Экстренный хил: NS + целительное прикосновение (инстант)
         if WB_S.NS~=false and bestHP<0.3 and IsReady('Природная стремительность') then CastSpellByName('Природная стремительность') TargetUnit(best) CastSpellByName('Покровительство Природы') return end
-        -- Быстрое восстановление (Swiftmend) — инстант если есть Омоложение/Восстановление на цели
-        if WB_S.SM~=false and bestHP<0.5 and IsReady('Быстрое восстановление') then TargetUnit(best) CastSpellByName('Быстрое восстановление') return end
+        -- Быстрое восстановление (Swiftmend) — требует Омоложение или Восстановление на цели
+        if WB_S.SM~=false and bestHP<0.5 and IsReady('Быстрое восстановление') then
+            local hasHot=false for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n=='Омоложение' or n=='Восстановление' then hasHot=true break end end
+            if hasHot then TargetUnit(best) CastSpellByName('Быстрое восстановление') return end
+        end
         -- Буйный рост (Wild Growth) — АоЕ хил при нескольких раненых
         if WB_S.WG~=false and bestHP<0.8 and IsReady('Буйный рост') then TargetUnit(best) CastSpellByName('Буйный рост') return end
         -- Омоложение (Rejuv) — поддерживать на раненых

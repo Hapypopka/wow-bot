@@ -234,6 +234,8 @@ WB_HIVE_TIME = 0
         Mode = SlaveMode.Idle;
         _autoAssistTick = 0;
         _botEngine?.SlaveCtrl.CmdStop();
+        // Сбросить таргет и авто-атаку чтобы Lua из предыдущей команды не повлияла
+        _hook.ExecuteLua("ClearTarget() if IsCurrentAction(72) then StopAttack() end", 100);
         OnAutoToggle?.Invoke("rotation", false);
         OnAutoToggle?.Invoke("buffs", false);
     }

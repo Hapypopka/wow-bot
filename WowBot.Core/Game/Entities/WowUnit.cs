@@ -27,6 +27,9 @@ public class WowUnit : WowObject
     public bool IsAlive => Health > 0;
     public bool IsDead => Health <= 0;
 
+    public int UnitFlags => ReadDescriptorInt(Offsets.UnitFieldFlags);
+    public bool InCombat => (UnitFlags & 0x80000) != 0; // UNIT_FLAG_IN_COMBAT = 0x80000
+
     // --- Каст ---
     public int CastingSpellId => Memory.ReadInt32(BaseAddress + Offsets.CurrentCastId);
     public int ChannelingSpellId => Memory.ReadInt32(BaseAddress + Offsets.CurrentChannelId);

@@ -466,13 +466,13 @@ public class BotEngine : IDisposable
                         break;
 
                     case Hivemind.SlaveMode.Auto:
-                        // Авторежим — follow + auto-assist
+                        // Авторежим — follow + auto-assist (только если цель в бою)
                         Hivemind.SlaveAutoTick();
                         var autoTarget = _objectManager.GetTarget();
-                        if (autoTarget != null && autoTarget.IsAlive && autoTarget.Type != WowObjectType.Player)
+                        if (autoTarget != null && autoTarget.IsAlive && autoTarget.Type != WowObjectType.Player && autoTarget.InCombat)
                             SlaveAttackTick(player, enemyCountLua);
                         else
-                            SlaveCtrl.Tick(); // Нет цели — follow
+                            SlaveCtrl.Tick(); // Нет цели или не в бою — follow
                         break;
                 }
                 return;
