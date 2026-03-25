@@ -86,6 +86,9 @@ public class BotEngine : IDisposable
     public string SelectedStance { get; set; } = "";
     public string SelectedPresence { get; set; } = "";
     public string SelectedFeralForm { get; set; } = "";
+    public bool AutoPveEnabled { get; set; } = false;
+    public BossTactics BossTactics { get; private set; }
+    private int _autoPveTick;
     public string SelectedTotemEarth { get; set; } = "";
     public string SelectedTotemFire { get; set; } = "";
     public string SelectedTotemWater { get; set; } = "";
@@ -156,6 +159,7 @@ public class BotEngine : IDisposable
         Hivemind = new Hivemind(hook, objectManager, navigation, ctm);
         Hivemind.SetBotEngine(this);
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
+        BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
         // Антиафк — всегда пока бот заатачен
         _afkTimer = new Timer(AfkTick, null, 300_000, 300_000); // каждые 5 мин
     }
@@ -561,18 +565,40 @@ public class BotEngine : IDisposable
                         break;
 
                     case Hivemind.SlaveMode.Attacking:
-                        // Бейте таргет — подбег + ротация
-                        SlaveAttackTick(player, enemyCountLua);
+                        // AutoPve тактики (если включено и босс найден)
+                        BossTactics.IsHealer = IsHealer;
+                        BossTactics.IsMelee = PlayerClass is "WARRIOR" or "PALADIN" or "ROGUE" or "DEATHKNIGHT" ||
+                            (PlayerClass == "DRUID" && SpecName?.Contains("Feral") == true) ||
+                            (PlayerClass == "SHAMAN" && SpecName?.Contains("Enhancement") == true);
+                        if (AutoPveEnabled && BossTactics.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
+                        {
+                            // Ротация — босс-тактика управляет подбегом, ротацию кастим
+                            string atkScript = enemyCountLua + SpellFlagsLua + _fullScript;
+                            _hook.ExecuteLua(atkScript, 500);
+                        }
+                        else
+                        {
+                            SlaveAttackTick(player, enemyCountLua);
+                        }
                         break;
 
                     case Hivemind.SlaveMode.Auto:
-                        // Авторежим — follow + auto-assist (только если цель в бою)
-                        Hivemind.SlaveAutoTick();
-                        var autoTarget = _objectManager.GetTarget();
-                        if (autoTarget != null && autoTarget.IsAlive && autoTarget.Type != WowObjectType.Player && autoTarget.InCombat)
-                            SlaveAttackTick(player, enemyCountLua);
+                        // AutoPve тактики (если включено и босс найден)
+                        if (AutoPveEnabled && BossTactics.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
+                        {
+                            string autoScript = enemyCountLua + SpellFlagsLua + _fullScript;
+                            _hook.ExecuteLua(autoScript, 500);
+                        }
                         else
-                            SlaveCtrl.Tick(); // Нет цели или не в бою — follow
+                        {
+                            // Обычный авторежим
+                            Hivemind.SlaveAutoTick();
+                            var autoTarget = _objectManager.GetTarget();
+                            if (autoTarget != null && autoTarget.IsAlive && autoTarget.Type != WowObjectType.Player && autoTarget.InCombat)
+                                SlaveAttackTick(player, enemyCountLua);
+                            else
+                                SlaveCtrl.Tick();
+                        }
                         break;
                 }
                 return;
@@ -581,7 +607,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} pos=({player.X:F1},{player.Y:F1},{player.Z:F1}) target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ ===
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))

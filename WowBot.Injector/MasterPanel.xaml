@@ -41,6 +41,12 @@
                     Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
                     Height="24" Margin="1,2,1,2" Cursor="Hand" ToolTip="Follow + авто-ассист в бою"/>
 
+            <!-- AutoPve toggle -->
+            <Button x:Name="BtnAutoPve" Content="⚔ Автопве" FontSize="10"
+                    Click="BtnAutoPve_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#888" BorderThickness="0"
+                    Height="24" Margin="1,0,1,2" Cursor="Hand" ToolTip="Авто-тактики на боссах (ЦЛК)"/>
+
             <!-- Slave panel -->
             <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>
 

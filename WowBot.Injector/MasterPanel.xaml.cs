@@ -70,6 +70,15 @@ public partial class MasterPanel : Window
 
     private void BtnAuto_Click(object sender, RoutedEventArgs e) => SendCommand("auto");
 
+    private bool _autoPveOn;
+    private void BtnAutoPve_Click(object sender, RoutedEventArgs e)
+    {
+        _autoPveOn = !_autoPveOn;
+        BtnAutoPve.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_autoPveOn ? "#4a6741" : "#1a1a28"));
+        BtnAutoPve.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_autoPveOn ? "#fff" : "#888"));
+        OnCommand?.Invoke(_autoPveOn ? "autopve:on" : "autopve:off");
+    }
+
     private void SendCommand(string cmd)
     {
         OnCommand?.Invoke(cmd);

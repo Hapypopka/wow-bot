@@ -158,6 +158,8 @@ public partial class MainWindow : Window
                 case "follow": hive.CmdFollow(); break;
                 case "stop": hive.CmdStop(); break;
                 case "auto": hive.CmdAuto(); break;
+                case "autopve:on": _botEngine.AutoPveEnabled = true; break;
+                case "autopve:off": _botEngine.AutoPveEnabled = false; break;
             }
         };
         _masterPanel.OnToggleSlave += (name) =>
