@@ -29,6 +29,10 @@ public partial class MasterPanel : Window
 
     public event Action<string>? OnCommand;
 
+    // Per-slave buff selections (сохраняем между перерисовками)
+    private readonly Dictionary<string, string> _slaveBlessing = new();
+    private readonly Dictionary<string, string> _slaveAura = new();
+
     private Dictionary<string, Key> _hotkeys = new();
     private string? _waitingForHotkey; // which command we're setting
     private Button? _waitingButton;
@@ -378,10 +382,179 @@ public partial class MasterPanel : Window
             lockBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(ln, "toggle_ignore"); e.Handled = true; };
             cmdPanel.Children.Add(lockBtn);
 
-            Grid.SetColumn(cmdPanel, 2);
-            row.Children.Add(cmdPanel);
-            SlavePanel.Children.Add(row);
+            // ▼ раскрыть бафы (только для палов)
+            if (slave.ClassName.ToUpperInvariant() == "PALADIN")
+            {
+                var buffBtn = new Button
+                {
+                    Content = "▼", FontSize = 8, Width = 18, Height = 28,
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5a5d65")),
+                    BorderThickness = new Thickness(0), Padding = new Thickness(0),
+                    Margin = new Thickness(1, 0, 0, 0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    ToolTip = "Настроить бафы", Style = null!,
+                };
+                // Панель бафов (скрыта по умолчанию)
+                var buffPanel = BuildSlaveBuffPanel(slave.Name);
+                buffBtn.PreviewMouseLeftButtonDown += (s, e) =>
+                {
+                    buffPanel.Visibility = buffPanel.Visibility == Visibility.Visible
+                        ? Visibility.Collapsed : Visibility.Visible;
+                    buffBtn.Content = buffPanel.Visibility == Visibility.Visible ? "▲" : "▼";
+                    e.Handled = true;
+                };
+                cmdPanel.Children.Add(buffBtn);
+
+                Grid.SetColumn(cmdPanel, 2);
+                row.Children.Add(cmdPanel);
+                SlavePanel.Children.Add(row);
+                SlavePanel.Children.Add(buffPanel);
+            }
+            else
+            {
+                Grid.SetColumn(cmdPanel, 2);
+                row.Children.Add(cmdPanel);
+                SlavePanel.Children.Add(row);
+            }
         }
+    }
+
+    private Border BuildSlaveBuffPanel(string slaveName)
+    {
+        string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+        string iconsDir = System.IO.Path.Combine(basePath, "Icons");
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12141a")),
+            Padding = new Thickness(6, 4, 6, 6),
+            Margin = new Thickness(22, 0, 0, 1),
+            CornerRadius = new CornerRadius(0, 0, 4, 4),
+            Visibility = Visibility.Collapsed,
+        };
+
+        var stack = new StackPanel();
+
+        // Благословение
+        var blessLabel = new TextBlock
+        {
+            Text = "Благословение", FontSize = 9,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5a5d65")),
+            Margin = new Thickness(0, 0, 0, 2),
+        };
+        stack.Children.Add(blessLabel);
+
+        var blessWrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var blessings = new (string key, string icon, string tip)[]
+        {
+            ("BoM", "blessing_might.jpg", "Могущества"),
+            ("BoK", "blessing_kings.jpg", "Королей"),
+            ("BoW", "blessing_wisdom.jpg", "Мудрости"),
+        };
+        _slaveBlessing.TryGetValue(slaveName, out var curBlessing);
+        var blessButtons = new List<Button>();
+        foreach (var (key, icon, tip) in blessings)
+        {
+            bool isActive = curBlessing == key;
+            var btn = CreateBuffIcon(iconsDir, icon, tip, isActive);
+            string bk = key; string sn = slaveName;
+            btn.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                _slaveBlessing[sn] = bk;
+                OnSlaveCommand?.Invoke(sn, $"buff_blessing:{bk}");
+                foreach (var b in blessButtons) SetBuffIconActive(b, false);
+                SetBuffIconActive(btn, true);
+                e.Handled = true;
+            };
+            blessButtons.Add(btn);
+            blessWrap.Children.Add(btn);
+        }
+        stack.Children.Add(blessWrap);
+
+        // Аура
+        var auraLabel = new TextBlock
+        {
+            Text = "Аура", FontSize = 9,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5a5d65")),
+            Margin = new Thickness(0, 0, 0, 2),
+        };
+        stack.Children.Add(auraLabel);
+
+        var auraWrap = new WrapPanel();
+        var auras = new (string key, string icon, string tip)[]
+        {
+            ("AuRet", "aura_retribution.jpg", "Воздаяния"),
+            ("AuDev", "aura_devotion.jpg", "Воина Света"),
+            ("AuFrost", "aura_frost.jpg", "Защиты от льда"),
+            ("AuFire", "aura_fire.jpg", "Защиты от огня"),
+            ("AuShadow", "aura_shadow.jpg", "Защиты от тьмы"),
+            ("AuConc", "aura_concentration.jpg", "Сосредоточенности"),
+        };
+        _slaveAura.TryGetValue(slaveName, out var curAura);
+        var auraButtons = new List<Button>();
+        foreach (var (key, icon, tip) in auras)
+        {
+            bool isActive = curAura == key;
+            var btn = CreateBuffIcon(iconsDir, icon, tip, isActive);
+            string ak = key; string sn = slaveName;
+            btn.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                _slaveAura[sn] = ak;
+                OnSlaveCommand?.Invoke(sn, $"buff_aura:{ak}");
+                foreach (var b in auraButtons) SetBuffIconActive(b, false);
+                SetBuffIconActive(btn, true);
+                e.Handled = true;
+            };
+            auraButtons.Add(btn);
+            auraWrap.Children.Add(btn);
+        }
+        stack.Children.Add(auraWrap);
+
+        border.Child = stack;
+        return border;
+    }
+
+    private static void SetBuffIconActive(Button btn, bool active)
+    {
+        btn.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#c8aa6e" : "#3a3a28"));
+        btn.Opacity = active ? 1.0 : 0.4;
+    }
+
+    private static Button CreateBuffIcon(string iconsDir, string iconFile, string tooltip, bool isActive = false)
+    {
+        var btn = new Button
+        {
+            Width = 26, Height = 26,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isActive ? "#c8aa6e" : "#3a3a28")),
+            BorderThickness = new Thickness(1.5),
+            Opacity = isActive ? 1.0 : 0.4,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 3, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = tooltip, Style = null!,
+        };
+        string path = System.IO.Path.Combine(iconsDir, iconFile);
+        if (System.IO.File.Exists(path))
+        {
+            try
+            {
+                btn.Content = new System.Windows.Controls.Image
+                {
+                    Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(path)),
+                    Width = 22, Height = 22,
+                };
+            }
+            catch { btn.Content = tooltip.Substring(0, Math.Min(2, tooltip.Length)); }
+        }
+        else
+        {
+            btn.Content = tooltip.Substring(0, Math.Min(2, tooltip.Length));
+            btn.FontSize = 8;
+            btn.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c8aa6e"));
+        }
+        return btn;
     }
 
     private static string GetClassIconPath(string className)

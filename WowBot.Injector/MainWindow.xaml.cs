@@ -198,6 +198,18 @@ public partial class MainWindow : Window
                 hive.CmdRefreshGuidToSlave(slaveName, targetName);
                 return;
             }
+            if (cmd.StartsWith("buff_blessing:"))
+            {
+                string key = cmd.Substring("buff_blessing:".Length);
+                hive.CmdSetBuffToSlave(slaveName, "blessing", key);
+                return;
+            }
+            if (cmd.StartsWith("buff_aura:"))
+            {
+                string key = cmd.Substring("buff_aura:".Length);
+                hive.CmdSetBuffToSlave(slaveName, "aura", key);
+                return;
+            }
             var command = cmd switch
             {
                 "attack" => WowBot.Core.Game.Hivemind.Command.Attack,
