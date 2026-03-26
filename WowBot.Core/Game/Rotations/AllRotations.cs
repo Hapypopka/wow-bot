@@ -367,7 +367,7 @@ public static class AllRotations
         if inCombat and not hasTotem and IsReady('Зов Духов') then CastSpellByName('Зов Духов') return end
         -- В бою + тотемы далеко (нет баффа воздуха) → возвращение, след тик поставит заново
         if inCombat and hasTotem then
-            local hasBuff=false for i=1,40 do local n=UnitBuff('player',i) if not n then break end if n=='Тотем гнева воздуха' or n=='Тотем неистовства ветра' or n=='Тотем защиты от сил природы' then hasBuff=true break end end
+            local hasBuff=false for i=1,40 do local n=UnitBuff('player',i) if not n then break end if n=='Тотем гнева воздуха' or n=='Тотем неистовства ветра' or n=='Сопротивление силам природы' then hasBuff=true break end end
             if not hasBuff and IsReady('Возвращение тотемов') then CastSpellByName('Возвращение тотемов') return end
         end
         -- Вне боя + тотемы стоят → подобрать
@@ -395,7 +395,7 @@ public static class AllRotations
         if t1>=t2 and t1>=t3 then
             -- ELEMENTAL
             if WB_S.FS~=false and not HasDebuff('target','Огненный шок') then CastSpellByName('Огненный шок') return end
-            if WB_S.LvB~=false and IsReady('Вскипание лавы') then CastSpellByName('Вскипание лавы') return end
+            if WB_S.LvB~=false and IsReady('Выброс лавы') then CastSpellByName('Выброс лавы') return end
             if WB_S.TnL~=false and IsReady('Гром и молния') then CastSpellByName('Гром и молния') return end
             if WB_S.CL~=false and IsReady('Цепная молния') then CastSpellByName('Цепная молния') return end
             if WB_S.LB~=false then CastSpellByName('Молния') end
@@ -404,6 +404,8 @@ public static class AllRotations
             if WB_S.LS~=false and not HasBuff('Щит молний') then CastSpellByName('Щит молний') return end
             if WB_S.Wolves~=false and IsReady('Дух дикого волка') then CastSpellByName('Дух дикого волка') return end
             if WB_S.SR~=false and IsReady('Ярость шамана') then CastSpellByName('Ярость шамана') return end
+            -- Searing Totem: обновлять если нет огненного тотема (60с жизни)
+            if WB_S.Searing~=false then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then CastSpellByName('Тотем опаляющего пламени') return end end
             if WB_S.SS~=false and IsReady('Удар бури') then CastSpellByName('Удар бури') return end
             if WB_S.FS~=false and not HasDebuff('target','Огненный шок') then CastSpellByName('Огненный шок') return end
             if WB_S.ES~=false and IsReady('Земной шок') then CastSpellByName('Земной шок') return end

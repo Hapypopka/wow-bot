@@ -508,6 +508,7 @@ public partial class OverlayWindow : Window
         ["Enhancement Shaman"] = new[]
         {
             ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
+            ("Searing", "flametongue_totem.jpg", "Тотем опаляющего пламени (авто)", true),
             ("LS", "lightning_shield.jpg", "Щит молний", true),
             ("Wolves", "feral_spirit.jpg", "Дух дикого волка", true),
             ("SR", "shamanistic_rage.jpg", "Ярость шамана", true),
@@ -698,6 +699,9 @@ public partial class OverlayWindow : Window
         {
             ("Щит молний", "lightning_shield.jpg", "Щит молний", true),
             ("Водный щит", "water_shield.jpg", "Водный щит", false),
+            ("WB_WEAPON_FT", "shaman_weapon_ft.jpg", "Оружие языка пламени", false),
+            ("WB_WEAPON_EL", "shaman_weapon_el.jpg", "Оружие жизни земли", false),
+            ("WB_WEAPON_WF", "shaman_weapon_wf.jpg", "Оружие неистовства ветра", false),
         },
         // WARRIOR: крики и стойки через радио-выбор (ShoutOptions/StanceOptions), не здесь
         ["HUNTER"] = new[]
@@ -1014,8 +1018,9 @@ public partial class OverlayWindow : Window
             return;
         }
 
-        // Шаман: щиты — радио (взаимоисключающие)
+        // Шаман: щиты и оружие — радио (взаимоисключающие)
         var shamanShields = new[] { "Щит молний", "Водный щит" };
+        var shamanWeapons = new[] { "WB_WEAPON_FT", "WB_WEAPON_EL", "WB_WEAPON_WF" };
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
         foreach (var (spell, oldToggle) in _buffToggles.ToList())
         {
@@ -1036,6 +1041,17 @@ public partial class OverlayWindow : Window
                     foreach (var sh in shamanShields)
                         if (sh != thisSpell && _buffToggles.ContainsKey(sh))
                             _buffToggles[sh].IsChecked = false;
+                };
+            }
+            // Радио-логика для оружия шамана
+            if (_playerClass == "SHAMAN" && shamanWeapons.Contains(spell))
+            {
+                var thisSpell = spell;
+                newToggle.Checked += (s, e) =>
+                {
+                    foreach (var w in shamanWeapons)
+                        if (w != thisSpell && _buffToggles.ContainsKey(w))
+                            _buffToggles[w].IsChecked = false;
                 };
             }
         }
@@ -1725,13 +1741,15 @@ public partial class OverlayWindow : Window
         }
         _selectedCurse = playerClass == "WARLOCK" ? GetSavedString("curse", "CoA") : "";
 
-        // Тотемы шамана: дефолты для рестора
+        // Тотемы шамана: дефолты по спеку
         if (playerClass == "SHAMAN")
         {
-            _selectedTotemEarth = GetSavedString("totemEarth", "Stoneskin");
+            string defAir = _playerSpec == "Enhancement Shaman" ? "Windfury" : "WrathOfAir";
+            string defEarth = "SoE"; // Сила земли для всех спеков
+            _selectedTotemEarth = GetSavedString("totemEarth", defEarth);
             _selectedTotemFire = GetSavedString("totemFire", "Flametongue");
             _selectedTotemWater = GetSavedString("totemWater", "ManaSpring");
-            _selectedTotemAir = GetSavedString("totemAir", "WrathOfAir");
+            _selectedTotemAir = GetSavedString("totemAir", defAir);
         }
         else
         {
@@ -1759,11 +1777,18 @@ public partial class OverlayWindow : Window
 
         // Pre-create buff toggles from ClassBuffs
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
+        // Дефолт оружия шамана по спеку
+        string defWeapon = _playerSpec == "Enhancement Shaman" ? "WB_WEAPON_WF"
+            : _playerSpec == "Resto Shaman" ? "WB_WEAPON_EL" : "WB_WEAPON_FT";
         foreach (var (spell, icon, label, defaultOn) in buffs)
         {
+            bool defOn = defaultOn;
+            // Шаман: оружие — дефолт по спеку
+            if (playerClass == "SHAMAN" && spell.StartsWith("WB_WEAPON_"))
+                defOn = spell == defWeapon;
             var toggle = new ToggleButton
             {
-                IsChecked = GetSavedBool($"buff_{spell}", defaultOn),
+                IsChecked = GetSavedBool($"buff_{spell}", defOn),
                 ToolTip = label,
                 Tag = icon,
             };

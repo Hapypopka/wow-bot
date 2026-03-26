@@ -1250,6 +1250,19 @@ WB_AoE()
         }
 
 
+        // Оружие шамана (проверка через GetWeaponEnchantInfo + смена выбора)
+        string? shamanWeapon = null;
+        string? shamanWeaponKey = null;
+        if (selfBuffs.Remove("WB_WEAPON_FT")) { shamanWeapon = "Оружие языка пламени"; shamanWeaponKey = "FT"; }
+        if (selfBuffs.Remove("WB_WEAPON_EL")) { shamanWeapon = "Оружие жизни земли"; shamanWeaponKey = "EL"; }
+        if (selfBuffs.Remove("WB_WEAPON_WF")) { shamanWeapon = "Оружие неистовства ветра"; shamanWeaponKey = "WF"; }
+        if (shamanWeapon != null)
+        {
+            sb.Append($"local hasEnch=GetWeaponEnchantInfo() ");
+            sb.Append($"if not hasEnch or (WB_WEAPON_LAST and WB_WEAPON_LAST~='{shamanWeaponKey}') then WB_WEAPON_LAST='{shamanWeaponKey}' CastSpellByName('{shamanWeapon}') return end ");
+            sb.Append($"if not WB_WEAPON_LAST then WB_WEAPON_LAST='{shamanWeaponKey}' end ");
+        }
+
         // Self-баффы
         foreach (var buff in selfBuffs)
         {
