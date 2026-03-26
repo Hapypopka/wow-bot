@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__figma__whoami",
+      "mcp__figma__generate_figma_design"
+    ]
+  }
+}

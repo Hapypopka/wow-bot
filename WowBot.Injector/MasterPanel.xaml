@@ -69,6 +69,21 @@
             <!-- Slave panel -->
             <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>
 
+            <!-- Навигация — дропдаун -->
+            <Button x:Name="BtnNavToggle" FontSize="10" FontWeight="Bold"
+                    Click="BtnNavToggle_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
+                    Height="24" Margin="1,4,1,0" Cursor="Hand"
+                    HorizontalContentAlignment="Left" Padding="8,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Навигация" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtNavArrow" Text=" ▼" VerticalAlignment="Center" FontSize="8"/>
+                </StackPanel>
+            </Button>
+            <StackPanel x:Name="NavSlaveList" Visibility="Collapsed" Margin="0,2,0,0"/>
+            <TextBlock x:Name="TxtNavHint" Text="Ctrl+ПКМ → все"
+                       FontSize="9" Foreground="#555" Margin="0,2,0,2"
+                       HorizontalAlignment="Center"/>
 
             <!-- Hotkey labels -->
             <UniformGrid Columns="3">

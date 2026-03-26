@@ -28,10 +28,13 @@ public partial class MasterPanel : Window
     private const int HK_STOP = 3;
 
     public event Action<string>? OnCommand;
+    public event Action<string>? OnSlaveToggled;     // навигация: тогл выбора
+    public event Action<string>? OnSlavePinToggled;  // навигация: тогл закрепления
 
     // Per-slave buff selections (сохраняем между перерисовками)
     private readonly Dictionary<string, string> _slaveBlessing = new();
     private readonly Dictionary<string, string> _slaveAura = new();
+    private bool _navExpanded;
 
     private Dictionary<string, Key> _hotkeys = new();
     private string? _waitingForHotkey; // which command we're setting
@@ -254,7 +257,7 @@ public partial class MasterPanel : Window
 
 
     // --- Slave panel ---
-    public event Action<string>? OnToggleSlave;
+
 
     public event Action<string, string>? OnSlaveCommand; // (slaveName, command)
 
@@ -577,6 +580,92 @@ public partial class MasterPanel : Window
         if (string.IsNullOrEmpty(iconName)) return "";
         string path = System.IO.Path.Combine(basePath, "Icons", iconName);
         return System.IO.File.Exists(path) ? path : "";
+    }
+
+    // --- Navigation dropdown ---
+    private void BtnNavToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _navExpanded = !_navExpanded;
+        NavSlaveList.Visibility = _navExpanded ? Visibility.Visible : Visibility.Collapsed;
+        TxtNavArrow.Text = _navExpanded ? " ▲" : " ▼";
+    }
+
+    public void UpdateNavSlaves(List<WowBot.Core.Game.Hivemind.SlaveInfo> slaves,
+        HashSet<string> selectedNames, HashSet<string> pinnedNames)
+    {
+        NavSlaveList.Children.Clear();
+
+        foreach (var slave in slaves)
+        {
+            bool isSel = selectedNames.Contains(slave.Name);
+            bool isPinned = pinnedNames.Contains(slave.Name);
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 0) };
+
+            // Кнопка выбора: иконка + ник
+            var btn = new Button
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isSel ? "#4a6741" : "#1a1a28")),
+                BorderThickness = new Thickness(0),
+                Height = 26,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(5, 0, 5, 0),
+                Style = null!,
+                MinWidth = 120,
+            };
+
+            var sp = new StackPanel { Orientation = Orientation.Horizontal };
+            string iconPath = GetClassIconPath(slave.ClassName);
+            if (!string.IsNullOrEmpty(iconPath))
+            {
+                try
+                {
+                    sp.Children.Add(new System.Windows.Controls.Image
+                    {
+                        Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath)),
+                        Width = 18, Height = 18,
+                        Margin = new Thickness(0, 0, 5, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                    });
+                }
+                catch { }
+            }
+            sp.Children.Add(new TextBlock
+            {
+                Text = slave.Name,
+                Foreground = isSel ? Brushes.White : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#aaa")),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            btn.Content = sp;
+
+            string name = slave.Name;
+            btn.PreviewMouseLeftButtonDown += (s, ev) => { OnSlaveToggled?.Invoke(name); ev.Handled = true; };
+            row.Children.Add(btn);
+
+            // Кнопка 📌
+            var pinBtn = new Button
+            {
+                Content = "📌", FontSize = 9,
+                Width = 22, Height = 26,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isPinned ? "#5a5020" : "#1a1a28")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isPinned ? "#C8A84E" : "#555")),
+                BorderThickness = new Thickness(0), Padding = new Thickness(0),
+                Margin = new Thickness(1, 0, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = isPinned ? "Закреплён" : "Закрепить",
+                Style = null!,
+            };
+            pinBtn.PreviewMouseLeftButtonDown += (s, ev) => { OnSlavePinToggled?.Invoke(name); ev.Handled = true; };
+            row.Children.Add(pinBtn);
+
+            NavSlaveList.Children.Add(row);
+        }
+
+        TxtNavHint.Text = selectedNames.Count == 0
+            ? "Ctrl+ПКМ → все"
+            : $"Ctrl+ПКМ → {string.Join(", ", selectedNames)}";
     }
 
     // --- Save/Load hotkeys ---

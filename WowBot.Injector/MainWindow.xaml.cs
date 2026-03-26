@@ -66,7 +66,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _updateTimer;
     private OverlayWindow? _overlay;
     private MasterPanel? _masterPanel;
-    private NavPanel? _navPanel;
+    // NavPanel убрана — навигация встроена в MasterPanel
 
     private int _autoConnectPid;
     private string _autoConnectRole = "";
@@ -184,11 +184,6 @@ public partial class MainWindow : Window
                     break;
             }
         };
-        _masterPanel.OnToggleSlave += (name) =>
-        {
-            if (_botEngine == null) return;
-            _botEngine.Hivemind.ToggleSlaveSelection(name);
-        };
         _masterPanel.OnSlaveCommand += (slaveName, cmd) =>
         {
             if (_botEngine == null) return;
@@ -230,35 +225,29 @@ public partial class MainWindow : Window
             };
             hive.SendCommandToSlave(slaveName, command);
         };
-        _masterPanel.Show();
-
-        // NavPanel
-        _navPanel = new NavPanel();
-        _navPanel.OnSlaveToggled += (name) =>
+        // Навигация встроена в MasterPanel
+        _masterPanel.OnSlaveToggled += (name) =>
         {
             if (_botEngine == null) return;
             var nav = _botEngine.Hivemind.NavSelectedSlaves;
             if (nav.Contains(name)) nav.Remove(name); else nav.Add(name);
             _botEngine.Hivemind.NotifyNavChanged();
         };
-        _navPanel.OnSlavePinToggled += (name) =>
+        _masterPanel.OnSlavePinToggled += (name) =>
         {
             if (_botEngine == null) return;
             var pins = _botEngine.Hivemind.NavPinnedSlaves;
             if (pins.Contains(name)) pins.Remove(name); else pins.Add(name);
-            // Закреплённый автоматически выбирается
             if (pins.Contains(name)) _botEngine.Hivemind.NavSelectedSlaves.Add(name);
             _botEngine.Hivemind.NotifyNavChanged();
         };
-        _navPanel.Show();
+        _masterPanel.Show();
     }
 
     private void CloseMasterPanel()
     {
         _masterPanel?.Close();
         _masterPanel = null;
-        _navPanel?.Close();
-        _navPanel = null;
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
@@ -442,12 +431,12 @@ public partial class MainWindow : Window
                 var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
                 _overlay?.UpdateSlaveList(slaves);
                 _masterPanel?.UpdateSlaves(slaves);
-                _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
+                _masterPanel?.UpdateNavSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
             });
             _botEngine.Hivemind.OnNavChanged += () => Dispatcher.Invoke(() =>
             {
                 var slaves = _botEngine.Hivemind.ConnectedSlaves.ToList();
-                _navPanel?.UpdateSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
+                _masterPanel?.UpdateNavSlaves(slaves, _botEngine.Hivemind.NavSelectedSlaves, _botEngine.Hivemind.NavPinnedSlaves);
             });
 
             // Мастер задал бафф → слейв обновляет свои настройки
@@ -833,8 +822,7 @@ public partial class MainWindow : Window
                 _overlay.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
                 if (_masterPanel != null)
                     _masterPanel.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
-                if (_navPanel != null)
-                    _navPanel.Visibility = wowActive ? Visibility.Visible : Visibility.Hidden;
+                // NavPanel теперь встроена в MasterPanel
             }
 
             if (_memory.Process?.HasExited == true)

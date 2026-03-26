@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>MasterPanel + NavPanel merged</title>
+<script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: Segoe UI, sans-serif;
+    background: #111;
+    display: flex;
+    gap: 50px;
+    padding: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .label { text-align:center; color:#888; font-size:11px; margin-bottom:10px; }
+  .col { display:flex; flex-direction:column; align-items:center; }
+
+  /* === Exact current bot style === */
+  .panel {
+    width: 300px;
+    background: #0a0a0f;
+    border: 1.5px solid #C8A84E;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  }
+
+  /* Header */
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .hdr-title {
+    color: #C8A84E;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .hdr-right {
+    display: flex; gap: 4px;
+  }
+  .hdr-btn {
+    width: 28px; height: 28px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #888;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+
+  /* Command buttons */
+  .cmds {
+    display: flex; gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .cmd {
+    flex: 1; height: 40px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #e8e6e3;
+    font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+
+  /* Авто button */
+  .auto-row {
+    padding: 4px 10px 6px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .auto-btn {
+    width: 100%; height: 24px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #C8A84E;
+    font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .auto-btn.on {
+    background: #4a6741;
+    color: #fff;
+    border-color: #4a6741;
+  }
+
+  /* GUID row */
+  .guid-row {
+    display: flex; gap: 4px;
+    padding: 4px 10px 6px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .guid-btn {
+    flex: 1; height: 24px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #888;
+    font-size: 10px;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+  }
+
+  /* Toggle row */
+  .tgl-row {
+    display: flex; gap: 4px;
+    padding: 4px 10px 6px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .tgl {
+    flex: 1; height: 24px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #888;
+    font-size: 10px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tgl.on-r { background: #6b2222; color: #ff4444; }
+  .tgl.on-g { background: #4a6741; color: #fff; }
+
+  /* Hotkey display */
+  .hk-display {
+    display: flex; gap: 4px;
+    padding: 4px 10px 6px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .hk-tag {
+    flex: 1;
+    font-size: 9px;
+    color: #555;
+    text-align: center;
+  }
+
+  /* ====== SLAVE LIST (current MasterPanel style) ====== */
+  .slaves {
+    padding: 4px 8px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .s-row {
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 4px;
+    margin-bottom: 1px;
+    background: #1a1a28;
+    border: 1px solid transparent;
+  }
+  .s-row.idle { background: #3d1f1f; }
+  .s-row.exp { border-color: #C8A84E; background: rgba(200,168,78,0.05); }
+
+  .s-cls {
+    width: 22px; height: 22px;
+    border-radius: 3px;
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+  .s-cls.pal { background: #f48cba; }
+  .s-cls.pri { background: #aaa; }
+  .s-cls.loc { background: #7744aa; }
+  .s-cls.dru { background: #ff7c0a; }
+  .s-cls.dk  { background: #c41e3a; }
+  .s-cls.sha { background: #0070dd; }
+  .s-cls.mag { background: #3fc7eb; }
+  .s-cls.war { background: #c69b6d; }
+  .s-cls.hun { background: #aad372; }
+  .s-cls.rog { background: #fff468; }
+
+  .s-info { flex:1; padding: 0 4px; min-width: 0; }
+  .s-name {
+    font-size: 11px; font-weight: 600;
+    color: #e8e6e3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .s-fol {
+    font-size: 9px;
+    color: #4a6741;
+  }
+  .s-fol.custom { color: #6688cc; }
+
+  .s-btns {
+    display: flex; gap: 1px; align-items: center;
+  }
+  .sb {
+    width: 24px; height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: #888;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sb.on-g { background: #4a6741; color: #fff; }
+  .sb.lock { color: #ff4444; background: #6b3a3a; }
+  .sb.pin { color: #C8A84E; background: #5a5020; }
+  .sb.arrow { color: #C8A84E; font-size: 10px; }
+
+  /* Buff dropdown */
+  .buff-dd {
+    padding: 6px 8px 8px 34px;
+    border-top: 1px solid #2a2a28;
+    background: rgba(200,168,78,0.02);
+  }
+  .buff-lbl {
+    font-size: 9px;
+    color: #888;
+    margin-bottom: 2px;
+    margin-top: 4px;
+  }
+  .buff-lbl:first-child { margin-top: 0; }
+  .buff-row { display: flex; gap: 3px; }
+  .buff-ic {
+    width: 26px; height: 26px;
+    border-radius: 3px;
+    border: 1.5px solid #3a3a28;
+    opacity: 0.4;
+  }
+  .buff-ic.on {
+    opacity: 1;
+    border-color: #c8aa6e;
+    box-shadow: 0 0 4px rgba(200,170,110,0.3);
+  }
+  /* Buff colors */
+  .b-mig { background: linear-gradient(135deg, #7a4400, #cc8800); }
+  .b-kin { background: linear-gradient(135deg, #2244aa, #4488ee); }
+  .b-wis { background: linear-gradient(135deg, #115555, #22aaaa); }
+  .b-ret { background: linear-gradient(135deg, #882222, #dd4444); }
+  .b-dev { background: linear-gradient(135deg, #6a5510, #ccaa22); }
+  .b-frs { background: linear-gradient(135deg, #224488, #44aaee); }
+  .b-fir { background: linear-gradient(135deg, #884400, #dd6600); }
+  .b-sha { background: linear-gradient(135deg, #442266, #7744cc); }
+  .b-con { background: linear-gradient(135deg, #445522, #88aa44); }
+
+  /* ====== НАВИГАЦИЯ — ДРОПДАУН ====== */
+  .nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #1a1a28;
+    border-bottom: 1px solid #2a2a28;
+    cursor: pointer;
+  }
+  .nav-toggle-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #C8A84E;
+  }
+  .nav-toggle-arrow {
+    font-size: 10px;
+    color: #C8A84E;
+  }
+
+  .nav-list {
+    padding: 4px 8px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .nav-row {
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    margin-bottom: 1px;
+    border-radius: 4px;
+  }
+  .nav-row .s-cls { width: 20px; height: 20px; }
+  .nav-sel-btn {
+    flex: 1;
+    height: 26px;
+    background: #1a1a28;
+    border: none;
+    border-radius: 4px;
+    color: #aaa;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .nav-sel-btn.sel {
+    background: #4a6741;
+    color: #fff;
+  }
+  .nav-pin {
+    width: 22px; height: 22px;
+    background: #1a1a28;
+    border: none;
+    border-radius: 3px;
+    color: #555;
+    font-size: 10px;
+    display: flex; align-items: center; justify-content: center;
+    margin-left: 2px;
+  }
+  .nav-pin.on {
+    background: #5a5020;
+    color: #C8A84E;
+  }
+
+  .nav-hint {
+    padding: 4px 10px 6px;
+    font-size: 9px;
+    color: #555;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== STATE 1: Навигация закрыта ===== -->
+<div class="col">
+  <div class="label">Навигация закрыта</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+      <div class="hdr-right">
+        <div class="hdr-btn">⚙</div>
+      </div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+    <div class="auto-row"><div class="auto-btn on">Авто</div></div>
+    <div class="guid-row">
+      <div class="guid-btn">🔄 GUID</div>
+      <div class="guid-btn">🎯 GUID→таргет</div>
+    </div>
+    <div class="tgl-row">
+      <div class="tgl">💀 Вайп</div>
+      <div class="tgl on-g">⚔ АвтоPvE</div>
+    </div>
+
+    <div class="slaves">
+      <div class="s-row">
+        <div class="s-cls pal"></div>
+        <div class="s-info">
+          <div class="s-name">Виртуэлла → М</div>
+          <div class="s-fol">→ Мастер</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb pin">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls pri"></div>
+        <div class="s-info">
+          <div class="s-name">Эрилён → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls loc"></div>
+        <div class="s-info">
+          <div class="s-name">Юп → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls dru"></div>
+        <div class="s-info">
+          <div class="s-name">Эрилун → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls pal"></div>
+        <div class="s-info">
+          <div class="s-name">Узянбайчок → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb lock">🔒</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- НАВИГАЦИЯ — закрыта -->
+    <div class="nav-toggle">
+      <div class="nav-toggle-text">Навигация</div>
+      <div class="nav-toggle-arrow">▼</div>
+    </div>
+
+    <div class="nav-hint">Ctrl+ПКМ → все</div>
+  </div>
+</div>
+
+<!-- ===== STATE 2: Навигация открыта ===== -->
+<div class="col">
+  <div class="label">Навигация открыта</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+      <div class="hdr-right">
+        <div class="hdr-btn">⚙</div>
+      </div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+    <div class="auto-row"><div class="auto-btn on">Авто</div></div>
+    <div class="guid-row">
+      <div class="guid-btn">🔄 GUID</div>
+      <div class="guid-btn">🎯 GUID→таргет</div>
+    </div>
+    <div class="tgl-row">
+      <div class="tgl">💀 Вайп</div>
+      <div class="tgl on-g">⚔ АвтоPvE</div>
+    </div>
+
+    <div class="slaves">
+      <div class="s-row">
+        <div class="s-cls pal"></div>
+        <div class="s-info">
+          <div class="s-name">Виртуэлла → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb pin">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls pri"></div>
+        <div class="s-info">
+          <div class="s-name">Эрилён → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls loc"></div>
+        <div class="s-info">
+          <div class="s-name">Юп → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls dru"></div>
+        <div class="s-info">
+          <div class="s-name">Эрилун → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+      <div class="s-row">
+        <div class="s-cls pal"></div>
+        <div class="s-info">
+          <div class="s-name">Узянбайчок → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb lock">🔒</div>
+          <div class="sb arrow">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- НАВИГАЦИЯ — открыта -->
+    <div class="nav-toggle">
+      <div class="nav-toggle-text">Навигация</div>
+      <div class="nav-toggle-arrow">▲</div>
+    </div>
+
+    <div class="nav-list">
+      <div class="nav-row">
+        <div class="nav-sel-btn sel"><div class="s-cls pal" style="width:18px;height:18px;"></div> Виртуэлла</div>
+        <div class="nav-pin on">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn"><div class="s-cls pri" style="width:18px;height:18px;"></div> Эрилён</div>
+        <div class="nav-pin">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn"><div class="s-cls loc" style="width:18px;height:18px;"></div> Юп</div>
+        <div class="nav-pin">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn sel"><div class="s-cls dru" style="width:18px;height:18px;"></div> Эрилун</div>
+        <div class="nav-pin">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn"><div class="s-cls pal" style="width:18px;height:18px;"></div> Узянбайчок</div>
+        <div class="nav-pin">📌</div>
+      </div>
+    </div>
+
+    <div class="nav-hint">Ctrl+ПКМ → Виртуэлла, Эрилун</div>
+  </div>
+</div>
+
+<!-- ===== STATE 3: Навигация открыта + бафф палладина ===== -->
+<div class="col">
+  <div class="label">Навигация + баффы палладина</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+      <div class="hdr-right">
+        <div class="hdr-btn">⚙</div>
+      </div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+    <div class="auto-row"><div class="auto-btn">Авто</div></div>
+    <div class="tgl-row">
+      <div class="tgl on-r">💀 Вайп</div>
+      <div class="tgl">⚔ АвтоPvE</div>
+    </div>
+
+    <div class="slaves">
+      <!-- Виртуэлла — expanded buffs -->
+      <div class="s-row exp">
+        <div class="s-cls pal"></div>
+        <div class="s-info">
+          <div class="s-name">Виртуэлла → Узянбайчок</div>
+          <div class="s-fol custom">→ Узянбайчок</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb pin">📌</div>
+          <div class="sb arrow">▲</div>
+        </div>
+      </div>
+      <div class="buff-dd">
+        <div class="buff-lbl">Благословение</div>
+        <div class="buff-row">
+          <div class="buff-ic on b-mig"></div>
+          <div class="buff-ic b-kin"></div>
+          <div class="buff-ic b-wis"></div>
+        </div>
+        <div class="buff-lbl">Аура</div>
+        <div class="buff-row">
+          <div class="buff-ic b-ret"></div>
+          <div class="buff-ic on b-dev"></div>
+          <div class="buff-ic b-frs"></div>
+          <div class="buff-ic b-fir"></div>
+          <div class="buff-ic b-sha"></div>
+          <div class="buff-ic b-con"></div>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <div class="s-cls pri"></div>
+        <div class="s-info"><div class="s-name">Эрилён → М</div></div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div><div class="sb arrow">▼</div>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <div class="s-cls loc"></div>
+        <div class="s-info"><div class="s-name">Юп → М</div></div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div><div class="sb arrow">▼</div>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <div class="s-cls dru"></div>
+        <div class="s-info"><div class="s-name">Эрилун → М</div></div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb">📌</div><div class="sb arrow">▼</div>
+        </div>
+      </div>
+
+      <!-- Узянбайчок — expanded buffs -->
+      <div class="s-row exp">
+        <div class="s-cls pal"></div>
+        <div class="s-info">
+          <div class="s-name">Узянбайчок → М</div>
+        </div>
+        <div class="s-btns">
+          <div class="sb">⚔</div><div class="sb">🏃</div><div class="sb">🔄</div><div class="sb">⏹</div>
+          <div class="sb lock">🔒</div>
+          <div class="sb arrow">▲</div>
+        </div>
+      </div>
+      <div class="buff-dd">
+        <div class="buff-lbl">Благословение</div>
+        <div class="buff-row">
+          <div class="buff-ic b-mig"></div>
+          <div class="buff-ic b-kin"></div>
+          <div class="buff-ic on b-wis"></div>
+        </div>
+        <div class="buff-lbl">Аура</div>
+        <div class="buff-row">
+          <div class="buff-ic on b-ret"></div>
+          <div class="buff-ic b-dev"></div>
+          <div class="buff-ic b-frs"></div>
+          <div class="buff-ic b-fir"></div>
+          <div class="buff-ic b-sha"></div>
+          <div class="buff-ic b-con"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- НАВИГАЦИЯ — открыта -->
+    <div class="nav-toggle">
+      <div class="nav-toggle-text">Навигация</div>
+      <div class="nav-toggle-arrow">▲</div>
+    </div>
+    <div class="nav-list">
+      <div class="nav-row">
+        <div class="nav-sel-btn sel"><div class="s-cls pal" style="width:18px;height:18px;"></div> Виртуэлла</div>
+        <div class="nav-pin on">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn"><div class="s-cls pri" style="width:18px;height:18px;"></div> Эрилён</div>
+        <div class="nav-pin">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn"><div class="s-cls loc" style="width:18px;height:18px;"></div> Юп</div>
+        <div class="nav-pin">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn sel"><div class="s-cls dru" style="width:18px;height:18px;"></div> Эрилун</div>
+        <div class="nav-pin">📌</div>
+      </div>
+      <div class="nav-row">
+        <div class="nav-sel-btn"><div class="s-cls pal" style="width:18px;height:18px;"></div> Узянбайчок</div>
+        <div class="nav-pin">📌</div>
+      </div>
+    </div>
+    <div class="nav-hint">Ctrl+ПКМ → Виртуэлла, Эрилун</div>
+  </div>
+</div>
+
+</body>
+</html>
