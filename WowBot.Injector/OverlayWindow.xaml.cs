@@ -106,7 +106,6 @@ public partial class OverlayWindow : Window
     private static readonly (string key, string icon, string tooltip)[] TotemFireOptions =
     {
         ("Flametongue", "flametongue_totem.jpg", "Тотем языка пламени"),
-        ("FireRes", "fire_resistance.jpg", "Тотем защиты от огня"),
         ("FrostRes", "frost_resistance.jpg", "Тотем защиты от магии льда"),
     };
     private static readonly (string key, string icon, string tooltip)[] TotemWaterOptions =
@@ -114,11 +113,13 @@ public partial class OverlayWindow : Window
         ("ManaSpring", "mana_spring.jpg", "Тотем источника маны"),
         ("HealStream", "healing_stream.jpg", "Тотем исцеляющего потока"),
         ("Cleansing", "cleansing_totem.jpg", "Тотем очищения"),
+        ("FireRes", "fire_resistance.jpg", "Тотем защиты от огня"),
     };
     private static readonly (string key, string icon, string tooltip)[] TotemAirOptions =
     {
         ("WrathOfAir", "wrath_of_air.jpg", "Тотем гнева воздуха"),
         ("Windfury", "windfury_totem.jpg", "Тотем неистовства ветра"),
+        ("NatureRes", "nature_resistance.jpg", "Тотем защиты от сил природы"),
     };
 
     // Seal selection (radio-style, only one at a time)
@@ -497,6 +498,7 @@ public partial class OverlayWindow : Window
         // ==================== SHAMAN ====================
         ["Elemental Shaman"] = new[]
         {
+            ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
             ("FS", "flame_shock.jpg", "Огненный шок", true),
             ("LvB", "lava_burst.jpg", "Вскипание лавы", true),
             ("TnL", "thunderstorm.jpg", "Гром и молния", true),
@@ -505,6 +507,7 @@ public partial class OverlayWindow : Window
         },
         ["Enhancement Shaman"] = new[]
         {
+            ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
             ("LS", "lightning_shield.jpg", "Щит молний", true),
             ("Wolves", "feral_spirit.jpg", "Дух дикого волка", true),
             ("SR", "shamanistic_rage.jpg", "Ярость шамана", true),
@@ -516,6 +519,7 @@ public partial class OverlayWindow : Window
         },
         ["Resto Shaman"] = new[]
         {
+            ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
             ("RT", "riptide.jpg", "Быстрина", true),
             ("NS", "natures_swift.jpg", "Природная стремительность", true),
             ("CH", "chain_heal.jpg", "Цепное исцеление", true),
@@ -760,6 +764,76 @@ public partial class OverlayWindow : Window
     private void MenuHivemind_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Hivemind");
     private void MenuReload_Click(object s, MouseButtonEventArgs e) => OnReloadScripts?.Invoke();
     public event Action? OnReloadScripts;
+    public event Func<string, string?>? OnLuaExecute;
+
+    private Window? _luaPopup;
+
+    private void LuaToggle_Click(object s, MouseButtonEventArgs e)
+    {
+        if (_luaPopup != null && _luaPopup.IsVisible)
+        {
+            _luaPopup.Close();
+            _luaPopup = null;
+            return;
+        }
+
+        _luaPopup = new Window
+        {
+            Title = "Lua",
+            Width = 450, Height = 180,
+            WindowStyle = WindowStyle.ToolWindow,
+            ResizeMode = ResizeMode.CanResizeWithGrip,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0d0f14")),
+            Topmost = true,
+            Left = Left, Top = Top + ActualHeight + 4,
+        };
+
+        var stack = new StackPanel { Margin = new Thickness(4) };
+        var input = new TextBox
+        {
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#16181e")),
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c8aa6e")),
+            BorderThickness = new Thickness(0),
+            FontSize = 11, FontFamily = new FontFamily("Consolas"),
+            Padding = new Thickness(4, 3, 4, 3),
+        };
+        var output = new TextBlock
+        {
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5ab57a")),
+            FontSize = 10, FontFamily = new FontFamily("Consolas"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var scroll = new ScrollViewer
+        {
+            MaxHeight = 120, Margin = new Thickness(0, 4, 0, 0),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = output,
+        };
+
+        input.KeyDown += (s2, e2) =>
+        {
+            if (e2.Key == Key.Enter && !string.IsNullOrWhiteSpace(input.Text))
+            {
+                string cmd = input.Text.Trim();
+                string? result = OnLuaExecute?.Invoke(cmd);
+                output.Text = result ?? "(ok)";
+                input.SelectAll();
+                e2.Handled = true;
+            }
+            if (e2.Key == Key.Escape)
+            {
+                _luaPopup?.Close();
+                _luaPopup = null;
+                e2.Handled = true;
+            }
+        };
+
+        stack.Children.Add(input);
+        stack.Children.Add(scroll);
+        _luaPopup.Content = stack;
+        _luaPopup.Show();
+        input.Focus();
+    }
 
     private void ShowSubmenu(string name)
     {
@@ -940,6 +1014,8 @@ public partial class OverlayWindow : Window
             return;
         }
 
+        // Шаман: щиты — радио (взаимоисключающие)
+        var shamanShields = new[] { "Щит молний", "Водный щит" };
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
         foreach (var (spell, oldToggle) in _buffToggles.ToList())
         {
@@ -950,6 +1026,18 @@ public partial class OverlayWindow : Window
 
             var newToggle = AddSpellIcon(wrap, iconFile, tooltip ?? spell, wasChecked);
             _buffToggles[spell] = newToggle;
+
+            // Радио-логика для щитов шамана
+            if (_playerClass == "SHAMAN" && shamanShields.Contains(spell))
+            {
+                var thisSpell = spell;
+                newToggle.Checked += (s, e) =>
+                {
+                    foreach (var sh in shamanShields)
+                        if (sh != thisSpell && _buffToggles.ContainsKey(sh))
+                            _buffToggles[sh].IsChecked = false;
+                };
+            }
         }
         SubContent.Children.Add(wrap);
 
@@ -1148,21 +1236,32 @@ public partial class OverlayWindow : Window
         if (_playerClass == "SHAMAN")
         {
             void AddTotemRadio(string label, (string key, string icon, string tooltip)[] options,
-                ref string selected, Dictionary<string, ToggleButton> toggles)
+                string elementId, Dictionary<string, ToggleButton> toggles)
             {
+                string currentSel = elementId switch
+                {
+                    "earth" => _selectedTotemEarth, "fire" => _selectedTotemFire,
+                    "water" => _selectedTotemWater, "air" => _selectedTotemAir, _ => ""
+                };
                 AddLabel(label);
                 var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
                 toggles.Clear();
-                string sel = selected; // capture for lambda
                 foreach (var (key, icon, tooltip) in options)
                 {
-                    bool isSelected = sel == key;
+                    bool isSelected = currentSel == key;
                     var toggle = AddSpellIcon(wrap, icon, tooltip, isSelected);
                     toggles[key] = toggle;
 
                     var tKey = key;
+                    var elId = elementId;
                     toggle.Checked += (s, e) =>
                     {
+                        switch (elId) {
+                            case "earth": _selectedTotemEarth = tKey; break;
+                            case "fire": _selectedTotemFire = tKey; break;
+                            case "water": _selectedTotemWater = tKey; break;
+                            case "air": _selectedTotemAir = tKey; break;
+                        }
                         foreach (var (k, btn) in toggles)
                             if (k != tKey) btn.IsChecked = false;
                         SaveSettings();
@@ -1170,16 +1269,23 @@ public partial class OverlayWindow : Window
                     };
                     toggle.Unchecked += (s, e) =>
                     {
+                        // Только если этот тотем был выбран (не затирать выбор нового)
+                        switch (elId) {
+                            case "earth": if (_selectedTotemEarth == tKey) _selectedTotemEarth = ""; break;
+                            case "fire": if (_selectedTotemFire == tKey) _selectedTotemFire = ""; break;
+                            case "water": if (_selectedTotemWater == tKey) _selectedTotemWater = ""; break;
+                            case "air": if (_selectedTotemAir == tKey) _selectedTotemAir = ""; break;
+                        }
                         OnTotemChanged?.Invoke(label, "");
                     };
                 }
                 SubContent.Children.Add(wrap);
             }
 
-            AddTotemRadio("Земля", TotemEarthOptions, ref _selectedTotemEarth, _totemEarthToggles);
-            AddTotemRadio("Огонь", TotemFireOptions, ref _selectedTotemFire, _totemFireToggles);
-            AddTotemRadio("Вода", TotemWaterOptions, ref _selectedTotemWater, _totemWaterToggles);
-            AddTotemRadio("Воздух", TotemAirOptions, ref _selectedTotemAir, _totemAirToggles);
+            AddTotemRadio("Земля", TotemEarthOptions, "earth", _totemEarthToggles);
+            AddTotemRadio("Огонь", TotemFireOptions, "fire", _totemFireToggles);
+            AddTotemRadio("Вода", TotemWaterOptions, "water", _totemWaterToggles);
+            AddTotemRadio("Воздух", TotemAirOptions, "air", _totemAirToggles);
         }
     }
 

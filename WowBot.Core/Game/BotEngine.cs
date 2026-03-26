@@ -650,7 +650,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} pos=({player.X:F1},{player.Y:F1},{player.Z:F1}) target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); string totemDbg = ""; try { totemDbg = _hook.ExecuteLuaWithResult("WB_R=tostring(WB_TOTEM_DBG or 'nil')") ?? ""; } catch {} Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} totem=[{totemDbg}] flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ ===
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
@@ -706,9 +706,9 @@ public class BotEngine : IDisposable
             bool targetInCombat = hasTarget && target!.InCombat;
             if (!_followEnabled && _rotationEnabled)
             {
-                if ((hasTarget && targetInCombat) || IsHealer)
+                if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (hasTarget && _autoFace && !IsHealer) _navigation.FaceUnit(player, target!);
+                    if (hasTarget && targetInCombat && _autoFace && !IsHealer) _navigation.FaceUnit(player, target!);
                     string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
                     if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
                     _hook.ExecuteLua(script, 500);
@@ -737,9 +737,9 @@ public class BotEngine : IDisposable
             else
             {
                 // В дистанции — полная ротация (только в бою)
-                if ((hasTarget && targetInCombat) || IsHealer)
+                if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (_autoFace) _navigation.FaceUnit(player, target!);
+                    if (hasTarget && targetInCombat && _autoFace) _navigation.FaceUnit(player, target!);
                     string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
                     _hook.ExecuteLua(script, 500);
                 }
@@ -1179,44 +1179,39 @@ WB_AoE()
             }
         }
 
-        // Тотемы шамана (4 стихии, проверяем через GetTotemInfo)
+        // Тотемы шамана — SetMultiCastSpell + Зов Духов
         if (PlayerClass == "SHAMAN")
         {
-            void AddTotem(int slot, string selectedKey, Dictionary<string, string> map)
+            // Spell ID для каждого тотема (max rank 3.3.5a)
+            var earthIds = new Dictionary<string, int>
             {
-                if (string.IsNullOrEmpty(selectedKey) || !map.ContainsKey(selectedKey)) return;
-                string spellName = map[selectedKey].Replace("'", "\\'");
-                sb.Append($"local _,tn{slot}=GetTotemInfo({slot}) if tn{slot}~='{spellName}' then CastSpellByName('{spellName}') return end ");
-            }
-
-            var earthMap = new Dictionary<string, string>
-            {
-                ["Stoneskin"] = "Тотем каменной кожи",
-                ["SoE"] = "Тотем силы земли",
-                ["Tremor"] = "Тотем трепета",
+                ["Stoneskin"] = 58753, ["SoE"] = 58643, ["Tremor"] = 8143,
             };
-            var fireMap = new Dictionary<string, string>
+            var fireIds = new Dictionary<string, int>
             {
-                ["Flametongue"] = "Тотем языка пламени",
-                ["FireRes"] = "Тотем защиты от огня",
-                ["FrostRes"] = "Тотем защиты от магии льда",
+                ["Flametongue"] = 58656, ["FrostRes"] = 58745,
             };
-            var waterMap = new Dictionary<string, string>
+            var waterIds = new Dictionary<string, int>
             {
-                ["ManaSpring"] = "Тотем источника маны",
-                ["HealStream"] = "Тотем исцеляющего потока",
-                ["Cleansing"] = "Тотем очищения",
+                ["ManaSpring"] = 58774, ["HealStream"] = 58757, ["Cleansing"] = 8170, ["FireRes"] = 58739,
             };
-            var airMap = new Dictionary<string, string>
+            var airIds = new Dictionary<string, int>
             {
-                ["WrathOfAir"] = "Тотем гнева воздуха",
-                ["Windfury"] = "Тотем неистовства ветра",
+                ["WrathOfAir"] = 3738, ["Windfury"] = 8512, ["NatureRes"] = 58749,
             };
 
-            AddTotem(2, SelectedTotemEarth, earthMap);   // Earth = slot 2
-            AddTotem(1, SelectedTotemFire, fireMap);      // Fire = slot 1
-            AddTotem(3, SelectedTotemWater, waterMap);     // Water = slot 3
-            AddTotem(4, SelectedTotemAir, airMap);         // Air = slot 4
+            // Слоты Зова Духов: 141=fire, 142=earth, 143=water, 144=air
+            Logger.Info($"Totems: fire={SelectedTotemFire} earth={SelectedTotemEarth} water={SelectedTotemWater} air={SelectedTotemAir}");
+            bool hasAny = false;
+            if (!string.IsNullOrEmpty(SelectedTotemFire) && fireIds.TryGetValue(SelectedTotemFire, out int fireId))
+            { sb.Append($"SetMultiCastSpell(141,{fireId}) "); hasAny = true; }
+            if (!string.IsNullOrEmpty(SelectedTotemEarth) && earthIds.TryGetValue(SelectedTotemEarth, out int earthId))
+            { sb.Append($"SetMultiCastSpell(142,{earthId}) "); hasAny = true; }
+            if (!string.IsNullOrEmpty(SelectedTotemWater) && waterIds.TryGetValue(SelectedTotemWater, out int waterId))
+            { sb.Append($"SetMultiCastSpell(143,{waterId}) "); hasAny = true; }
+            if (!string.IsNullOrEmpty(SelectedTotemAir) && airIds.TryGetValue(SelectedTotemAir, out int airId))
+            { sb.Append($"SetMultiCastSpell(144,{airId}) "); hasAny = true; }
+
         }
 
         // Аспект охотника (авто-переключение по мане: дракондор/гадюка)

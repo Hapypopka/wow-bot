@@ -70,6 +70,7 @@ public partial class MainWindow : Window
 
     private int _autoConnectPid;
     private string _autoConnectRole = "";
+    private bool _hiddenMode;
 
     public MainWindow()
     {
@@ -77,7 +78,7 @@ public partial class MainWindow : Window
         Closed += OnWindowClosed;
         Loaded += MainWindow_Loaded;
 
-        // Парсим аргументы командной строки: --pid=1234 --role=slave
+        // Парсим аргументы командной строки: --pid=1234 --role=slave --hidden
         var args = Environment.GetCommandLineArgs();
         foreach (var arg in args)
         {
@@ -85,6 +86,15 @@ public partial class MainWindow : Window
                 _autoConnectPid = pid;
             if (arg.StartsWith("--role="))
                 _autoConnectRole = arg[7..];
+            if (arg == "--hidden")
+                _hiddenMode = true;
+        }
+
+        // Скрытый режим — прячем главное окно (оверлеи всё равно появятся)
+        if (_hiddenMode)
+        {
+            WindowState = WindowState.Minimized;
+            ShowInTaskbar = false;
         }
     }
 
@@ -261,6 +271,18 @@ public partial class MainWindow : Window
         _botEngine?.Dispose();
         _endSceneHook?.Dispose();
         _memory.Dispose();
+
+        // Лаунчер (не hidden) — убить все дочерние скрытые процессы
+        if (!_hiddenMode)
+        {
+            try { System.IO.File.WriteAllText(PidLockFile, ""); } catch { }
+            int myPid = Environment.ProcessId;
+            foreach (var proc in Process.GetProcessesByName("WowBot.Injector"))
+            {
+                if (proc.Id == myPid) continue;
+                try { proc.Kill(); } catch { }
+            }
+        }
         Environment.Exit(0);
     }
 
@@ -510,6 +532,19 @@ public partial class MainWindow : Window
                 if (_botEngine == null) return;
                 _botEngine.ReloadScripts();
                 _overlay.UpdateInfo("Scripts reloaded!");
+            };
+            _overlay.OnLuaExecute += (cmd) =>
+            {
+                if (_endSceneHook == null) return null;
+                try
+                {
+                    // Если команда содержит WB_R= — вернуть результат
+                    if (cmd.Contains("WB_R="))
+                        return _endSceneHook.ExecuteLuaWithResult(cmd);
+                    _endSceneHook.ExecuteLua(cmd, 500);
+                    return "(ok)";
+                }
+                catch (Exception ex) { return ex.Message; }
             };
             _overlay.OnHivemindCommand += (cmd) =>
             {
@@ -1358,7 +1393,7 @@ public partial class MainWindow : Window
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = exePath,
-                    Arguments = $"--pid={pid} --role={role}",
+                    Arguments = $"--pid={pid} --role={role} --hidden",
                     UseShellExecute = true,
                     Verb = "runas", // Админ
                 });
@@ -1373,6 +1408,9 @@ public partial class MainWindow : Window
 
     private void BtnCloseAll_Click(object sender, RoutedEventArgs e)
     {
+        // Очистить лок-файл (боты убиваются и не успевают UnlockPid)
+        try { System.IO.File.WriteAllText(PidLockFile, ""); } catch { }
+
         // Убить все дочерние WowBot.Injector процессы (кроме себя)
         int myPid = Environment.ProcessId;
         foreach (var proc in Process.GetProcessesByName("WowBot.Injector"))

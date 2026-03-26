@@ -179,6 +179,9 @@
                     <StackPanel>
                         <TextBlock x:Name="TxtInfo" Text="" Foreground="#5a5d65" FontSize="9" FontFamily="Consolas"/>
                         <TextBlock x:Name="TxtFollowInfo" Text="" Foreground="#5a5d65" FontSize="9" FontFamily="Consolas"/>
+                        <TextBlock Text="lua›" Foreground="#2a2a34" FontSize="8" FontFamily="Consolas"
+                                   Cursor="Hand" MouseLeftButtonDown="LuaToggle_Click"
+                                   HorizontalAlignment="Right" Margin="0,-2,0,0"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

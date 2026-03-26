@@ -358,6 +358,21 @@ public static class AllRotations
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
+    -- Тотемы: в бою → Зов Духов, вне боя → Возвращение тотемов
+    if WB_S.CallSpirits~=false then
+        local inCombat = UnitAffectingCombat('player')
+        local hasTotem = false
+        for i=1,4 do local _,_,_,d = GetTotemInfo(i) if d and d>0 then hasTotem=true break end end
+        -- В бою + нет тотемов → поставить
+        if inCombat and not hasTotem and IsReady('Зов Духов') then CastSpellByName('Зов Духов') return end
+        -- В бою + тотемы далеко (нет баффа воздуха) → возвращение, след тик поставит заново
+        if inCombat and hasTotem then
+            local hasBuff=false for i=1,40 do local n=UnitBuff('player',i) if not n then break end if n=='Тотем гнева воздуха' or n=='Тотем неистовства ветра' or n=='Тотем защиты от сил природы' then hasBuff=true break end end
+            if not hasBuff and IsReady('Возвращение тотемов') then CastSpellByName('Возвращение тотемов') return end
+        end
+        -- Вне боя + тотемы стоят → подобрать
+        if not inCombat and hasTotem and IsReady('Возвращение тотемов') then CastSpellByName('Возвращение тотемов') return end
+    end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
@@ -635,8 +650,8 @@ public static class AllRotations
         foreach (var cls in classes)
         {
             var path = Path.Combine(ScriptsDir, $"{cls.ToLower()}.lua");
-            if (!File.Exists(path))
-                File.WriteAllText(path, GetBuiltInScript(cls));
+            // Всегда перезаписываем встроенными (hot-reload: юзер правит → жмёт Reload)
+            File.WriteAllText(path, GetBuiltInScript(cls));
         }
         Logger.Info($"Exported {classes.Length} scripts to {ScriptsDir}");
     }
