@@ -483,6 +483,7 @@ public class Hivemind
     public void StopCtmWatch()
     {
         _ctmWatchRunning = false;
+        _ctmWatchThread?.Join(500);
         _ctmWatchThread = null;
     }
 

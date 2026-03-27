@@ -1,24 +1,13 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Media;
+using WowBot.Core.Memory;
 
 namespace WowBot.Injector;
 
 public partial class MasterPanel : Window
 {
-    [DllImport("user32.dll")]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-    [DllImport("user32.dll")]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
-
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -47,8 +36,8 @@ public partial class MasterPanel : Window
         {
             // Сделать окно не-активируемым — клик не забирает фокус у WoW
             var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            int exStyle = GetWindowLong(handle, GWL_EXSTYLE);
-            SetWindowLong(handle, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+            int exStyle = WinApi.GetWindowLong(handle, GWL_EXSTYLE);
+            WinApi.SetWindowLong(handle, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
         };
         Loaded += (s, e) => RegisterAll();
         Closed += (s, e) => UnregisterAll();
@@ -59,7 +48,7 @@ public partial class MasterPanel : Window
     {
         if (wowHwnd == IntPtr.Zero) return;
         var myHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        SetParent(myHwnd, wowHwnd);
+        WinApi.SetParent(myHwnd, wowHwnd);
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
@@ -120,9 +109,6 @@ public partial class MasterPanel : Window
     }
 
     // --- Hotkey assignment ---
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-
     private System.Windows.Threading.DispatcherTimer? _captureTimer;
 
     private void BtnSetHotkey_Click(object sender, RoutedEventArgs e)
@@ -151,7 +137,7 @@ public partial class MasterPanel : Window
         // Проверяем F1-F12, цифры, буквы
         for (int vk = 0x70; vk <= 0x7B; vk++) // F1-F12
         {
-            if ((GetAsyncKeyState(vk) & 0x8000) != 0)
+            if ((WinApi.GetAsyncKeyState(vk) & 0x8000) != 0)
             {
                 var key = KeyInterop.KeyFromVirtualKey(vk);
                 AssignHotkey(key);
@@ -160,7 +146,7 @@ public partial class MasterPanel : Window
         }
         for (int vk = 0x30; vk <= 0x39; vk++) // 0-9
         {
-            if ((GetAsyncKeyState(vk) & 0x8000) != 0)
+            if ((WinApi.GetAsyncKeyState(vk) & 0x8000) != 0)
             {
                 var key = KeyInterop.KeyFromVirtualKey(vk);
                 AssignHotkey(key);
@@ -169,7 +155,7 @@ public partial class MasterPanel : Window
         }
         for (int vk = 0x41; vk <= 0x5A; vk++) // A-Z
         {
-            if ((GetAsyncKeyState(vk) & 0x8000) != 0)
+            if ((WinApi.GetAsyncKeyState(vk) & 0x8000) != 0)
             {
                 var key = KeyInterop.KeyFromVirtualKey(vk);
                 AssignHotkey(key);
@@ -177,7 +163,7 @@ public partial class MasterPanel : Window
             }
         }
         // Escape — отмена
-        if ((GetAsyncKeyState(0x1B) & 0x8000) != 0)
+        if ((WinApi.GetAsyncKeyState(0x1B) & 0x8000) != 0)
         {
             _captureTimer?.Stop();
             _waitingButton!.Content = "Нажми...";
@@ -224,19 +210,19 @@ public partial class MasterPanel : Window
         UnregisterAll();
         var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if (_hotkeys.ContainsKey("attack"))
-            RegisterHotKey(handle, HK_ATTACK, 0, (uint)KeyInterop.VirtualKeyFromKey(_hotkeys["attack"]));
+            WinApi.RegisterHotKey(handle, HK_ATTACK, 0, (uint)KeyInterop.VirtualKeyFromKey(_hotkeys["attack"]));
         if (_hotkeys.ContainsKey("follow"))
-            RegisterHotKey(handle, HK_FOLLOW, 0, (uint)KeyInterop.VirtualKeyFromKey(_hotkeys["follow"]));
+            WinApi.RegisterHotKey(handle, HK_FOLLOW, 0, (uint)KeyInterop.VirtualKeyFromKey(_hotkeys["follow"]));
         if (_hotkeys.ContainsKey("stop"))
-            RegisterHotKey(handle, HK_STOP, 0, (uint)KeyInterop.VirtualKeyFromKey(_hotkeys["stop"]));
+            WinApi.RegisterHotKey(handle, HK_STOP, 0, (uint)KeyInterop.VirtualKeyFromKey(_hotkeys["stop"]));
     }
 
     private void UnregisterAll()
     {
         var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        UnregisterHotKey(handle, HK_ATTACK);
-        UnregisterHotKey(handle, HK_FOLLOW);
-        UnregisterHotKey(handle, HK_STOP);
+        WinApi.UnregisterHotKey(handle, HK_ATTACK);
+        WinApi.UnregisterHotKey(handle, HK_FOLLOW);
+        WinApi.UnregisterHotKey(handle, HK_STOP);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

@@ -15,8 +15,8 @@ public class BotEngine : IDisposable
     private string _fullScript = "";
     private string _fullScriptNoCombatCheck = "";
 
-    private bool _followEnabled;
-    private bool _rotationEnabled;
+    private volatile bool _followEnabled;
+    private volatile bool _rotationEnabled;
     private bool _autoFace = true;
     private bool _autoSelectTarget = true;
     private float _maxTargetRange = 30f;
@@ -24,7 +24,7 @@ public class BotEngine : IDisposable
     private float _followDistance = 8f;
 
     // AoE settings
-    private bool _aoeEnabled;
+    private volatile bool _aoeEnabled;
     private bool _useMultiDot = true;
     private int _maxDotTargets = 4;
     private bool _useMindSear = true;
@@ -43,15 +43,15 @@ public class BotEngine : IDisposable
     }
 
     // AoE properties
-    public bool AoeEnabled { get => _aoeEnabled; set => _aoeEnabled = value; }
+    public bool AoeEnabled { get => _aoeEnabled; set { _aoeEnabled = value; _buffBuilder.AoeEnabled = value; } }
     public bool UseMultiDot { get => _useMultiDot; set => _useMultiDot = value; }
     public int MaxDotTargets { get => _maxDotTargets; set => _maxDotTargets = value; }
     public bool UseMindSear { get => _useMindSear; set => _useMindSear = value; }
     public int MindSearTargets { get => _mindSearTargets; set => _mindSearTargets = value; }
 
     // Buff settings
-    private bool _buffsEnabled;
-    private List<string> _enabledBuffs = new();
+    private volatile bool _buffsEnabled;
+    private readonly BuffScriptBuilder _buffBuilder = new();
     private int _buffCheckTick;
 
     public bool BuffsEnabled
@@ -64,7 +64,7 @@ public class BotEngine : IDisposable
             else if (!_followEnabled && !_rotationEnabled && !Hivemind.IsActive) StopTimer();
         }
     }
-    public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
+    public List<string> EnabledBuffs { get => _buffBuilder.EnabledBuffs; set => _buffBuilder.EnabledBuffs = value; }
     public string SpellFlagsLua { get; set; } = "";
 
     /// Считает живых мобов рядом с игроком (для AoE ротаций, напр. Залп охотника)
@@ -91,63 +91,33 @@ public class BotEngine : IDisposable
         }
         return count;
     }
-    public string SelectedSeal { get; set; } = "";
-    public string SelectedBlessing { get; set; } = "BoM";
-    public string SelectedAura { get; set; } = "AuRet";
-    public string SelectedShout { get; set; } = "";
-    public string SelectedStance { get; set; } = "";
-    public string SelectedPresence { get; set; } = "";
-    public string SelectedFeralForm { get; set; } = "";
-    public bool AoeSealSwap { get; set; } = false;
+    public string SelectedSeal { get => _buffBuilder.SelectedSeal; set => _buffBuilder.SelectedSeal = value; }
+    public string SelectedBlessing { get => _buffBuilder.SelectedBlessing; set => _buffBuilder.SelectedBlessing = value; }
+    public string SelectedAura { get => _buffBuilder.SelectedAura; set => _buffBuilder.SelectedAura = value; }
+    public string SelectedShout { get => _buffBuilder.SelectedShout; set => _buffBuilder.SelectedShout = value; }
+    public string SelectedStance { get => _buffBuilder.SelectedStance; set => _buffBuilder.SelectedStance = value; }
+    public string SelectedPresence { get => _buffBuilder.SelectedPresence; set => _buffBuilder.SelectedPresence = value; }
+    public string SelectedFeralForm { get => _buffBuilder.SelectedFeralForm; set => _buffBuilder.SelectedFeralForm = value; }
+    public bool AoeSealSwap { get => _buffBuilder.AoeSealSwap; set => _buffBuilder.AoeSealSwap = value; }
     public bool AutoPveEnabled { get; set; } = false;
     public BossTactics BossTactics { get; private set; }
     private int _autoPveTick;
-    public string SelectedTotemEarth { get; set; } = "";
-    public string SelectedTotemFire { get; set; } = "";
-    public string SelectedTotemWater { get; set; } = "";
-    public string SelectedTotemAir { get; set; } = "";
+    public string SelectedTotemEarth { get => _buffBuilder.SelectedTotemEarth; set => _buffBuilder.SelectedTotemEarth = value; }
+    public string SelectedTotemFire { get => _buffBuilder.SelectedTotemFire; set => _buffBuilder.SelectedTotemFire = value; }
+    public string SelectedTotemWater { get => _buffBuilder.SelectedTotemWater; set => _buffBuilder.SelectedTotemWater = value; }
+    public string SelectedTotemAir { get => _buffBuilder.SelectedTotemAir; set => _buffBuilder.SelectedTotemAir = value; }
     public bool IsHealer { get; set; }
     public System.Diagnostics.Process? WowProcess { get; set; }
-    public string PlayerClass { get; set; } = "";
+    private string _playerClass = "";
+    public string PlayerClass
+    {
+        get => _playerClass;
+        set { _playerClass = value; _buffBuilder.PlayerClass = value; }
+    }
     private bool _isMovingForward;
     private int _healerTickCount;
-    private int _registerTick;
     private int _blessingCooldown; // пропустить N баф-чеков после каста благословения
-    private double _lastRegisterTime;
-    private uint _hiveMacroAddr;
-    private int _hiveAddrRetry;
-
-    /// <summary>Найти адрес макроса #2 в памяти WoW</summary>
-    private uint FindHiveMacroAddr()
-    {
-        // Пишем маркер в макрос #2
-        string marker = "WBHM_" + (Environment.TickCount % 100000);
-        _hook.ExecuteLua($"EditMacro(2,'WH',1,'{marker}')", 300);
-        System.Threading.Thread.Sleep(300);
-
-        // Сканируем память
-        byte[] needle = System.Text.Encoding.UTF8.GetBytes(marker);
-        uint[][] regions = { new uint[] { 0x01000000, 0x20000000 }, new uint[] { 0x20000000, 0x30000000 } };
-        foreach (var region in regions)
-        {
-            for (uint addr = region[0]; addr < region[1]; addr += 4096)
-            {
-                try
-                {
-                    byte[] block = _objectManager.Memory.ReadBytes(addr, 4096 + needle.Length);
-                    for (int i = 0; i < 4096; i++)
-                    {
-                        bool match = true;
-                        for (int j = 0; j < needle.Length; j++)
-                            if (block[i + j] != needle[j]) { match = false; break; }
-                        if (match) return addr + (uint)i;
-                    }
-                }
-                catch { }
-            }
-        }
-        return 0;
-    }
+    private HivemindTickHandler _hivemindHandler;
     private string? _specName;
     public string? SpecName { get => _specName; set => _specName = value; }
 
@@ -160,7 +130,11 @@ public class BotEngine : IDisposable
     // Hivemind (мультибоксинг)
     public Hivemind Hivemind { get; private set; }
     public SlaveController SlaveCtrl { get; private set; }
-    public double LastHiveCheck { get; set; }
+    public double LastHiveCheck
+    {
+        get => _hivemindHandler.LastHiveCheck;
+        set => _hivemindHandler.LastHiveCheck = value;
+    }
     // _slaveListenerInstalled хранится в Hivemind
 
     public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
@@ -173,6 +147,7 @@ public class BotEngine : IDisposable
         Hivemind.SetBotEngine(this);
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
+        _hivemindHandler = new HivemindTickHandler(Hivemind, hook, objectManager);
         // Антиафк — всегда пока бот заатачен
         _afkTimer = new Timer(AfkTick, null, 30_000, 30_000); // каждые 30 сек
     }
@@ -406,7 +381,6 @@ public class BotEngine : IDisposable
 
     // --- Main tick ---
     private int _logTick;
-    private int _hiveCheckTick;
 
     private void Tick(object? state)
     {
@@ -419,16 +393,9 @@ public class BotEngine : IDisposable
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
 
-            // Кэш позиции для быстрого потока CTM watch
-            if (Hivemind.CurrentRole == Hivemind.Role.Master)
-                Hivemind.UpdateCachedPosition(player.X, player.Y, player.Z, player.Facing);
-
-            // Авто-принятие реса для слейвов
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && player.IsDead)
-            {
-                _hook.ExecuteLua("AcceptResurrect()", 100);
-                return;
-            }
+            // Кэш позиции мастера + авто-рес слейвов
+            _hivemindHandler.UpdateMasterPosition(player);
+            if (_hivemindHandler.HandleSlaveAutoRes(player)) return;
 
             // Глобальный декремент кулдаунов
             if (_blessingCooldown > 0) _blessingCooldown--;
@@ -438,104 +405,11 @@ public class BotEngine : IDisposable
             int combatEnemies = CountNearbyCombatEnemies(player);
             string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} ";
 
-            // === HIVEMIND: слушаем addon messages (и мастер, и слейв) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave || Hivemind.CurrentRole == Hivemind.Role.Master)
-            {
-                // Устанавливаем слушатель (один раз)
-                if (!Hivemind._slaveListenerInstalled)
-                {
-                    _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
-                    Hivemind._slaveListenerInstalled = true;
-                    Logger.Info("Hivemind: slave listener installed");
-                    // Найти адрес макроса #2 для прямого чтения
-                    if (_hiveMacroAddr == 0 && LuaReader != null && LuaReader.IsInitialized)
-                    {
-                        System.Threading.Thread.Sleep(300);
-                        _hiveMacroAddr = FindHiveMacroAddr();
-                        Logger.Info($"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
-                    }
-                }
-
-                // Читаем команды через Lua C API (без макросов!)
-                _hiveCheckTick++;
-                if (_hiveCheckTick >= 3 && !Hivemind.GossipReading)
-                {
-                    _hiveCheckTick = 0;
-
-                    // Команды мастера (для слейвов)
-                    string checkLua = Hivemind.GetSlaveReadScript();
-                    string? response = _hook.ExecuteLuaWithResult(checkLua);
-                    if (_logTick == 0) Logger.Info($"Hivemind: raw response=[{response ?? "NULL"}]");
-                    if (response != null)
-                    {
-                        var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
-                        if (cmd != null && time > LastHiveCheck)
-                        {
-                            LastHiveCheck = time;
-                            // Слейв: игнорировать команды от чужих мастеров
-                            if (Hivemind.CurrentRole == Hivemind.Role.Slave &&
-                                !string.IsNullOrEmpty(Hivemind.MasterName) &&
-                                !string.IsNullOrEmpty(sender) &&
-                                sender != Hivemind.MasterName)
-                            {
-                                if (_logTick == 0) Logger.Info($"Hivemind: IGNORED {cmd} from {sender} (my master={Hivemind.MasterName})");
-                                // не выполняем
-                            }
-                            else
-                            {
-                                Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
-                                Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
-                            }
-                        }
-                    }
-
-                    // Register от слейвов (для мастера) — отдельные Lua переменные
-                    if (Hivemind.CurrentRole == Hivemind.Role.Master)
-                    {
-                        string regLua = Hivemind.GetRegisterReadScript();
-                        string? regResponse = _hook.ExecuteLuaWithResult(regLua);
-                        if (regResponse != null)
-                        {
-                            var regParts = regResponse.Split('|');
-                            if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
-                            {
-                                double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
-                                    System.Globalization.CultureInfo.InvariantCulture, out double regTime);
-                                if (regTime > _lastRegisterTime)
-                                {
-                                    _lastRegisterTime = regTime;
-                                    Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // === HIVEMIND SLAVE: периодический Register (каждые ~10 сек) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave)
-            {
-                _registerTick++;
-                if (_registerTick >= 66) // 66 * 150мс ≈ 10 сек
-                {
-                    _registerTick = 0;
-                    Hivemind.SendRegister(PlayerClass);
-                }
-            }
-
-            // === HIVEMIND MASTER: Ctrl+ПКМ → направить слейвов ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Master)
-            {
-                Hivemind.MasterTick();
-            }
+            // === HIVEMIND: слушатель, команды, register, Ctrl+CTM ===
+            _hivemindHandler.Tick(_logTick, LuaReader, PlayerClass);
 
             // === БАФФЫ ДЛЯ СЛЕЙВОВ (до return из слейв-блоков) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && _buffsEnabled &&
-                (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) ||
-                 !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) ||
-                 !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm) ||
-                 !string.IsNullOrEmpty(SelectedTotemEarth) || !string.IsNullOrEmpty(SelectedTotemFire) ||
-                 !string.IsNullOrEmpty(SelectedTotemWater) || !string.IsNullOrEmpty(SelectedTotemAir)))
+            if (Hivemind.CurrentRole == Hivemind.Role.Slave && _buffsEnabled && _buffBuilder.HasAnyBuffSettings())
             {
                 _buffCheckTick++;
                 bool classBuffCheck = _buffCheckTick % 3 == 0;
@@ -543,7 +417,7 @@ public class BotEngine : IDisposable
                 if (fullBuffCheck) _buffCheckTick = 0;
                 if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
                 {
-                    string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
+                    string buffScript = fullBuffCheck ? _buffBuilder.BuildBuffScript() : _buffBuilder.BuildClassBuffScript(combatEnemies);
                     if (!string.IsNullOrEmpty(buffScript))
                     {
                         _hook.ExecuteLua(buffScript, 500);
@@ -648,7 +522,7 @@ public class BotEngine : IDisposable
             if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); string totemDbg = ""; try { totemDbg = _hook.ExecuteLuaWithResult("WB_R=tostring(WB_TOTEM_DBG or 'nil')") ?? ""; } catch {} Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} totem=[{totemDbg}] flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ ===
-            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
+            if (_buffsEnabled && _buffBuilder.HasAnyBuffSettings())
             {
                 _buffCheckTick++;
                 bool classBuffCheck = _buffCheckTick % 3 == 0;
@@ -656,7 +530,7 @@ public class BotEngine : IDisposable
                 if (fullBuffCheck) _buffCheckTick = 0;
                 if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
                 {
-                    string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
+                    string buffScript = fullBuffCheck ? _buffBuilder.BuildBuffScript() : _buffBuilder.BuildClassBuffScript(combatEnemies);
                     if (!string.IsNullOrEmpty(buffScript))
                     {
                         if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal}");
@@ -871,438 +745,7 @@ WB_AoE()
 ";
     }
 
-    // --- Buff system ---
-
-    // Баффы которые кастуются на группу/рейд (через TargetUnit)
-    private static readonly HashSet<string> RaidBuffs = new()
-    {
-        "Молитва стойкости", "Молитва духа", "Молитва защиты от темной магии",
-        "Дар дикой природы", "Чародейская гениальность",
-    };
-
-    // Баффы-аналоги: рейдовый бафф покрывает одиночный (проверяем оба)
-    private static readonly Dictionary<string, string> BuffAliases = new()
-    {
-        { "Молитва стойкости", "Слово силы: Стойкость" },
-        { "Молитва духа", "Божественный дух" },
-        { "Молитва защиты от темной магии", "Защита от темной магии" },
-        { "Дар дикой природы", "Знак дикой природы" },
-        { "Чародейская гениальность", "Чародейский интеллект" },
-    };
-
-    // Реагенты для рейд-баффов: prayer → (reagent, fallback single-target spell)
-    private static readonly Dictionary<string, (string reagent, string fallback)> BuffReagents = new()
-    {
-        { "Молитва стойкости", ("Свеча благочестия", "Слово силы: Стойкость") },
-        { "Молитва духа", ("Свеча благочестия", "Божественный дух") },
-        { "Молитва защиты от темной магии", ("Свеча благочестия", "Защита от темной магии") },
-        { "Дар дикой природы", ("Дикий шиполист", "Знак дикой природы") },
-        { "Чародейская гениальность", ("Чародейский порошок", "Чародейский интеллект") },
-    };
-
-    /// <summary>Быстрая проверка только классовых баффов (стойка/форма/власть/аура/печать) — каждые 0.5 сек</summary>
-    private string BuildClassBuffScript()
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.Append("local function WB_CB() ");
-        sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
-
-        bool hasAnything = false;
-
-        // Стойка воина
-        if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedStance))
-        {
-            var (stanceForm, stanceSpell) = SelectedStance switch
-            {
-                "Battle" => (1, "Боевая стойка"),
-                "Defensive" => (2, "Оборонительная стойка"),
-                "Berserker" => (3, "Стойка берсерка"),
-                _ => (0, "")
-            };
-            if (stanceForm > 0)
-            {
-                sb.Append($"if GetShapeshiftForm()~={stanceForm} then CastSpellByName('{stanceSpell}') return end ");
-                hasAnything = true;
-            }
-        }
-
-        // Власть ДК
-        if (PlayerClass == "DEATHKNIGHT" && !string.IsNullOrEmpty(SelectedPresence))
-        {
-            var (presForm, presSpell) = SelectedPresence switch
-            {
-                "Blood" => (1, "Власть крови"),
-                "Frost" => (2, "Власть льда"),
-                "Unholy" => (3, "Власть нечестивости"),
-                _ => (0, "")
-            };
-            if (presForm > 0)
-            {
-                sb.Append($"if GetShapeshiftForm()~={presForm} then CastSpellByName('{presSpell}') return end ");
-                hasAnything = true;
-            }
-        }
-
-        // Форма друида
-        if (PlayerClass == "DRUID" && !string.IsNullOrEmpty(SelectedFeralForm))
-        {
-            var (formId, formSpell) = SelectedFeralForm switch
-            {
-                "Cat" => (3, "Облик кошки"),
-                "Bear" => (1, "Облик лютого медведя"),
-                _ => (0, "")
-            };
-            if (formId > 0)
-            {
-                sb.Append($"if GetShapeshiftForm()~={formId} then CastSpellByName('{formSpell}') return end ");
-                hasAnything = true;
-            }
-        }
-
-        // Аура паладина
-        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedAura))
-        {
-            string auraSpell = SelectedAura switch
-            {
-                "AuRet" => "Аура воздаяния",
-                "AuDev" => "Аура благочестия",
-                "AuCru" => "Аура воина Света",
-                "AuFrost" => "Аура защиты от магии льда",
-                "AuFire" => "Аура защиты от огня",
-                "AuShadow" => "Аура защиты от темной магии",
-                "AuConc" => "Аура сосредоточенности",
-                _ => ""
-            };
-            if (!string.IsNullOrEmpty(auraSpell))
-            {
-                sb.Append($"local function HasB(u,n) for i=1,40 do local b=UnitBuff(u,i) if not b then return false end if b==n then return true end end return false end ");
-                sb.Append($"if not HasB('player','{auraSpell}') then CastSpellByName('{auraSpell}') return end ");
-                hasAnything = true;
-            }
-        }
-
-        // Печать паладина (быстрая проверка)
-        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedSeal))
-        {
-            if (!hasAnything)
-                sb.Append("local function HasB(u,n) for i=1,40 do local b=UnitBuff(u,i) if not b then return false end if b==n then return true end end return false end ");
-            if (AoeEnabled && AoeSealSwap && (SelectedSeal == "SoV" || SelectedSeal == "SoC"))
-            {
-                sb.Append("if WB_NCE>=2 then if not HasB('player','Печать повиновения') then CastSpellByName('Печать повиновения') end ");
-                sb.Append("else if not HasB('player','Печать мщения') then CastSpellByName('Печать мщения') end end ");
-            }
-            else
-            {
-                string sealSpell = SelectedSeal switch
-                {
-                    "SoV" => "Печать мщения",
-                    "SoC" => "Печать повиновения",
-                    "SoW" => "Печать мудрости",
-                    "SoL" => "Печать Света",
-                    _ => ""
-                };
-                if (!string.IsNullOrEmpty(sealSpell))
-                    sb.Append($"if not HasB('player','{sealSpell}') then CastSpellByName('{sealSpell}') return end ");
-            }
-            hasAnything = true;
-        }
-
-        if (!hasAnything) return "";
-        sb.Append("end WB_CB()");
-        return sb.ToString();
-    }
-
-    private string BuildBuffScript()
-    {
-        // Аура/печать/благословение кастуются даже если нет обычных баффов
-        if (_enabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence) && string.IsNullOrEmpty(SelectedFeralForm) && string.IsNullOrEmpty(SelectedTotemEarth) && string.IsNullOrEmpty(SelectedTotemFire) && string.IsNullOrEmpty(SelectedTotemWater) && string.IsNullOrEmpty(SelectedTotemAir)) return "";
-
-        var selfBuffs = new List<string>();
-        var raidBuffs = new List<string>();
-
-        foreach (var buff in _enabledBuffs)
-        {
-            if (RaidBuffs.Contains(buff))
-                raidBuffs.Add(buff);
-            else
-                selfBuffs.Add(buff);
-        }
-
-        // Всё в одну строку — многострочный Lua через AppendLine триггерит taint WeakAuras
-        var sb = new System.Text.StringBuilder();
-        sb.Append("local function WB_Buff() ");
-        sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
-        sb.Append("if UnitIsDeadOrGhost('player') then return end ");
-        sb.Append("local function HasB(unit,name) for i=1,40 do local n=UnitBuff(unit,i) if not n then return false end if n==name then return true end end return false end ");
-
-        // Аура паладина (только для PALADIN)
-        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedAura))
-        {
-            string auraSpell = SelectedAura switch
-            {
-                "AuRet" => "Аура воздаяния",
-                "AuDev" => "Аура благочестия",
-                "AuCru" => "Аура воина Света",
-                "AuFrost" => "Аура защиты от магии льда",
-                "AuFire" => "Аура защиты от огня",
-                "AuShadow" => "Аура защиты от темной магии",
-                "AuConc" => "Аура сосредоточенности",
-                _ => ""
-            };
-            if (!string.IsNullOrEmpty(auraSpell))
-            {
-                var au = auraSpell.Replace("'", "\\'");
-                sb.Append($"if not HasB('player','{au}') then CastSpellByName('{au}') return end ");
-            }
-        }
-
-        // Печать паладина (только для PALADIN)
-        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedSeal))
-        {
-            // AoE свап: SoV↔SoC при 2+ врагах (только для рет/прот)
-            if (AoeEnabled && AoeSealSwap && (SelectedSeal == "SoV" || SelectedSeal == "SoC"))
-            {
-                sb.Append("if WB_NCE>=2 then if not HasB('player','Печать повиновения') then CastSpellByName('Печать повиновения') return end ");
-                sb.Append("else if not HasB('player','Печать мщения') then CastSpellByName('Печать мщения') return end end ");
-            }
-            else
-            {
-                string sealSpell = SelectedSeal switch
-                {
-                    "SoV" => "Печать мщения",
-                    "SoC" => "Печать повиновения",
-                    "SoW" => "Печать мудрости",
-                    "SoL" => "Печать Света",
-                    _ => ""
-                };
-                if (!string.IsNullOrEmpty(sealSpell))
-                {
-                    var ss = sealSpell.Replace("'", "\\'");
-                    sb.Append($"if not HasB('player','{ss}') then CastSpellByName('{ss}') return end ");
-                }
-            }
-        }
-
-        // Благословение паладина (только для PALADIN) — проверяем пати/рейд
-        if (PlayerClass == "PALADIN" && !string.IsNullOrEmpty(SelectedBlessing))
-        {
-            var (blessSpell, greatSpell) = SelectedBlessing switch
-            {
-                "BoM" => ("Благословение могущества", "Великое благословение могущества"),
-                "BoK" => ("Благословение королей", "Великое благословение королей"),
-                "BoW" => ("Благословение мудрости", "Великое благословение мудрости"),
-                "BoS" => ("Благословение неприкосновенности", "Великое благословение неприкосновенности"),
-                _ => ("", "")
-            };
-            if (!string.IsNullOrEmpty(blessSpell))
-            {
-                var bs = blessSpell.Replace("'", "\\'");
-                var gs = greatSpell.Replace("'", "\\'");
-                // Сначала себя (TargetUnit('player') чтобы Великое благословение бафнуло свой класс)
-                sb.Append($"if not HasB('player','{bs}') and not HasB('player','{gs}') then TargetUnit('player') if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end ");
-                // Потом пати/рейд в радиусе 30 ярдов
-                sb.Append($"local nr=GetNumRaidMembers() ");
-                sb.Append($"if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{bs}') and not HasB(u,'{gs}') then TargetUnit(u) if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end end ");
-                sb.Append($"else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{bs}') and not HasB(u,'{gs}') then TargetUnit(u) if GetItemCount('Знак королей')>0 then CastSpellByName('{gs}') else CastSpellByName('{bs}') end TargetLastTarget() return end end end ");
-            }
-        }
-
-        // Крик воина (только для WARRIOR)
-        if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedShout))
-        {
-            string shoutSpell = SelectedShout switch
-            {
-                "Battle" => "Боевой крик",
-                "Commanding" => "Командирский крик",
-                _ => ""
-            };
-            if (!string.IsNullOrEmpty(shoutSpell))
-            {
-                var sh = shoutSpell.Replace("'", "\\'");
-                sb.Append($"if not HasB('player','{sh}') then CastSpellByName('{sh}') return end ");
-            }
-        }
-
-        // Стойка воина (через GetShapeshiftForm: 1=боевая, 2=защитная, 3=берсерк)
-        if (PlayerClass == "WARRIOR" && !string.IsNullOrEmpty(SelectedStance))
-        {
-            var (stanceForm, stanceSpell) = SelectedStance switch
-            {
-                "Battle" => (1, "Боевая стойка"),
-                "Defensive" => (2, "Оборонительная стойка"),
-                "Berserker" => (3, "Стойка берсерка"),
-                _ => (0, "")
-            };
-            if (stanceForm > 0)
-            {
-                var st = stanceSpell.Replace("'", "\\'");
-                Logger.Info($"BuildBuff: stance={SelectedStance} form={stanceForm} spell={stanceSpell}");
-                sb.Append($"if GetShapeshiftForm()~={stanceForm} then CastSpellByName('{st}') return end ");
-            }
-        }
-
-        // Власть ДК (через GetShapeshiftForm: 1=кровь, 2=лёд, 3=нечестивость)
-        if (PlayerClass == "DEATHKNIGHT" && !string.IsNullOrEmpty(SelectedPresence))
-        {
-            var (presForm, presSpell) = SelectedPresence switch
-            {
-                "Blood" => (1, "Власть крови"),
-                "Frost" => (2, "Власть льда"),
-                "Unholy" => (3, "Власть нечестивости"),
-                _ => (0, "")
-            };
-            if (presForm > 0)
-            {
-                var pr = presSpell.Replace("'", "\\'");
-                sb.Append($"if GetShapeshiftForm()~={presForm} then CastSpellByName('{pr}') return end ");
-            }
-        }
-
-        // Форма ферал друида (через GetShapeshiftForm: 1=медведь, 3=кот)
-        if (PlayerClass == "DRUID" && !string.IsNullOrEmpty(SelectedFeralForm))
-        {
-            var (formId, formSpell) = SelectedFeralForm switch
-            {
-                "Cat" => (3, "Облик кошки"),
-                "Bear" => (1, "Облик лютого медведя"),
-                _ => (0, "")
-            };
-            if (formId > 0)
-            {
-                var fs = formSpell.Replace("'", "\\'");
-                sb.Append($"if GetShapeshiftForm()~={formId} then CastSpellByName('{fs}') return end ");
-            }
-        }
-
-        // Тотемы шамана — SetMultiCastSpell + Зов Духов
-        if (PlayerClass == "SHAMAN")
-        {
-            // Spell ID для каждого тотема (max rank 3.3.5a)
-            var earthIds = new Dictionary<string, int>
-            {
-                ["Stoneskin"] = 58753, ["SoE"] = 58643, ["Tremor"] = 8143,
-            };
-            var fireIds = new Dictionary<string, int>
-            {
-                ["Flametongue"] = 58656, ["FrostRes"] = 58745,
-            };
-            var waterIds = new Dictionary<string, int>
-            {
-                ["ManaSpring"] = 58774, ["HealStream"] = 58757, ["Cleansing"] = 8170, ["FireRes"] = 58739,
-            };
-            var airIds = new Dictionary<string, int>
-            {
-                ["WrathOfAir"] = 3738, ["Windfury"] = 8512, ["NatureRes"] = 58749,
-            };
-
-            // Слоты Зова Духов: 141=fire, 142=earth, 143=water, 144=air
-            Logger.Info($"Totems: fire={SelectedTotemFire} earth={SelectedTotemEarth} water={SelectedTotemWater} air={SelectedTotemAir}");
-            bool hasAny = false;
-            if (!string.IsNullOrEmpty(SelectedTotemFire) && fireIds.TryGetValue(SelectedTotemFire, out int fireId))
-            { sb.Append($"SetMultiCastSpell(141,{fireId}) "); hasAny = true; }
-            if (!string.IsNullOrEmpty(SelectedTotemEarth) && earthIds.TryGetValue(SelectedTotemEarth, out int earthId))
-            { sb.Append($"SetMultiCastSpell(142,{earthId}) "); hasAny = true; }
-            if (!string.IsNullOrEmpty(SelectedTotemWater) && waterIds.TryGetValue(SelectedTotemWater, out int waterId))
-            { sb.Append($"SetMultiCastSpell(143,{waterId}) "); hasAny = true; }
-            if (!string.IsNullOrEmpty(SelectedTotemAir) && airIds.TryGetValue(SelectedTotemAir, out int airId))
-            { sb.Append($"SetMultiCastSpell(144,{airId}) "); hasAny = true; }
-
-        }
-
-        // Аспект охотника (авто-переключение по мане: дракондор/гадюка)
-        if (PlayerClass == "HUNTER")
-        {
-            bool hasDragon = selfBuffs.Remove("Дух дракондора");
-            bool hasViper = selfBuffs.Remove("Дух гадюки");
-            if (hasDragon)
-            {
-                // Дракондор включён → авто-переключение на гадюку для реген маны
-                // Вне боя: гадюка если мана <100%, дракондор если мана полная
-                // В бою: гадюка при мане <30%, дракондор при мане >80% (гистерезис)
-                sb.Append("local m=UnitMana('player')/UnitManaMax('player') ");
-                sb.Append("if not UnitAffectingCombat('player') then ");
-                sb.Append("if m<1 and not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
-                sb.Append("if m>=1 and not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
-                sb.Append("else ");
-                sb.Append("if m<0.3 and not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
-                sb.Append("if m>0.8 and not HasB('player','Дух дракондора') then CastSpellByName('Дух дракондора') return end ");
-                sb.Append("end ");
-                sb.Append("if not HasB('player','Дух дракондора') and not HasB('player','Дух гадюки') then CastSpellByName('Дух дракондора') return end ");
-            }
-            else if (hasViper)
-            {
-                sb.Append("if not HasB('player','Дух гадюки') then CastSpellByName('Дух гадюки') return end ");
-            }
-        }
-
-        // Камень чар (проверка чары на оружии, создание + применение)
-        if (selfBuffs.Remove("WB_SPELLSTONE"))
-        {
-            sb.Append("local hasEnch=GetWeaponEnchantInfo() ");
-            sb.Append("if not hasEnch then ");
-            sb.Append("if GetItemCount('Могучий камень чар')>0 then UseItemByName('Могучий камень чар') PickupInventoryItem(16) return end ");
-            sb.Append("CastSpellByName('Создание камня чар') return end ");
-        }
-
-
-        // Оружие шамана (проверка через GetWeaponEnchantInfo + смена выбора)
-        string? shamanWeapon = null;
-        string? shamanWeaponKey = null;
-        if (selfBuffs.Remove("WB_WEAPON_FT")) { shamanWeapon = "Оружие языка пламени"; shamanWeaponKey = "FT"; }
-        if (selfBuffs.Remove("WB_WEAPON_EL")) { shamanWeapon = "Оружие жизни земли"; shamanWeaponKey = "EL"; }
-        if (selfBuffs.Remove("WB_WEAPON_WF")) { shamanWeapon = "Оружие неистовства ветра"; shamanWeaponKey = "WF"; }
-        if (shamanWeapon != null)
-        {
-            sb.Append($"local hasEnch=GetWeaponEnchantInfo() ");
-            sb.Append($"if not hasEnch or (WB_WEAPON_LAST and WB_WEAPON_LAST~='{shamanWeaponKey}') then WB_WEAPON_LAST='{shamanWeaponKey}' CastSpellByName('{shamanWeapon}') return end ");
-            sb.Append($"if not WB_WEAPON_LAST then WB_WEAPON_LAST='{shamanWeaponKey}' end ");
-        }
-
-        // Self-баффы
-        foreach (var buff in selfBuffs)
-        {
-            var s = buff.Replace("'", "\\'");
-            sb.Append($"if not HasB('player','{s}') then CastSpellByName('{s}') return end ");
-        }
-
-        // Рейд-баффы: проверяем себя + пати/рейд
-        foreach (var buff in raidBuffs)
-        {
-            var s = buff.Replace("'", "\\'");
-            string singleBuff = s;
-            if (BuffAliases.TryGetValue(buff, out var alias))
-                singleBuff = alias.Replace("'", "\\'");
-
-            string reagent = "", fallback = "";
-            bool hasReagent = BuffReagents.TryGetValue(buff, out var reagentInfo);
-            if (hasReagent)
-            {
-                reagent = reagentInfo.reagent.Replace("'", "\\'");
-                fallback = reagentInfo.fallback.Replace("'", "\\'");
-            }
-
-            // Проверить: нужен ли кому бафф? Ищем первого без бафа
-            // Себя
-            sb.Append($"if not HasB('player','{s}') and not HasB('player','{singleBuff}') then ");
-            if (hasReagent)
-                sb.Append($"if GetItemCount('{reagent}')>0 then CastSpellByName('{s}') else CastSpellByName('{fallback}') end ");
-            else
-                sb.Append($"CastSpellByName('{s}') ");
-            sb.Append("return end ");
-
-            // Пати/рейд
-            string castLogic = hasReagent
-                ? $"if GetItemCount('{reagent}')>0 then CastSpellByName('{s}') else TargetUnit(u) CastSpellByName('{fallback}') TargetLastTarget() end"
-                : $"TargetUnit(u) CastSpellByName('{s}') TargetLastTarget()";
-
-            sb.Append($"local nr=GetNumRaidMembers() ");
-            sb.Append($"if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{s}') and not HasB(u,'{singleBuff}') then {castLogic} return end end ");
-            sb.Append($"else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and not HasB(u,'{s}') and not HasB(u,'{singleBuff}') then {castLogic} return end end end ");
-        }
-
-        sb.Append("end WB_Buff()");
-        return sb.ToString();
-    }
+    // --- Buff system (делегирован в BuffScriptBuilder) ---
 
     public void Dispose()
     {

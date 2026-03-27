@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using WowBot.Core;
 
 namespace WowBot.Core.Memory;
 
@@ -7,6 +8,7 @@ public class MemoryReader : IDisposable
 {
     private IntPtr _processHandle;
     private Process? _process;
+    private DateTime _lastReadWarning = DateTime.MinValue;
 
     public bool IsAttached => _processHandle != IntPtr.Zero;
     public Process? Process => _process;
@@ -46,7 +48,17 @@ public class MemoryReader : IDisposable
     public byte[] ReadBytes(uint address, int count)
     {
         var buffer = new byte[count];
-        WinApi.ReadProcessMemory(_processHandle, (IntPtr)address, buffer, count, out _);
+        bool success = WinApi.ReadProcessMemory(_processHandle, (IntPtr)address, buffer, count, out _);
+        if (!success)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastReadWarning).TotalSeconds >= 1.0)
+            {
+                _lastReadWarning = now;
+                Logger.Warn($"ReadProcessMemory failed at 0x{address:X8} (count={count})");
+            }
+            return new byte[count];
+        }
         return buffer;
     }
 

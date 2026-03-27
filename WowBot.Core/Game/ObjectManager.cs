@@ -19,6 +19,8 @@ public class ObjectManager
     public List<WowPlayer> Players { get; private set; } = new();
     public List<WowObject> Objects { get; private set; } = new();
 
+    private Dictionary<ulong, WowUnit> _guidLookup = new();
+
     /// <summary>
     /// Проверяет валидность базовых указателей ObjectManager
     /// </summary>
@@ -36,13 +38,14 @@ public class ObjectManager
         var units = new List<WowUnit>();
         var players = new List<WowPlayer>();
         var objects = new List<WowObject>();
+        var guidLookup = new Dictionary<ulong, WowUnit>();
         WowPlayer? localPlayer = null;
 
         uint clientConnection = _memory.ReadUInt32(Offsets.ClientConnection);
-        if (clientConnection == 0) { Units = units; Players = players; Objects = objects; LocalPlayer = null; return; }
+        if (clientConnection == 0) { Units = units; Players = players; Objects = objects; _guidLookup = guidLookup; LocalPlayer = null; return; }
 
         uint objectManagerBase = _memory.ReadUInt32(clientConnection + Offsets.ObjectManagerOffset);
-        if (objectManagerBase == 0) { Units = units; Players = players; Objects = objects; LocalPlayer = null; return; }
+        if (objectManagerBase == 0) { Units = units; Players = players; Objects = objects; _guidLookup = guidLookup; LocalPlayer = null; return; }
 
         LocalPlayerGuid = _memory.ReadUInt64(objectManagerBase + Offsets.LocalPlayerGuid);
 
@@ -61,12 +64,14 @@ public class ObjectManager
                 {
                     var unit = new WowUnit(_memory, currentObject);
                     units.Add(unit);
+                    guidLookup[unit.Guid] = unit;
                     break;
                 }
                 case WowObjectType.Player:
                 {
                     var player = new WowPlayer(_memory, currentObject);
                     players.Add(player);
+                    guidLookup[player.Guid] = player;
 
                     if (player.Guid == LocalPlayerGuid)
                         localPlayer = player;
@@ -86,6 +91,7 @@ public class ObjectManager
         Units = units;
         Players = players;
         Objects = objects;
+        _guidLookup = guidLookup;
         LocalPlayer = localPlayer;
     }
 
@@ -102,11 +108,8 @@ public class ObjectManager
     /// </summary>
     public WowUnit? GetUnitByGuid(ulong guid)
     {
-        foreach (var unit in Units)
-            if (unit.Guid == guid) return unit;
-        foreach (var player in Players)
-            if (player.Guid == guid) return player;
-        return null;
+        if (guid == 0) return null;
+        return _guidLookup.TryGetValue(guid, out var unit) ? unit : null;
     }
 
     /// <summary>
