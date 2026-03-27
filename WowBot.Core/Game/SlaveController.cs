@@ -34,6 +34,14 @@ public class SlaveController
 
     public void ResetMasterGuid() => _masterGuid = 0;
 
+    /// <summary>Установить GUID напрямую (от мастера)</summary>
+    public void SetMasterGuid(ulong guid, string name)
+    {
+        _masterGuid = guid;
+        MasterName = name;
+        Logger.Info($"SlaveCtrl: GUID set directly to 0x{guid:X} '{name}'");
+    }
+
     /// <summary>Один раз при старте слейва — найти GUID мастера через TargetUnit</summary>
     public void InitMasterGuid(string masterName)
     {
@@ -136,17 +144,67 @@ public class SlaveController
 
     private void FindMasterGuid(string name)
     {
-        // TargetUnit для точного поиска по имени, потом TargetLastTarget чтобы не сломать таргет
-        _hook.ExecuteLua($"TargetUnit('{name}')", 200);
-        System.Threading.Thread.Sleep(150);
+        _objectManager.Update();
+
+        // 1. Ищем среди игроков через Lua (надёжнее чем Player.Name из памяти)
+        string luaFind = $"for i=1,4 do if UnitName('party'..i)=='{name.Replace("'", "\\'")}' then WB_R=UnitGUID('party'..i) return end end WB_R=''";
+        string? guidStr = _hook.ExecuteLuaWithResult(luaFind, 0, 500);
+        if (!string.IsNullOrEmpty(guidStr) && guidStr.StartsWith("0x"))
+        {
+            if (ulong.TryParse(guidStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out ulong pGuid) && pGuid != 0)
+            {
+                _masterGuid = pGuid;
+                Logger.Info($"SlaveCtrl: GUID=0x{_masterGuid:X} (Lua party '{name}')");
+                return;
+            }
+        }
+
+        // 2. Ищем среди NPC (Units) — для GuidByTarget, берём ближайшего
+        var localPlayer = _objectManager.LocalPlayer;
+        WowUnit? bestUnit = null;
+        float bestDist = float.MaxValue;
+        int candidateCount = 0;
+        foreach (var unit in _objectManager.Units)
+        {
+            if (string.Equals(unit.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                candidateCount++;
+                float dist = localPlayer != null
+                    ? MathF.Sqrt(MathF.Pow(unit.X - localPlayer.X, 2) + MathF.Pow(unit.Y - localPlayer.Y, 2) + MathF.Pow(unit.Z - localPlayer.Z, 2))
+                    : 0;
+                Logger.Info($"SlaveCtrl: candidate Unit '{name}' GUID=0x{unit.Guid:X} dist={dist:F1}");
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestUnit = unit;
+                }
+            }
+        }
+        if (bestUnit != null)
+        {
+            _masterGuid = bestUnit.Guid;
+            Logger.Info($"SlaveCtrl: GUID=0x{_masterGuid:X} (nearest Unit '{name}', dist={bestDist:F1}, candidates={candidateCount})");
+            return;
+        }
+
+        // 3. Fallback: TargetUnit + сохранение/восстановление таргета (для игроков не в пати)
+        string safeName = name.Replace("'", "\\'");
+        string targetLua = $"WB_OLDTGT=UnitGUID('target') or '' TargetUnit('{safeName}')";
+        _hook.ExecuteLua(targetLua, 200);
+        System.Threading.Thread.Sleep(200);
         _objectManager.Update();
         var target = _objectManager.GetTarget();
-        if (target != null)
+        if (target != null && string.Equals(target.Name, name, StringComparison.OrdinalIgnoreCase))
         {
             _masterGuid = target.Guid;
-            Logger.Info($"SlaveCtrl: master GUID=0x{_masterGuid:X}");
+            Logger.Info($"SlaveCtrl: GUID=0x{_masterGuid:X} (TargetUnit fallback '{name}')");
         }
-        _hook.ExecuteLua("TargetLastTarget()", 100);
+        else
+        {
+            Logger.Warn($"SlaveCtrl: not found '{name}' (players={_objectManager.Players.Count}, units={_objectManager.Units.Count}, target='{target?.Name}')");
+        }
+        // Восстановить предыдущий таргет
+        _hook.ExecuteLua("if WB_OLDTGT and WB_OLDTGT~='' then TargetUnit(WB_OLDTGT) else ClearTarget() end TargetLastTarget()", 200);
     }
 
     private WowUnit? FindMaster()

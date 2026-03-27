@@ -300,12 +300,11 @@ public class Hivemind
         string? targetName = target.Name;
         if (string.IsNullOrEmpty(targetName))
         {
-            // Для игроков Name может не работать — используем Lua
             string? luaName = _hook.ExecuteLuaWithResult("WB_R=UnitName('target')");
             targetName = luaName;
         }
         if (string.IsNullOrEmpty(targetName)) return;
-        // Шлём 3 раза с задержкой — чтобы все слейвы получили
+        // Отправляем имя таргета — слейв найдёт ближайшего по имени
         SendCommand(Command.RefreshGuid, targetName);
         Logger.Info($"Hivemind: MASTER GuidByTarget → {targetName}");
         Task.Run(async () =>
