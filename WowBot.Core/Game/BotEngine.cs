@@ -463,7 +463,7 @@ public class BotEngine : IDisposable
 
                 // Читаем команды через Lua C API (без макросов!)
                 _hiveCheckTick++;
-                if (_hiveCheckTick >= 3)
+                if (_hiveCheckTick >= 3 && !Hivemind.GossipReading)
                 {
                     _hiveCheckTick = 0;
 

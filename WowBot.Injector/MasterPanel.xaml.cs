@@ -654,6 +654,8 @@ public partial class MasterPanel : Window
             btn.PreviewMouseLeftButtonDown += (s, ev) =>
             {
                 OnGossipSelect?.Invoke(idx);
+                // Показать лоадер, заблокировать повторные клики
+                ShowLoading();
                 ev.Handled = true;
             };
             GossipPanel.Children.Add(btn);
@@ -668,6 +670,41 @@ public partial class MasterPanel : Window
     {
         GossipPanel.Visibility = Visibility.Collapsed;
         BtnGossipAccept.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Только gossip список (не кнопка Принять) — для автоскрытия</summary>
+    public bool IsGossipListVisible => GossipPanel.Visibility == Visibility.Visible;
+
+    /// <summary>Показать лоадер вместо gossip списка</summary>
+    public void ShowLoading()
+    {
+        GossipPanel.Children.Clear();
+        var txt = new TextBlock
+        {
+            Text = "⏳ Загрузка...",
+            FontSize = 10,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888")),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 4, 0, 4),
+        };
+        GossipPanel.Children.Add(txt);
+        GossipPanel.Visibility = Visibility.Visible;
+        BtnGossipAccept.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Скрыть только список gossip (оставить кнопку Принять)</summary>
+    public void HideGossipList()
+    {
+        GossipPanel.Children.Clear();
+        GossipPanel.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Показать только кнопку Принять (для popup подтверждения)</summary>
+    public void ShowAcceptOnly()
+    {
+        GossipPanel.Children.Clear();
+        GossipPanel.Visibility = Visibility.Collapsed;
+        BtnGossipAccept.Visibility = Visibility.Visible;
     }
 
     // --- Navigation dropdown ---

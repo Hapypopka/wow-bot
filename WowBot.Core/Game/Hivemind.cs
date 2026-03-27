@@ -56,6 +56,8 @@ public class Hivemind
         }
     }
     public bool IsActive => CurrentRole != Role.None;
+    /// <summary>Флаг: идёт чтение gossip, пропустить hivemind polling</summary>
+    public bool GossipReading { get; set; }
     public string MasterName { get; private set; } = "";
 
     /// <summary>Текущий режим слейва</summary>
@@ -161,13 +163,47 @@ public class Hivemind
         if (CurrentRole != Role.Master) return;
         string masterName = _objectManager.GetPlayerName() ?? "master";
         // Слейвы ассистят мастера → получают его таргет → InteractUnit
+        Logger.Info($"Interact: MASTER sending Interact, masterName={masterName}");
         SendCommand(Command.Interact, masterName);
+        // Мастер тоже открывает диалог (чтобы читать gossip опции)
+        _hook.ExecuteLua("InteractUnit('target')", 200);
+        Logger.Info("Interact: MASTER InteractUnit('target') executed");
     }
 
     /// <summary>Мастер: слейвы выбирают пункт gossip</summary>
     public void CmdGossipSelect(int optionIndex)
     {
+        Logger.Info($"Gossip: MASTER select option {optionIndex}");
         SendCommand(Command.GossipSelect, optionIndex.ToString());
+    }
+
+    /// <summary>Мастер: сам выбирает gossip опцию (чтобы видеть popup)</summary>
+    public void MasterSelectGossip(int optionIndex)
+    {
+        Logger.Info($"Gossip: MASTER self-select option {optionIndex}");
+        // Очищаем WB_GOSSIP перед выбором, чтобы не прочитать старые данные
+        _hook.ExecuteLua($"WB_GOSSIP=nil SelectGossipOption({optionIndex})", 200);
+    }
+
+    /// <summary>Мастер: сам подтверждает popup</summary>
+    public void MasterAcceptPopup()
+    {
+        Logger.Info("Gossip: MASTER self-accept popup");
+        _hook.ExecuteLua("StaticPopup1Button1:Click()", 200);
+    }
+
+    /// <summary>Проверить открыт ли GossipFrame (лёгкая проверка, не трогает WB_GOSSIP)</summary>
+    public bool IsGossipFrameVisible()
+    {
+        string? result = _hook.ExecuteLuaWithResult("WB_R=GossipFrame and GossipFrame:IsShown() and '1' or '0'", 0, 500);
+        return result == "1";
+    }
+
+    /// <summary>Проверить открыт ли popup на мастере</summary>
+    public bool IsPopupVisible()
+    {
+        string? result = _hook.ExecuteLuaWithResult("WB_R=StaticPopup1 and StaticPopup1:IsShown() and '1' or '0'", 0, 500);
+        return result == "1";
     }
 
     /// <summary>Мастер: слейвы подтверждают popup</summary>
@@ -180,11 +216,24 @@ public class Hivemind
     public List<string> GetMasterGossipOptions()
     {
         var options = new List<string>();
-        string? raw = _hook.ExecuteLuaWithResult(
-            "local s='' for i=1,20 do local t=select(i*2-1,GetGossipOptions()) if not t then break end s=s..t..'|' end WB_R=s", 0, 1000);
-        if (string.IsNullOrEmpty(raw)) return options;
-        foreach (var opt in raw.Split('|', StringSplitOptions.RemoveEmptyEntries))
-            options.Add(opt);
+        // Приостановить hivemind polling чтобы не перезаписал WB_R
+        GossipReading = true;
+        try
+        {
+            System.Threading.Thread.Sleep(200); // дать текущему polling завершиться
+            string? raw = _hook.ExecuteLuaWithResult(
+                "local s='G:' for i=1,20 do local t=select(i*2-1,GetGossipOptions()) if not t then break end s=s..t..'|' end WB_R=s", 0, 1000);
+            Logger.Info($"Gossip: raw=[{raw ?? "NULL"}] startsWith_G={raw?.StartsWith("G:")}]");
+            if (string.IsNullOrEmpty(raw) || !raw.StartsWith("G:")) return options;
+            raw = raw.Substring(2);
+            if (string.IsNullOrEmpty(raw)) return options;
+            foreach (var opt in raw.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                options.Add(opt);
+        }
+        finally
+        {
+            GossipReading = false;
+        }
         return options;
     }
 
@@ -797,8 +846,13 @@ WB_HIVE_REG_TIME = 0
                 {
                     string masterN = cleanArg.Replace("'", "\\'");
                     string interactLua = $"AssistUnit('{masterN}') InteractUnit('target')";
+                    Logger.Info($"Interact: SLAVE executing [{interactLua}]");
                     _hook.ExecuteLua(interactLua, 300);
-                    Logger.Info($"Hivemind: SLAVE interact via assist {cleanArg}");
+                    Logger.Info($"Interact: SLAVE done, master={cleanArg}");
+                }
+                else
+                {
+                    Logger.Warn("Interact: SLAVE — empty arg, skip");
                 }
                 break;
 
@@ -806,15 +860,32 @@ WB_HIVE_REG_TIME = 0
                 // Выбор пункта gossip диалога: arg = номер опции
                 if (int.TryParse(cleanArg, out int gossipIdx))
                 {
+                    // Если gossip закрыт — сначала переоткрыть
+                    Logger.Info($"Gossip: SLAVE selecting option {gossipIdx}, checking GossipFrame...");
+                    _hook.ExecuteLua(
+                        $"if not (GossipFrame and GossipFrame:IsShown()) then InteractUnit('target') end", 300);
+                    System.Threading.Thread.Sleep(500);
                     _hook.ExecuteLua($"SelectGossipOption({gossipIdx})", 200);
-                    Logger.Info($"Hivemind: SLAVE gossip select {gossipIdx}");
+                    Logger.Info($"Gossip: SLAVE option {gossipIdx} selected");
+                }
+                else
+                {
+                    Logger.Warn($"Gossip: SLAVE — invalid option index [{cleanArg}]");
                 }
                 break;
 
             case Command.GossipAccept:
-                // Подтвердить popup (Принять)
-                _hook.ExecuteLua("StaticPopup1Button1:Click()", 200);
-                Logger.Info("Hivemind: SLAVE gossip accept");
+                // Подтвердить popup — ждём пока появится (до 3с)
+                Logger.Info("Gossip: SLAVE accepting popup, waiting for StaticPopup...");
+                Task.Run(async () =>
+                {
+                    for (int wait = 0; wait < 6; wait++)
+                    {
+                        await Task.Delay(500);
+                        _hook.ExecuteLua("if StaticPopup1 and StaticPopup1:IsShown() then StaticPopup1Button1:Click() WB_ACCEPTED=1 end", 200);
+                    }
+                    Logger.Info("Gossip: SLAVE popup accept attempts done");
+                });
                 break;
 
             case Command.Ping:

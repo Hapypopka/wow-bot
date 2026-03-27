@@ -64,6 +64,7 @@ public partial class MainWindow : Window
     private string _playerClass = "";
     private LuaReader? _luaReader;
     private DispatcherTimer? _updateTimer;
+    private int _gossipCheckTick;
     private OverlayWindow? _overlay;
     private MasterPanel? _masterPanel;
     // NavPanel убрана — навигация встроена в MasterPanel
@@ -231,13 +232,23 @@ public partial class MainWindow : Window
             if (_botEngine == null) return;
             var hive = _botEngine.Hivemind;
             hive.CmdInteract();
-            // Через 1.5с читаем gossip опции мастера и показываем
-            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            // Через 2с читаем gossip, retry если пусто
+            int retries = 0;
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
             timer.Tick += (s2, e2) =>
             {
-                timer.Stop();
+                retries++;
                 var options = hive.GetMasterGossipOptions();
-                _masterPanel?.ShowGossipOptions(options);
+                if (options.Count > 0 || retries >= 3)
+                {
+                    timer.Stop();
+                    if (options.Count > 0)
+                        _masterPanel?.ShowGossipOptions(options); _gossipCheckTick = 0;
+                }
+                else
+                {
+                    timer.Interval = TimeSpan.FromMilliseconds(1000); // retry через 1с
+                }
             };
             timer.Start();
         };
@@ -245,17 +256,26 @@ public partial class MainWindow : Window
         {
             if (_botEngine == null) return;
             _botEngine.Hivemind.CmdGossipSelect(idx);
-            // Через 1с проверяем есть ли popup
-            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
+            // Мастер тоже выбирает ту же опцию (с очисткой WB_GOSSIP)
+            _botEngine.Hivemind.MasterSelectGossip(idx);
+            // Через 2с проверяем: подменю или popup, retry до 3 раз
+            int selRetries = 0;
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
             timer.Tick += (s2, e2) =>
             {
-                timer.Stop();
-                // Проверяем есть ли подменю
+                selRetries++;
                 var subOptions = _botEngine.Hivemind.GetMasterGossipOptions();
+                WowBot.Core.Logger.Info($"Gossip: after select, retry={selRetries} opts={subOptions.Count}");
                 if (subOptions.Count > 0)
-                    _masterPanel?.ShowGossipOptions(subOptions);
-                else
-                    _masterPanel?.HideGossip();
+                {
+                    timer.Stop();
+                    _masterPanel?.ShowGossipOptions(subOptions); _gossipCheckTick = 0;
+                }
+                else if (selRetries >= 2)
+                {
+                    timer.Stop();
+                    _masterPanel?.ShowAcceptOnly(); // popup — показать только кнопку Принять
+                }
             };
             timer.Start();
         };
@@ -263,6 +283,7 @@ public partial class MainWindow : Window
         {
             if (_botEngine == null) return;
             _botEngine.Hivemind.CmdGossipAccept();
+            // Мастер НЕ принимает — тпшится сам руками после проверки слейвов
             _masterPanel?.HideGossip();
         };
         // Навигация встроена в MasterPanel
@@ -874,6 +895,21 @@ public partial class MainWindow : Window
 
             _objectManager.Update();
             UpdateDisplay();
+
+            // Авто-скрытие gossip по таймеру бездействия (15с без кликов)
+            if (_masterPanel != null && _masterPanel.IsGossipListVisible)
+            {
+                _gossipCheckTick++;
+                if (_gossipCheckTick >= 75) // 15с (75 * 200мс)
+                {
+                    _masterPanel.HideGossipList();
+                    _gossipCheckTick = 0;
+                }
+            }
+            else
+            {
+                _gossipCheckTick = 0;
+            }
         }
         catch (Exception ex)
         {
