@@ -130,8 +130,13 @@ public class Hivemind
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
-        foreach (var slave in affected)
-            slave.ActiveCommand = cmd;
+        // Не обновлять ActiveCommand для служебных команд
+        if (cmd != Command.RefreshGuid && cmd != Command.SetBuff && cmd != Command.Wipe &&
+            cmd != Command.Interact && cmd != Command.GossipSelect && cmd != Command.GossipAccept)
+        {
+            foreach (var slave in affected)
+                slave.ActiveCommand = cmd;
+        }
         OnSlavesChanged?.Invoke();
 
         Logger.Info($"Hivemind: MASTER sent {cmd} {arg}");
