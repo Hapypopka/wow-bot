@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid }
+    public enum Command { Follow, Attack, Stop, Auto, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -153,6 +153,39 @@ public class Hivemind
         OnSlavesChanged?.Invoke();
 
         Logger.Info($"Hivemind: MASTER sent {cmd} to {slaveName}");
+    }
+
+    /// <summary>Мастер: слейвы взаимодействуют с таргетом мастера</summary>
+    public void CmdInteract()
+    {
+        if (CurrentRole != Role.Master) return;
+        string masterName = _objectManager.GetPlayerName() ?? "master";
+        // Слейвы ассистят мастера → получают его таргет → InteractUnit
+        SendCommand(Command.Interact, masterName);
+    }
+
+    /// <summary>Мастер: слейвы выбирают пункт gossip</summary>
+    public void CmdGossipSelect(int optionIndex)
+    {
+        SendCommand(Command.GossipSelect, optionIndex.ToString());
+    }
+
+    /// <summary>Мастер: слейвы подтверждают popup</summary>
+    public void CmdGossipAccept()
+    {
+        SendCommand(Command.GossipAccept);
+    }
+
+    /// <summary>Мастер: получить gossip опции с таргета мастера</summary>
+    public List<string> GetMasterGossipOptions()
+    {
+        var options = new List<string>();
+        string? raw = _hook.ExecuteLuaWithResult(
+            "local s='' for i=1,20 do local t=select(i*2-1,GetGossipOptions()) if not t then break end s=s..t..'|' end WB_R=s", 0, 1000);
+        if (string.IsNullOrEmpty(raw)) return options;
+        foreach (var opt in raw.Split('|', StringSplitOptions.RemoveEmptyEntries))
+            options.Add(opt);
+        return options;
     }
 
     /// <summary>Мастер: бейте мой таргет</summary>
@@ -588,6 +621,9 @@ WB_HIVE_REG_TIME = 0
             "RefreshGuid" => Command.RefreshGuid,
             "Wipe" => Command.Wipe,
             "Register" => Command.Register,
+            "Interact" => Command.Interact,
+            "GossipSelect" => Command.GossipSelect,
+            "GossipAccept" => Command.GossipAccept,
             _ => null
         };
 
@@ -753,6 +789,32 @@ WB_HIVE_REG_TIME = 0
                     _ctm.MoveTo(gx, gy, gz, 1f);
                     Logger.Info($"Hivemind: SLAVE goto ({gx:F1}, {gy:F1}, {gz:F1})");
                 }
+                break;
+
+            case Command.Interact:
+                // Ассистим мастера (получаем его таргет) → InteractUnit
+                if (!string.IsNullOrEmpty(cleanArg))
+                {
+                    string masterN = cleanArg.Replace("'", "\\'");
+                    string interactLua = $"AssistUnit('{masterN}') InteractUnit('target')";
+                    _hook.ExecuteLua(interactLua, 300);
+                    Logger.Info($"Hivemind: SLAVE interact via assist {cleanArg}");
+                }
+                break;
+
+            case Command.GossipSelect:
+                // Выбор пункта gossip диалога: arg = номер опции
+                if (int.TryParse(cleanArg, out int gossipIdx))
+                {
+                    _hook.ExecuteLua($"SelectGossipOption({gossipIdx})", 200);
+                    Logger.Info($"Hivemind: SLAVE gossip select {gossipIdx}");
+                }
+                break;
+
+            case Command.GossipAccept:
+                // Подтвердить popup (Принять)
+                _hook.ExecuteLua("StaticPopup1Button1:Click()", 200);
+                Logger.Info("Hivemind: SLAVE gossip accept");
                 break;
 
             case Command.Ping:

@@ -225,6 +225,46 @@ public partial class MainWindow : Window
             };
             hive.SendCommandToSlave(slaveName, command);
         };
+        // Interact / Gossip
+        _masterPanel.OnInteract += () =>
+        {
+            if (_botEngine == null) return;
+            var hive = _botEngine.Hivemind;
+            hive.CmdInteract();
+            // Через 1.5с читаем gossip опции мастера и показываем
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            timer.Tick += (s2, e2) =>
+            {
+                timer.Stop();
+                var options = hive.GetMasterGossipOptions();
+                _masterPanel?.ShowGossipOptions(options);
+            };
+            timer.Start();
+        };
+        _masterPanel.OnGossipSelect += (idx) =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdGossipSelect(idx);
+            // Через 1с проверяем есть ли popup
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
+            timer.Tick += (s2, e2) =>
+            {
+                timer.Stop();
+                // Проверяем есть ли подменю
+                var subOptions = _botEngine.Hivemind.GetMasterGossipOptions();
+                if (subOptions.Count > 0)
+                    _masterPanel?.ShowGossipOptions(subOptions);
+                else
+                    _masterPanel?.HideGossip();
+            };
+            timer.Start();
+        };
+        _masterPanel.OnGossipAccept += () =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdGossipAccept();
+            _masterPanel?.HideGossip();
+        };
         // Навигация встроена в MasterPanel
         _masterPanel.OnSlaveToggled += (name) =>
         {

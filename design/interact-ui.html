@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Interact UI — MasterPanel</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: Segoe UI, sans-serif;
+    background: #111;
+    display: flex;
+    gap: 50px;
+    padding: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .label { text-align:center; color:#888; font-size:11px; margin-bottom:10px; }
+  .col { display:flex; flex-direction:column; align-items:center; }
+
+  .panel {
+    width: 300px;
+    background: #0a0a0f;
+    border: 1.5px solid #C8A84E;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  }
+
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .hdr-title { color: #C8A84E; font-size: 14px; font-weight: bold; }
+
+  .cmds {
+    display: flex; gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .cmd {
+    flex: 1; height: 40px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #e8e6e3;
+    font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+
+  .section {
+    padding: 6px 10px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .section-title {
+    font-size: 9px;
+    color: #C8A84E;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  /* Interact button */
+  .interact-btn {
+    width: 100%;
+    height: 32px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    color: #aaa;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer;
+  }
+  .interact-btn.active {
+    background: #2a3a5a;
+    border-color: #3a5a8a;
+    color: #88bbee;
+  }
+  .interact-btn .ico { font-size: 14px; }
+
+  /* Target info */
+  .target-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: #12121a;
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+  .target-name {
+    font-size: 11px;
+    color: #88bbee;
+    font-weight: 600;
+  }
+  .target-type {
+    font-size: 9px;
+    color: #555;
+  }
+
+  /* Gossip options */
+  .gossip-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 3px;
+  }
+  .gossip-num {
+    width: 20px; height: 22px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 3px;
+    color: #C8A84E;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .gossip-text {
+    font-size: 10px;
+    color: #ccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .gossip-btn {
+    flex: 1;
+    height: 24px;
+    background: #1a1a28;
+    border: 1px solid #2a2a28;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .gossip-btn:hover {
+    background: #2a2a38;
+    border-color: #3a3a48;
+  }
+
+  /* Status */
+  .status-bar {
+    padding: 4px 10px;
+    font-size: 9px;
+    color: #555;
+    text-align: center;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .status-bar.progress {
+    color: #88bbee;
+    background: rgba(88,136,204,0.05);
+  }
+  .status-bar.done {
+    color: #6a9a5a;
+    background: rgba(106,154,90,0.05);
+  }
+
+  /* Slave list mini */
+  .slaves-mini {
+    padding: 4px 10px;
+    border-bottom: 1px solid #2a2a28;
+  }
+  .sm-row {
+    display: flex;
+    align-items: center;
+    height: 20px;
+    gap: 6px;
+    margin-bottom: 1px;
+  }
+  .sm-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sm-dot.idle { background: #555; }
+  .sm-dot.walking { background: #5588cc; }
+  .sm-dot.interacting { background: #88bbee; box-shadow: 0 0 4px rgba(88,136,204,0.5); }
+  .sm-dot.done { background: #6a9a5a; }
+  .sm-name { font-size: 10px; color: #aaa; }
+  .sm-status { font-size: 9px; color: #555; margin-left: auto; }
+  .sm-status.active { color: #88bbee; }
+  .sm-status.ok { color: #6a9a5a; }
+</style>
+</head>
+<body>
+
+<!-- ===== STATE 1: Кнопка Interact (без таргета) ===== -->
+<div class="col">
+  <div class="label">Нет таргета NPC</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+
+    <div class="section">
+      <div class="interact-btn">
+        <span class="ico">🤝</span> Interact с таргетом
+      </div>
+      <div style="font-size:9px; color:#444; text-align:center; margin-top:3px;">
+        Натаргетьте NPC
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STATE 2: Таргет есть, жмём Interact ===== -->
+<div class="col">
+  <div class="label">NPC натаргечен → жмём Interact</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+
+    <div class="section">
+      <div class="target-info">
+        <span style="font-size:14px;">🧙</span>
+        <div>
+          <div class="target-name">Зул'Аман Телепортёр</div>
+          <div class="target-type">NPC · Friendly</div>
+        </div>
+      </div>
+      <div class="interact-btn active">
+        <span class="ico">🤝</span> Взаимодействовать
+      </div>
+    </div>
+
+    <div class="status-bar progress">
+      ⏳ Слейвы идут к NPC...
+    </div>
+
+    <div class="slaves-mini">
+      <div class="sm-row">
+        <div class="sm-dot walking"></div>
+        <div class="sm-name">Виртуэлла</div>
+        <div class="sm-status active">идёт к NPC</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot interacting"></div>
+        <div class="sm-name">Эрилён</div>
+        <div class="sm-status active">взаимодействует</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot walking"></div>
+        <div class="sm-name">Юп</div>
+        <div class="sm-status active">идёт к NPC</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot done"></div>
+        <div class="sm-name">Эрилун</div>
+        <div class="sm-status ok">gossip открыт</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot idle"></div>
+        <div class="sm-name">Узянбайчок</div>
+        <div class="sm-status">🔒 игнорирует</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STATE 3: Gossip окно — выбор опции ===== -->
+<div class="col">
+  <div class="label">Gossip открыт — выбираем опцию</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+
+    <div class="section">
+      <div class="target-info">
+        <span style="font-size:14px;">🧙</span>
+        <div>
+          <div class="target-name">Зул'Аман Телепортёр</div>
+          <div class="target-type">Gossip · 3 опции</div>
+        </div>
+      </div>
+
+      <div class="section-title">Gossip опции</div>
+
+      <div class="gossip-row">
+        <div class="gossip-btn">
+          <div class="gossip-num">1</div>
+          <div class="gossip-text">Телепорт в Даларан</div>
+        </div>
+      </div>
+      <div class="gossip-row">
+        <div class="gossip-btn">
+          <div class="gossip-num">2</div>
+          <div class="gossip-text">Телепорт в Штормград</div>
+        </div>
+      </div>
+      <div class="gossip-row">
+        <div class="gossip-btn">
+          <div class="gossip-num">3</div>
+          <div class="gossip-text">Прощай</div>
+        </div>
+      </div>
+
+      <div style="font-size:8px; color:#444; margin-top:4px;">
+        Нажми опцию → все слейвы выберут то же
+      </div>
+    </div>
+
+    <div class="status-bar done">
+      ✓ 4/4 слейва — gossip открыт
+    </div>
+  </div>
+</div>
+
+<!-- ===== STATE 4: После выбора — все тпшнулись ===== -->
+<div class="col">
+  <div class="label">Все выбрали → тпшнулись</div>
+  <div class="panel">
+    <div class="hdr">
+      <div class="hdr-title">Master</div>
+    </div>
+    <div class="cmds">
+      <div class="cmd">⚔ Бейте</div>
+      <div class="cmd">🏃 Ко мне</div>
+      <div class="cmd">⏹ Стоп</div>
+    </div>
+
+    <div class="section">
+      <div class="interact-btn">
+        <span class="ico">🤝</span> Interact с таргетом
+      </div>
+    </div>
+
+    <div class="status-bar done">
+      ✓ Взаимодействие завершено
+    </div>
+
+    <div class="slaves-mini">
+      <div class="sm-row">
+        <div class="sm-dot done"></div>
+        <div class="sm-name">Виртуэлла</div>
+        <div class="sm-status ok">✓ телепорт</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot done"></div>
+        <div class="sm-name">Эрилён</div>
+        <div class="sm-status ok">✓ телепорт</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot done"></div>
+        <div class="sm-name">Юп</div>
+        <div class="sm-status ok">✓ телепорт</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot done"></div>
+        <div class="sm-name">Эрилун</div>
+        <div class="sm-status ok">✓ телепорт</div>
+      </div>
+      <div class="sm-row">
+        <div class="sm-dot idle"></div>
+        <div class="sm-name">Узянбайчок</div>
+        <div class="sm-status">🔒 игнорировал</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -69,6 +69,20 @@
             <!-- Slave panel -->
             <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>
 
+            <!-- Interact с NPC -->
+            <Button x:Name="BtnInteract" Content="🤝 Interact с таргетом" FontSize="10"
+                    Click="BtnInteract_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#888" BorderThickness="0"
+                    Height="28" Margin="1,2,1,0" Cursor="Hand"
+                    ToolTip="Слейвы взаимодействуют с вашим таргетом"/>
+            <!-- Gossip панель (скрыта) -->
+            <StackPanel x:Name="GossipPanel" Visibility="Collapsed" Margin="1,2,1,0"/>
+            <Button x:Name="BtnGossipAccept" Content="✓ Принять" FontSize="10"
+                    Click="BtnGossipAccept_Click" Style="{x:Null}"
+                    Background="#1a1a28" Foreground="#6a9a5a" BorderThickness="0"
+                    Height="24" Margin="1,2,1,2" Cursor="Hand" Visibility="Collapsed"
+                    ToolTip="Слейвы нажимают Принять в popup"/>
+
             <!-- Навигация — дропдаун -->
             <Button x:Name="BtnNavToggle" FontSize="10" FontWeight="Bold"
                     Click="BtnNavToggle_Click" Style="{x:Null}"

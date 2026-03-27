@@ -582,6 +582,94 @@ public partial class MasterPanel : Window
         return System.IO.File.Exists(path) ? path : "";
     }
 
+    // --- Interact / Gossip ---
+    public event Action? OnInteract;
+    public event Action<int>? OnGossipSelect;
+    public event Action? OnGossipAccept;
+
+    private void BtnInteract_Click(object sender, RoutedEventArgs e)
+    {
+        OnInteract?.Invoke();
+        // Подсветка
+        BtnInteract.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a3a5a"));
+        BtnInteract.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#88bbee"));
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (s, ev) =>
+        {
+            BtnInteract.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28"));
+            BtnInteract.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888"));
+            timer.Stop();
+        };
+        timer.Start();
+    }
+
+    private void BtnGossipAccept_Click(object sender, RoutedEventArgs e) => OnGossipAccept?.Invoke();
+
+    /// <summary>Показать gossip опции</summary>
+    public void ShowGossipOptions(List<string> options)
+    {
+        GossipPanel.Children.Clear();
+        if (options.Count == 0)
+        {
+            GossipPanel.Visibility = Visibility.Collapsed;
+            BtnGossipAccept.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        for (int i = 0; i < options.Count; i++)
+        {
+            int idx = i + 1;
+            var btn = new Button
+            {
+                Style = null!,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ccc")),
+                BorderThickness = new Thickness(0),
+                Height = 22,
+                Margin = new Thickness(0, 1, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(6, 0, 6, 0),
+            };
+
+            var sp = new StackPanel { Orientation = Orientation.Horizontal };
+            sp.Children.Add(new TextBlock
+            {
+                Text = $"{idx}.",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8A84E")),
+                FontSize = 10, FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0),
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text = options[i],
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 240,
+            });
+            btn.Content = sp;
+
+            btn.PreviewMouseLeftButtonDown += (s, ev) =>
+            {
+                OnGossipSelect?.Invoke(idx);
+                ev.Handled = true;
+            };
+            GossipPanel.Children.Add(btn);
+        }
+
+        GossipPanel.Visibility = Visibility.Visible;
+        BtnGossipAccept.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Скрыть gossip панель</summary>
+    public void HideGossip()
+    {
+        GossipPanel.Visibility = Visibility.Collapsed;
+        BtnGossipAccept.Visibility = Visibility.Collapsed;
+    }
+
     // --- Navigation dropdown ---
     private void BtnNavToggle_Click(object sender, RoutedEventArgs e)
     {
