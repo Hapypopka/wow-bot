@@ -174,7 +174,7 @@ public class BotEngine : IDisposable
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
         // Антиафк — всегда пока бот заатачен
-        _afkTimer = new Timer(AfkTick, null, 300_000, 300_000); // каждые 5 мин
+        _afkTimer = new Timer(AfkTick, null, 30_000, 30_000); // каждые 30 сек
     }
 
     private Timer? _afkTimer;
@@ -182,14 +182,9 @@ public class BotEngine : IDisposable
     {
         try
         {
-            if (WowProcess == null || WowProcess.HasExited) return;
-            var hwnd = WowProcess.MainWindowHandle;
-            if (hwnd == IntPtr.Zero) return;
-            // VK_SPACE (0x20) = прыжок — реальный ввод, снимает AFK
-            Memory.WinApi.PostMessage(hwnd, 0x0100, 0x20, 0); // WM_KEYDOWN
-            System.Threading.Thread.Sleep(50);
-            Memory.WinApi.PostMessage(hwnd, 0x0101, 0x20, 0); // WM_KEYUP
-            Logger.Info("AntiAFK: space key sent");
+            // Снимаем AFK через Lua если стоит
+            _hook.ExecuteLua("if UnitIsAFK('player') then SendChatMessage('','AFK') end", 200);
+            Logger.Info("AntiAFK: Lua AFK check");
         }
         catch { /* hook может быть занят */ }
     }
