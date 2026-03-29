@@ -16,8 +16,11 @@ public class BotEngine : IDisposable
     private string _fullScriptNoCombatCheck = "";
 
     private bool _followEnabled;
-    private bool _rotationEnabled;
+    private volatile bool _rotationEnabled;
     private bool _autoFace = true;
+
+    /// <summary>Hivemind Follow — SlaveController рулит движением, BotEngine только кастует</summary>
+    public bool HivemindFollowing { get; set; }
     private bool _autoSelectTarget = true;
     private float _maxTargetRange = 30f;
     private ulong _followGuid;
@@ -579,15 +582,26 @@ public class BotEngine : IDisposable
                 switch (Hivemind.Mode)
                 {
                     case Hivemind.SlaveMode.Following:
-                        // Ко мне — follow + продолжать бить
+                        // Ко мне — SlaveCtrl рулит движением
                         SlaveCtrl.Tick();
-                        // Ротация продолжается если есть таргет
                         var fTarget = _objectManager.GetTarget();
-                        if (fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player && fTarget.InCombat)
+                        bool fHasTarget = fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player && fTarget.InCombat;
+                        bool standing = _navigation.IsPlayerStanding(player);
+                        if (!standing)
                         {
-                            _navigation.FaceUnit(player, fTarget);
-                            string fScript = enemyCountLua + SpellFlagsLua + _fullScript;
-                            _hook.ExecuteLua(fScript, 500);
+                            // Бежим — только instants, без поворота
+                            if (fHasTarget)
+                                _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+                        }
+                        else
+                        {
+                            // Добежали — поворот + полная ротация
+                            Logger.Info($"HiveFollow ARRIVED: fHasTarget={fHasTarget} target={fTarget?.Name} alive={fTarget?.IsAlive} combat={fTarget?.InCombat}");
+                            if (fHasTarget)
+                            {
+                                if (_autoFace) _navigation.FaceInstant(player, fTarget!);
+                                _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
+                            }
                         }
                         break;
 
@@ -671,7 +685,8 @@ public class BotEngine : IDisposable
 
 
 
-            if (!_followEnabled && !_rotationEnabled) return;
+            if (!_followEnabled && !_rotationEnabled && !HivemindFollowing) return;
+            Logger.Info($"Tick: follow={_followEnabled} rot={_rotationEnabled} hiveFollow={HivemindFollowing}");
 
             var target = _objectManager.GetTarget();
             bool hasTarget = target != null && target.IsAlive;
@@ -699,11 +714,39 @@ public class BotEngine : IDisposable
 
             // === ТОЛЬКО ROTATION ===
             bool targetInCombat = hasTarget && target!.InCombat;
-            if (!_followEnabled && _rotationEnabled)
+            if (!_followEnabled && (_rotationEnabled || HivemindFollowing))
             {
+                // Hivemind Follow: SlaveController рулит движением
+                if (HivemindFollowing)
+                {
+                    bool moving = _navigation.IsPlayerMoving(player);
+                    var slaveState = SlaveCtrl?.CurrentState;
+                    Logger.Info($"HiveFollow: moving={moving} slaveState={slaveState} hasTarget={hasTarget} combat={targetInCombat} cast={player.IsCasting}");
+                    if (moving)
+                    {
+                        // Бежим — только instants на ходу, без поворота
+                        if (hasTarget && targetInCombat)
+                        {
+                            if (_logTick == 0) Logger.Info("HiveFollow: MOVING — instants only");
+                            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+                        }
+                    }
+                    else
+                    {
+                        // Стоим (добежали) — поворот + полная ротация
+                        if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
+                        {
+                            if (_logTick == 0) Logger.Info("HiveFollow: STOPPED — full rotation + face");
+                            if (hasTarget && targetInCombat && _autoFace && !IsHealer) _navigation.FaceInstant(player, target!);
+                            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + GetRotationScript(player), 500);
+                        }
+                    }
+                    return;
+                }
+
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (hasTarget && targetInCombat && _autoFace && !IsHealer) _navigation.FaceUnit(player, target!);
+                    if (hasTarget && targetInCombat && _autoFace && !IsHealer) _navigation.FaceInstant(player, target!);
                     string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
                     if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
                     _hook.ExecuteLua(script, 500);
@@ -715,26 +758,24 @@ public class BotEngine : IDisposable
 
             bool isCasting = player.IsCasting;
 
-            if (isCasting)
+            if (needsToMove)
             {
-                // КАСТУЕМ — стоп движения
-                _ctm.Stop();
-            }
-            else if (needsToMove)
-            {
-                // БЕЖИМ к follow — CTM к координатам цели
+                // БЕЖИМ к follow + instants на ходу БЕЗ поворота
                 _ctm.MoveTo(followTarget!.X, followTarget.Y, followTarget.Z, _followDistance);
-
-                // Instants на бегу БЕЗ поворота (только в бою)
-                if (hasTarget && targetInCombat)
+                if (hasTarget && targetInCombat && !isCasting)
                     _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+            }
+            else if (isCasting)
+            {
+                // НА МЕСТЕ кастуем — стоп движения (только когда уже добежал)
+                _ctm.Stop();
             }
             else
             {
                 // В дистанции — полная ротация (только в бою)
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (hasTarget && targetInCombat && _autoFace) _navigation.FaceUnit(player, target!);
+                    if (hasTarget && targetInCombat && _autoFace) _navigation.FaceInstant(player, target!);
                     string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
                     _hook.ExecuteLua(script, 500);
                 }

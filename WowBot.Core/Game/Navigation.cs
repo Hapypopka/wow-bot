@@ -65,77 +65,60 @@ public class Navigation
         return diff;
     }
 
+    // Позиция для детекта движения — "стоит" = не двигался 3 тика подряд (~450мс)
+    private float _lastX, _lastY, _lastZ;
+    private int _standingTicks;
+    private const float MOVE_THRESHOLD = 0.3f;
+    private const int STANDING_TICKS_REQUIRED = 3; // 3 тика × 150мс = 450мс
+
     /// <summary>
-    /// Повернуться к юниту. Вызывать каждый тик.
-    /// Возвращает true когда поворот завершён.
-    /// НЕ перезаписывает facing каждый тик — пишет один раз, ждёт, стопит.
+    /// Стоит ли игрок (не двигался 3 тика подряд).
     /// </summary>
-    public bool FaceUnit(WowUnit player, WowUnit target)
+    public bool IsPlayerStanding(WowUnit player)
     {
-        // Уже смотрим на цель?
-        if (IsFacing(player, target))
-        {
-            FinishTurn();
-            return true;
-        }
+        float dx = player.X - _lastX;
+        float dy = player.Y - _lastY;
+        float dz = player.Z - _lastZ;
+        bool moved = (dx * dx + dy * dy + dz * dz) > MOVE_THRESHOLD * MOVE_THRESHOLD;
+        _lastX = player.X; _lastY = player.Y; _lastZ = player.Z;
 
-        // Не поворачиваем во время каста
-        if (player.IsCasting) return false;
+        if (moved)
+            _standingTicks = 0;
+        else
+            _standingTicks++;
 
+        return _standingTicks >= STANDING_TICKS_REQUIRED;
+    }
+
+    /// <summary>Обратная совместимость</summary>
+    public bool IsPlayerMoving(WowUnit player) => !IsPlayerStanding(player);
+
+    /// <summary>
+    /// Мгновенный поворот к цели — запись в память + серверный апдейт.
+    /// Не поворачивает если игрок движется (moonwalk fix).
+    /// </summary>
+    public void FaceInstant(WowUnit player, WowUnit target)
+    {
+        if (IsFacing(player, target)) return;
+        if (player.IsCasting) return;
+        if (IsPlayerMoving(player)) return; // не крутить на бегу
         float needed = GetAngleTo(player, target);
-
-        switch (_turnState)
-        {
-            case TurnState.Idle:
-                // Начинаем поворот: записываем facing + TurnStart
-                _targetFacing = needed;
-                _turnTicks = 0;
-
-                // Записываем facing в память (мгновенный локальный поворот)
-                _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
-
-                // Определяем направление и запускаем серверный поворот
-                float diff = AngleDiff(player.Facing, needed);
-                if (diff > 0)
-                    _hook.ExecuteLua("TurnRightStop() TurnLeftStart()", 30);
-                else
-                    _hook.ExecuteLua("TurnLeftStop() TurnRightStart()", 30);
-
-                _turnState = TurnState.Turning;
-                return false;
-
-            case TurnState.Turning:
-                _turnTicks++;
-
-                // Проверяем: довернулись?
-                if (IsFacing(player, target) || _turnTicks >= MAX_TURN_TICKS)
-                {
-                    FinishTurn();
-                    return true;
-                }
-
-                // Ещё не довернулись — НЕ перезаписываем, просто ждём
-                return false;
-
-            case TurnState.Done:
-                // Поворот завершён, сброс для следующего
-                _turnState = TurnState.Idle;
-                return true;
-        }
-
-        return false;
+        // 1. Пишем в память (клиент)
+        _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
+        // 2. Мгновенный TurnStart+Stop — сервер получит новый facing
+        _hook.ExecuteLua("TurnLeftStart() TurnLeftStop()", 20);
     }
 
     /// <summary>
-    /// Завершить поворот — остановить TurnStart
+    /// Повернуться к юниту. Вызывать каждый тик.
+    /// Возвращает true когда смотрим на цель.
     /// </summary>
-    private void FinishTurn()
+    public bool FaceUnit(WowUnit player, WowUnit target)
     {
-        if (_turnState == TurnState.Turning)
-        {
-            _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 30);
-        }
-        _turnState = TurnState.Done;
+        if (IsFacing(player, target)) return true;
+        if (player.IsCasting) return false;
+        FaceInstant(player, target);
+        return IsFacing(player, target);
     }
 
     /// <summary>
@@ -143,8 +126,7 @@ public class Navigation
     /// </summary>
     public void ResetTurn()
     {
-        if (_turnState == TurnState.Turning)
-            _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 30);
+        _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 20);
         _turnState = TurnState.Idle;
         _turnTicks = 0;
     }

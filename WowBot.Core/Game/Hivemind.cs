@@ -793,14 +793,17 @@ WB_HIVE_REG_TIME = 0
                 MasterName = cleanArg;
                 Mode = SlaveMode.Following;
                 _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
+                if (_botEngine != null) _botEngine.HivemindFollowing = true;
+                OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"Hivemind: SLAVE follow master={cleanArg}");
+                Logger.Info($"Hivemind: SLAVE follow master={cleanArg} HivemindFollowing=TRUE");
                 break;
 
             case Command.Attack:
                 // Бейте таргет — ассистим мастера, ротация, подбег к цели
                 MasterName = cleanArg;
                 Mode = SlaveMode.Attacking;
+                if (_botEngine != null) _botEngine.HivemindFollowing = false;
                 _hook.ExecuteLua($"AssistUnit('{cleanArg}') StartAttack()", 200);
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
@@ -811,6 +814,7 @@ WB_HIVE_REG_TIME = 0
                 // Авторежим — follow + auto-assist в бою
                 MasterName = cleanArg;
                 Mode = SlaveMode.Auto;
+                if (_botEngine != null) _botEngine.HivemindFollowing = true;
                 _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
@@ -819,6 +823,7 @@ WB_HIVE_REG_TIME = 0
 
             case Command.Stop:
                 // Стоп движения — но ротация продолжается
+                if (_botEngine != null) _botEngine.HivemindFollowing = false;
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
                 Logger.Info("Hivemind: SLAVE stop (rotation continues)");

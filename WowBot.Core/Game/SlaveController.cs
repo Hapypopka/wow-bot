@@ -32,6 +32,7 @@ public class SlaveController
 
     // === Команды ===
 
+    public ulong MasterGuid => _masterGuid;
     public void ResetMasterGuid() => _masterGuid = 0;
 
     /// <summary>Установить GUID напрямую (от мастера)</summary>
@@ -100,6 +101,8 @@ public class SlaveController
     }
 
     private bool _isFollowMoving;
+    /// <summary>CTM к мастеру активен — ещё не добежал</summary>
+    public bool IsFollowMoving => _isFollowMoving;
     private float _lastCtmX, _lastCtmY;
 
     private void TickFollowing(WowPlayer player)
@@ -111,7 +114,7 @@ public class SlaveController
 
         if (dist <= FollowDistance)
         {
-            if (_isFollowMoving) { _ctm.Stop(); _isFollowMoving = false; }
+            if (_isFollowMoving) { _ctm.Stop(); _isFollowMoving = false; Logger.Info($"SlaveCtrl: arrived (dist={dist:F1})"); }
             return;
         }
 
