@@ -354,7 +354,12 @@ public partial class MasterPanel : Window
             };
             foreach (var (cmd, icon, tip) in commands)
             {
-                bool isActive = slave.ActiveCommand?.ToString().ToLower() == cmd;
+                var ac = slave.ActiveCommand;
+                bool isAuto = ac == WowBot.Core.Game.Hivemind.Command.Auto;
+                bool isStopFollow = ac == WowBot.Core.Game.Hivemind.Command.StopFollow;
+                bool isActive = ac?.ToString().ToLower() == cmd
+                    || (isAuto && (cmd == "attack" || cmd == "follow"))
+                    || (isStopFollow && cmd == "attack"); // StopFollow = атака без follow
                 var cmdBtn = new Button
                 {
                     Content = icon, FontSize = 11, Width = 24, Height = 28,

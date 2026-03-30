@@ -8,21 +8,13 @@ public class Navigation
     private readonly MemoryReader _memory;
     private readonly EndSceneHook _hook;
 
-    // Состояние поворота
-    private enum TurnState { Idle, Turning, Done }
-    private TurnState _turnState = TurnState.Idle;
-    private float _targetFacing;
-    private int _turnTicks; // Счётчик тиков с начала поворота
-
     // Состояние движения
     private bool _isMovingForward;
 
     // Настройки
     private const float FACE_TOLERANCE = 0.5f;   // Радиан — "уже смотрим" (~29°)
-    private const int MAX_TURN_TICKS = 5;         // Макс тиков на поворот (750мс)
 
     public bool IsMovingForward => _isMovingForward;
-    public bool IsTurning => _turnState == TurnState.Turning;
 
     public Navigation(MemoryReader memory, EndSceneHook hook)
     {
@@ -149,8 +141,6 @@ public class Navigation
     public void ResetTurn()
     {
         _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 20);
-        _turnState = TurnState.Idle;
-        _turnTicks = 0;
     }
 
     // === Движение ===
@@ -186,7 +176,5 @@ public class Navigation
     {
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop() TurnLeftStop() TurnRightStop()", 100);
         _isMovingForward = false;
-        _turnState = TurnState.Idle;
-        _turnTicks = 0;
     }
 }

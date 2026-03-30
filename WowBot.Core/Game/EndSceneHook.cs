@@ -14,8 +14,6 @@ public class EndSceneHook : IDisposable
     private uint _botStringAddr;       // "bot\0"
     private uint _varNameAddr;         // имя переменной для GetLocalizedText ("WB_R\0")
     private uint _returnPtrAddr;       // сюда запишем указатель на результат
-    private uint _playerBasePatchOffset; // смещение в codecave где лежит playerBase (push imm32)
-
     private uint _endSceneAddr;
     private byte[] _originalBytes = Array.Empty<byte>();
     private int _stolenByteCount;
@@ -75,20 +73,6 @@ public class EndSceneHook : IDisposable
         }
 
         Logger.Error("EndScene not found by any method");
-        return 0;
-    }
-
-    private uint TryEndSceneAtOffset(uint pDevice1, uint offset)
-    {
-        uint pDevice2 = _memory.ReadUInt32(pDevice1 + offset);
-        if (pDevice2 == 0 || pDevice2 < 0x10000 || pDevice2 > 0x7FFFFFFF) return 0;
-        uint vTable = _memory.ReadUInt32(pDevice2);
-        if (vTable == 0 || vTable < 0x10000 || vTable > 0x7FFFFFFF) return 0;
-        uint endScene = _memory.ReadUInt32(vTable + Offsets.EndSceneOffset);
-        if (endScene == 0 || endScene < 0x10000 || endScene > 0x7FFFFFFF) return 0;
-        byte[] header = _memory.ReadBytes(endScene, 4);
-        if (header[0] == 0x55 || header[0] == 0x8B || header[0] == 0x6A || header[0] == 0xE9)
-            return endScene;
         return 0;
     }
 
@@ -323,7 +307,6 @@ public class EndSceneHook : IDisposable
         asm.Add(0xFF); asm.Add(0xD0);                                                 // call eax
         asm.Add(0x83); asm.Add(0xC4); asm.Add(0x08);                                  // add esp,8
 
-        _playerBasePatchOffset = (uint)(asm.Count); // dummy
         EmitSetFlag(asm, 2);
 
         // jmp to skip

@@ -685,7 +685,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); string totemDbg = ""; try { totemDbg = _hook.ExecuteLuaWithResult("WB_R=tostring(WB_TOTEM_DBG or 'nil')") ?? ""; } catch {} Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} totem=[{totemDbg}] flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
 
             // === БАФФЫ ===
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
