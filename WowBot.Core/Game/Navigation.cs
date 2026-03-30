@@ -95,18 +95,61 @@ public class Navigation
 
     /// <summary>
     /// Мгновенный поворот к цели — запись в память + серверный апдейт.
-    /// Не поворачивает если игрок движется (moonwalk fix).
+    /// Не поворачивает на бегу и во время каста.
     /// </summary>
+    private bool _faceTurnActive;
+    private int _faceTurnTicks;
+    private int _faceLogTick;
+
     public void FaceInstant(WowUnit player, WowUnit target)
     {
+        if (player.IsCasting) { StopFaceTurn(); return; }
+        if (IsPlayerMoving(player)) { StopFaceTurn(); return; }
+
+        _faceLogTick++;
+        bool logNow = _faceLogTick >= 10;
+        if (logNow) _faceLogTick = 0;
+
+        if (_faceTurnActive)
+        {
+            // Довернулись?
+            if (IsFacing(player, target))
+            {
+                float needed = GetAngleTo(player, target);
+                _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 20);
+                _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
+                _faceTurnActive = false;
+                if (logNow) Logger.Info($"Face: DONE, write {needed:F2}");
+                return;
+            }
+            _faceTurnTicks++;
+            if (_faceTurnTicks >= 20) // макс 3с
+            {
+                _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 20);
+                _faceTurnActive = false;
+                if (logNow) Logger.Info("Face: TIMEOUT");
+            }
+            // Иначе продолжаем крутить — ничего не делаем
+            return;
+        }
+
         if (IsFacing(player, target)) return;
-        if (player.IsCasting) return;
-        if (IsPlayerMoving(player)) return; // не крутить на бегу
-        float needed = GetAngleTo(player, target);
-        // 1. Пишем в память (клиент)
-        _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
-        // 2. Мгновенный TurnStart+Stop — сервер получит новый facing
-        _hook.ExecuteLua("TurnLeftStart() TurnLeftStop()", 20);
+
+        // Начинаем серверный Turn (БЕЗ записи в память)
+        float diff = AngleDiff(player.Facing, GetAngleTo(player, target));
+        _hook.ExecuteLua(diff > 0 ? "TurnLeftStart()" : "TurnRightStart()", 20);
+        _faceTurnActive = true;
+        _faceTurnTicks = 0;
+        if (logNow) Logger.Info($"Face: START {(diff > 0 ? "L" : "R")} diff={diff:F2}");
+    }
+
+    private void StopFaceTurn()
+    {
+        if (_faceTurnActive)
+        {
+            _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 20);
+            _faceTurnActive = false;
+        }
     }
 
     /// <summary>

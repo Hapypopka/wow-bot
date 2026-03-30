@@ -322,10 +322,10 @@ public class BotEngine : IDisposable
                 if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
                 _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
             }
-            // Бить если в дистанции (даже на бегу)
-            if (distToTarget <= castRange)
+            // Бить если в дистанции
+            if (distToTarget <= castRange && !player.IsCasting)
             {
-                _navigation.FaceUnit(player, slaveTarget);
+                _navigation.FaceInstant(player, slaveTarget);
                 string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
                 _hook.ExecuteLua(script, 500);
             }
@@ -341,9 +341,10 @@ public class BotEngine : IDisposable
                 if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
                 _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
             }
-            else
+            else if (!player.IsCasting)
             {
-                _navigation.FaceUnit(player, slaveTarget);
+                // Стоим в дистанции — поворот + каст (без CTM!)
+                _navigation.FaceInstant(player, slaveTarget);
                 string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
                 _hook.ExecuteLua(script, 500);
             }
