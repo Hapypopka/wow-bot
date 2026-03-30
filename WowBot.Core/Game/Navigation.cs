@@ -18,7 +18,7 @@ public class Navigation
     private bool _isMovingForward;
 
     // Настройки
-    private const float FACE_TOLERANCE = 0.3f;   // Радиан — "уже смотрим" (~17°)
+    private const float FACE_TOLERANCE = 0.5f;   // Радиан — "уже смотрим" (~29°, больше чем шаг Turn за тик)
     private const int MAX_TURN_TICKS = 5;         // Макс тиков на поворот (750мс)
 
     public bool IsMovingForward => _isMovingForward;
