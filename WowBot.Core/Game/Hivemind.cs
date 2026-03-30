@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, StopFollow, Auto, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -30,6 +30,8 @@ public class Hivemind
         public double LastSeen { get; set; }
         public Command? ActiveCommand { get; set; } = null; // последняя команда
         public string FollowTargetName { get; set; } = ""; // за кем бежит (пусто = мастер)
+        public bool AutoFollowPaused { get; set; } = false; // авто: follow на паузе
+        public bool AutoAttackPaused { get; set; } = false; // авто: атака на паузе
     }
 
     /// <summary>Список подключённых слейвов (мастер)</summary>
@@ -37,7 +39,7 @@ public class Hivemind
     public event Action? OnSlavesChanged;
     public void NotifySlavesChanged() => OnSlavesChanged?.Invoke();
 
-    /// <summary>Режим слейва — каждая команда отменяет предыдущую</summary>
+    /// <summary>Режим слейва — каждая команда = полный переход</summary>
     public enum SlaveMode { Idle, Following, Attacking, Auto }
 
     private Role _currentRole = Role.None;
@@ -60,14 +62,15 @@ public class Hivemind
     public bool GossipReading { get; set; }
     public string MasterName { get; private set; } = "";
 
-    /// <summary>Текущий режим слейва (legacy, для совместимости)</summary>
+    /// <summary>Текущий режим слейва</summary>
     public SlaveMode Mode { get; set; } = SlaveMode.Idle;
     public bool ForceIdle { get; set; }
 
-    // === Независимые тоглы слейва ===
-    public enum AttackType { None, Manual, Auto }
-    public AttackType SlaveAttackMode { get; set; } = AttackType.None;
-    public bool SlaveFollowActive { get; set; } = false;
+    /// <summary>Авто-режим: пауза follow (слейв стоит, но бьёт)</summary>
+    public bool AutoPauseFollow { get; set; }
+    /// <summary>Авто-режим: пауза атаки (слейв бежит, но не бьёт)</summary>
+    public bool AutoPauseAttack { get; set; }
+
     /// <summary>Хилы не хилят (вайп)</summary>
     public bool WipeMode { get; set; } = false;
 
@@ -136,20 +139,13 @@ public class Hivemind
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
-        // Обновить ActiveCommand на основе текущего состояния тоглов
+        // Обновить ActiveCommand для UI (служебные команды не меняют статус)
         if (cmd != Command.RefreshGuid && cmd != Command.SetBuff && cmd != Command.Wipe &&
-            cmd != Command.Interact && cmd != Command.GossipSelect && cmd != Command.GossipAccept)
+            cmd != Command.Interact && cmd != Command.GossipSelect && cmd != Command.GossipAccept &&
+            cmd != Command.AutoToggleFollow && cmd != Command.AutoToggleAttack)
         {
-            // ActiveCommand отражает комбинацию тоглов для UI
-            Command? displayCmd;
-            if (_attackActive && _followActive) displayCmd = Command.Auto;
-            else if (_attackActive) displayCmd = Command.Attack;
-            else if (_followActive) displayCmd = Command.Follow;
-            else if (cmd == Command.Stop) displayCmd = Command.Stop;
-            else displayCmd = cmd;
-
             foreach (var slave in affected)
-                slave.ActiveCommand = displayCmd;
+                slave.ActiveCommand = cmd;
         }
         OnSlavesChanged?.Invoke();
 
@@ -168,9 +164,15 @@ public class Hivemind
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
-        // Обновить ActiveCommand
-        var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
-        if (slave != null) slave.ActiveCommand = cmd;
+        // Обновить ActiveCommand (служебные команды не меняют статус)
+        bool isService = cmd is Command.AutoToggleFollow or Command.AutoToggleAttack
+            or Command.RefreshGuid or Command.SetBuff or Command.Wipe
+            or Command.Interact or Command.GossipSelect or Command.GossipAccept;
+        if (!isService)
+        {
+            var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
+            if (slave != null) slave.ActiveCommand = cmd;
+        }
         OnSlavesChanged?.Invoke();
 
         Logger.Info($"Hivemind: MASTER sent {cmd} to {slaveName}");
@@ -256,53 +258,26 @@ public class Hivemind
         return options;
     }
 
-    /// <summary>Мастер: бейте мой таргет</summary>
-    private bool _attackActive;
-
+    /// <summary>Мастер: бейте мой таргет (ассист + атака, без follow)</summary>
     public void CmdAttack()
     {
-        // Toggle: если уже атакуем → снять атаку (StopAttack)
-        if (_attackActive)
-        {
-            _attackActive = false;
-            // Отправляем StopFollow чтобы слейв перешёл в Idle (но follow останется если был)
-            // Проще: отправим Stop если follow тоже выключен, иначе Follow
-            if (_followActive)
-                SendCommand(Command.Follow, _objectManager.GetPlayerName() ?? "master");
-            else
-                SendCommand(Command.Stop);
-            return;
-        }
-        _attackActive = true;
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.Attack, name);
     }
 
-    /// <summary>Мастер: все ко мне</summary>
-    private bool _followActive;
-
+    /// <summary>Мастер: ко мне (follow, не трогает таргет слейва)</summary>
     public void CmdFollow()
     {
-        // Toggle follow
-        if (_followActive)
-        {
-            _followActive = false;
-            SendCommand(Command.StopFollow);
-            return;
-        }
-        _followActive = true;
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.Follow, name);
     }
 
-    /// <summary>Мастер: стоп</summary>
-    public void CmdStop() { _followActive = false; _attackActive = false; SendCommand(Command.Stop); }
+    /// <summary>Мастер: стоп (полный сброс + ClearTarget)</summary>
+    public void CmdStop() => SendCommand(Command.Stop);
 
-    /// <summary>Мастер: авторежим (follow + auto-assist)</summary>
+    /// <summary>Мастер: авторежим (follow + авто-ассист)</summary>
     public void CmdAuto()
     {
-        _followActive = true;
-        _attackActive = true;
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.Auto, name);
     }
@@ -712,7 +687,9 @@ WB_HIVE_REG_TIME = 0
             "RefreshGuid" => Command.RefreshGuid,
             "Wipe" => Command.Wipe,
             "Register" => Command.Register,
-            "StopFollow" => Command.StopFollow,
+            "StopFollow" => Command.Stop, // legacy
+            "AutoToggleFollow" => Command.AutoToggleFollow,
+            "AutoToggleAttack" => Command.AutoToggleAttack,
             "Interact" => Command.Interact,
             "GossipSelect" => Command.GossipSelect,
             "GossipAccept" => Command.GossipAccept,
@@ -723,16 +700,6 @@ WB_HIVE_REG_TIME = 0
             System.Globalization.CultureInfo.InvariantCulture, out double time);
 
         return (cmd, parts[1], parts[2], time);
-    }
-
-    /// <summary>Общий сброс — вызывается перед каждой командой</summary>
-    private void ResetMode()
-    {
-        Mode = SlaveMode.Idle;
-        _autoAssistTick = 0;
-        _botEngine?.SlaveCtrl.CmdStop();
-        OnAutoToggle?.Invoke("rotation", false);
-        OnAutoToggle?.Invoke("buffs", false);
     }
 
     public void ExecuteSlaveCommand(Command cmd, string arg)
@@ -822,63 +789,75 @@ WB_HIVE_REG_TIME = 0
         if (!string.IsNullOrEmpty(cleanArg) && cmd != Command.Stop && cmd != Command.Scatter)
             _botEngine?.SlaveCtrl.InitMasterGuid(cleanArg);
 
-        // Каждая команда отменяет предыдущую
-        ResetMode();
+        // Каждая команда = полный переход в новый режим
 
         switch (cmd)
         {
-            case Command.Follow:
-            case Command.Stack:
-                // Follow ON (не трогаем атаку)
-                MasterName = cleanArg;
-                SlaveFollowActive = true;
-                Mode = SlaveAttackMode != AttackType.None ? SlaveMode.Auto : SlaveMode.Following;
-                _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
-                if (_botEngine != null) _botEngine.HivemindFollowing = true;
-                OnAutoToggle?.Invoke("rotation", true);
-                OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"SLAVE: follow=ON attack={SlaveAttackMode}");
-                break;
-
-            case Command.StopFollow:
-                // Follow OFF (не трогаем атаку)
-                SlaveFollowActive = false;
-                if (_botEngine != null) _botEngine.HivemindFollowing = false;
-                _botEngine?.SlaveCtrl.CmdStop();
-                Mode = SlaveAttackMode != AttackType.None ? SlaveMode.Attacking : SlaveMode.Idle;
-                OnAutoToggle?.Invoke("rotation", SlaveAttackMode != AttackType.None);
-                OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"SLAVE: follow=OFF attack={SlaveAttackMode}");
-                break;
-
             case Command.Attack:
-                // Атака Manual (не трогаем follow)
+                // Бейте таргет: ассист мастера + атака, без follow
                 MasterName = cleanArg;
-                SlaveAttackMode = AttackType.Manual;
-                Mode = SlaveFollowActive ? SlaveMode.Auto : SlaveMode.Attacking;
+                Mode = SlaveMode.Attacking;
+                if (_botEngine != null) _botEngine.HivemindFollowing = false;
+                _botEngine?.SlaveCtrl.CmdStop(); // стоп follow если был
                 _hook.ExecuteLua($"AssistUnit('{cleanArg}') StartAttack()", 200);
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info($"SLAVE: attack=Manual follow={SlaveFollowActive}");
+                Logger.Info("SLAVE: attack (assist + hit, no follow)");
                 break;
 
-            case Command.Auto:
-                // Авто = follow ON + attack Auto
+            case Command.Follow:
+            case Command.Stack:
+                // Ко мне: follow за мастером, НЕ трогает таргет, ротация бьёт свою цель
                 MasterName = cleanArg;
-                SlaveFollowActive = true;
-                SlaveAttackMode = AttackType.Auto;
-                Mode = SlaveMode.Auto;
+                Mode = SlaveMode.Following;
                 _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
                 if (_botEngine != null) _botEngine.HivemindFollowing = true;
                 OnAutoToggle?.Invoke("rotation", true);
                 OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info("SLAVE: auto (follow=ON attack=Auto)");
+                Logger.Info("SLAVE: follow (keep current target)");
+                break;
+
+            case Command.Auto:
+                // Авто: follow + авто-ассист каждые ~1с
+                MasterName = cleanArg;
+                Mode = SlaveMode.Auto;
+                AutoPauseFollow = false;
+                AutoPauseAttack = false;
+                _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
+                if (_botEngine != null) _botEngine.HivemindFollowing = true;
+                OnAutoToggle?.Invoke("rotation", true);
+                OnAutoToggle?.Invoke("buffs", true);
+                Logger.Info("SLAVE: auto (follow + auto-assist)");
+                break;
+
+            case Command.AutoToggleFollow:
+                // Пауза/возобновление follow в авто-режиме
+                if (Mode != SlaveMode.Auto) break;
+                AutoPauseFollow = !AutoPauseFollow;
+                if (AutoPauseFollow)
+                {
+                    _botEngine?.SlaveCtrl.CmdStop();
+                    if (_botEngine != null) _botEngine.HivemindFollowing = false;
+                }
+                else
+                {
+                    _botEngine?.SlaveCtrl.CmdFollow(MasterName);
+                    if (_botEngine != null) _botEngine.HivemindFollowing = true;
+                }
+                Logger.Info($"SLAVE: auto follow paused={AutoPauseFollow}");
+                break;
+
+            case Command.AutoToggleAttack:
+                // Пауза/возобновление атаки в авто-режиме
+                if (Mode != SlaveMode.Auto) break;
+                AutoPauseAttack = !AutoPauseAttack;
+                if (AutoPauseAttack)
+                    _hook.ExecuteLua("ClearTarget()", 100);
+                Logger.Info($"SLAVE: auto attack paused={AutoPauseAttack}");
                 break;
 
             case Command.Stop:
-                // Полный стоп
-                SlaveFollowActive = false;
-                SlaveAttackMode = AttackType.None;
+                // Полный стоп: всё сбросить + ClearTarget
                 Mode = SlaveMode.Idle;
                 ForceIdle = true;
                 if (_botEngine != null)
@@ -888,7 +867,9 @@ WB_HIVE_REG_TIME = 0
                 }
                 _botEngine?.SlaveCtrl.CmdStop();
                 _hook.ExecuteLua("ClearTarget()", 100);
-                Logger.Info("SLAVE: full stop");
+                OnAutoToggle?.Invoke("rotation", false);
+                OnAutoToggle?.Invoke("buffs", false);
+                Logger.Info("SLAVE: full stop + clear target");
                 break;
 
             case Command.Scatter:

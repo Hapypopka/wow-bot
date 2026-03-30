@@ -355,11 +355,7 @@ public partial class MasterPanel : Window
             foreach (var (cmd, icon, tip) in commands)
             {
                 var ac = slave.ActiveCommand;
-                bool isAuto = ac == WowBot.Core.Game.Hivemind.Command.Auto;
-                bool isStopFollow = ac == WowBot.Core.Game.Hivemind.Command.StopFollow;
-                bool isActive = ac?.ToString().ToLower() == cmd
-                    || (isAuto && (cmd == "attack" || cmd == "follow"))
-                    || (isStopFollow && cmd == "attack"); // StopFollow = атака без follow
+                bool isActive = ac?.ToString().ToLower() == cmd;
                 var cmdBtn = new Button
                 {
                     Content = icon, FontSize = 11, Width = 24, Height = 28,
@@ -418,14 +414,79 @@ public partial class MasterPanel : Window
                 row.Children.Add(cmdPanel);
                 SlavePanel.Children.Add(row);
                 SlavePanel.Children.Add(buffPanel);
+                // Auto sub-toggles после бафов
+                if (slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Auto)
+                    SlavePanel.Children.Add(BuildAutoSubPanel(slave));
             }
             else
             {
                 Grid.SetColumn(cmdPanel, 2);
                 row.Children.Add(cmdPanel);
                 SlavePanel.Children.Add(row);
+                // Auto sub-toggles
+                if (slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Auto)
+                    SlavePanel.Children.Add(BuildAutoSubPanel(slave));
             }
         }
+    }
+
+    private Border BuildAutoSubPanel(WowBot.Core.Game.Hivemind.SlaveInfo slave)
+    {
+        var border = new Border
+        {
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12141a")),
+            Padding = new Thickness(6, 3, 6, 3),
+            Margin = new Thickness(22, 0, 0, 1),
+            CornerRadius = new CornerRadius(0, 0, 4, 4),
+        };
+
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+
+        var label = new TextBlock
+        {
+            Text = "Авто:",
+            FontSize = 9,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8A84E")),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+        };
+        panel.Children.Add(label);
+
+        // Follow toggle
+        bool followOn = !slave.AutoFollowPaused;
+        var followBtn = new Button
+        {
+            Content = "🏃", FontSize = 11, Width = 28, Height = 22,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(followOn ? "#4a6741" : "#3d1f1f")),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0), Padding = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = followOn ? "Follow ВКЛ — нажми чтобы выключить" : "Follow ВЫКЛ — нажми чтобы включить",
+            Style = null!,
+        };
+        string fn = slave.Name;
+        followBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(fn, "auto_toggle_follow"); e.Handled = true; };
+        panel.Children.Add(followBtn);
+
+        // Attack toggle
+        bool attackOn = !slave.AutoAttackPaused;
+        var attackBtn = new Button
+        {
+            Content = "⚔", FontSize = 11, Width = 28, Height = 22,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(attackOn ? "#4a6741" : "#3d1f1f")),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0), Padding = new Thickness(0),
+            Margin = new Thickness(2, 0, 0, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = attackOn ? "Атака ВКЛ — нажми чтобы выключить" : "Атака ВЫКЛ — нажми чтобы включить",
+            Style = null!,
+        };
+        string an = slave.Name;
+        attackBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(an, "auto_toggle_attack"); e.Handled = true; };
+        panel.Children.Add(attackBtn);
+
+        border.Child = panel;
+        return border;
     }
 
     private Border BuildSlaveBuffPanel(string slaveName)

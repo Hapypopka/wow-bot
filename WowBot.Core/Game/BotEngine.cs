@@ -579,8 +579,10 @@ public class BotEngine : IDisposable
             // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
             {
-                // Follow к мастеру если есть команда follow/auto
-                if (Hivemind.Mode == Hivemind.SlaveMode.Following || Hivemind.Mode == Hivemind.SlaveMode.Auto)
+                // Follow к мастеру если есть команда follow/auto (и follow не на паузе)
+                bool healerFollow = Hivemind.Mode == Hivemind.SlaveMode.Following ||
+                    (Hivemind.Mode == Hivemind.SlaveMode.Auto && !Hivemind.AutoPauseFollow);
+                if (healerFollow)
                 {
                     SlaveCtrl.FollowDistance = _followDistance;
                     SlaveCtrl.Tick();
@@ -654,13 +656,34 @@ public class BotEngine : IDisposable
                         }
                         else
                         {
-                            // Обычный авторежим
-                            Hivemind.SlaveAutoTick();
+                            // Авто-ассист (если атака не на паузе)
+                            if (!Hivemind.AutoPauseAttack)
+                                Hivemind.SlaveAutoTick();
+
+                            // Приоритет: сначала follow, потом атака
+                            if (!Hivemind.AutoPauseFollow)
+                                SlaveCtrl.Tick(); // follow мастера
+
                             var autoTarget = _objectManager.GetTarget();
-                            if (autoTarget != null && autoTarget.IsAlive && autoTarget.Type != WowObjectType.Player && autoTarget.InCombat)
-                                SlaveAttackTick(player, enemyCountLua);
-                            else
-                                SlaveCtrl.Tick();
+                            bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
+                                autoTarget != null && autoTarget.IsAlive &&
+                                autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
+
+                            if (hasAutoTarget)
+                            {
+                                bool autoStanding = _navigation.IsPlayerStanding(player);
+                                if (!autoStanding)
+                                {
+                                    // Бежим за мастером — только инстанты
+                                    _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+                                }
+                                else
+                                {
+                                    // Стоим рядом с мастером — полная ротация + поворот к мобу
+                                    if (_autoFace && !_navigation.FaceInstant(player, autoTarget!)) { }
+                                    else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
+                                }
+                            }
                         }
                         break;
 

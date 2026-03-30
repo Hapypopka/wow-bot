@@ -216,19 +216,27 @@ public partial class MainWindow : Window
                 hive.CmdSetBuffToSlave(slaveName, "aura", key);
                 return;
             }
-            // Per-slave follow toggle
-            if (cmd == "follow")
+            // Auto sub-toggles
+            if (cmd == "auto_toggle_follow")
             {
                 var si = hive.ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
-                if (si?.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Follow)
-                    hive.SendCommandToSlave(slaveName, WowBot.Core.Game.Hivemind.Command.StopFollow);
-                else
-                    hive.SendCommandToSlave(slaveName, WowBot.Core.Game.Hivemind.Command.Follow);
+                if (si != null) si.AutoFollowPaused = !si.AutoFollowPaused;
+                hive.SendCommandToSlave(slaveName, WowBot.Core.Game.Hivemind.Command.AutoToggleFollow);
+                hive.NotifySlavesChanged();
+                return;
+            }
+            if (cmd == "auto_toggle_attack")
+            {
+                var si = hive.ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
+                if (si != null) si.AutoAttackPaused = !si.AutoAttackPaused;
+                hive.SendCommandToSlave(slaveName, WowBot.Core.Game.Hivemind.Command.AutoToggleAttack);
+                hive.NotifySlavesChanged();
                 return;
             }
             var command = cmd switch
             {
                 "attack" => WowBot.Core.Game.Hivemind.Command.Attack,
+                "follow" => WowBot.Core.Game.Hivemind.Command.Follow,
                 "auto" => WowBot.Core.Game.Hivemind.Command.Auto,
                 "stop" => WowBot.Core.Game.Hivemind.Command.Stop,
                 _ => WowBot.Core.Game.Hivemind.Command.Stop
