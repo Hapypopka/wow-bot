@@ -470,8 +470,8 @@ public partial class MainWindow : Window
 
             // Инициализируем BotEngine
             WowBot.Core.Logger.Info("Creating BotEngine...");
-            var navigation = new Navigation(_memory, _endSceneHook);
             var ctm = new ClickToMove(_memory);
+            var navigation = new Navigation(_memory, _endSceneHook);
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
             _botEngine.WowProcess = wow;

@@ -18,7 +18,7 @@ public class Navigation
     private bool _isMovingForward;
 
     // Настройки
-    private const float FACE_TOLERANCE = 0.5f;   // Радиан — "уже смотрим" (~29°, больше чем шаг Turn за тик)
+    private const float FACE_TOLERANCE = 0.5f;   // Радиан — "уже смотрим" (~29°)
     private const int MAX_TURN_TICKS = 5;         // Макс тиков на поворот (750мс)
 
     public bool IsMovingForward => _isMovingForward;
@@ -97,40 +97,38 @@ public class Navigation
     /// Мгновенный поворот к цели — запись в память + серверный апдейт.
     /// Не поворачивает на бегу и во время каста.
     /// </summary>
-    private bool _faceTurnPending; // фоновый Turn ещё выполняется
+    private bool _turnPending;
 
     /// <summary>
-    /// Мгновенный поворот к цели.
-    /// 1. Запись facing в память (мгновенный клиент)
-    /// 2. Фоновый TurnLeft/Right с 50мс задержкой (серверный пакет)
+    /// Поворот к цели. Возвращает true = смотрим (можно кастовать), false = крутимся.
+    /// Запись в память + TurnLeftStart → 80мс → TurnLeftStop в фоне.
     /// </summary>
-    public void FaceInstant(WowUnit player, WowUnit target)
+    public bool FaceInstant(WowUnit player, WowUnit target)
     {
-        if (IsFacing(player, target)) return;
-        if (player.IsCasting) return;
-        if (IsPlayerMoving(player)) return;
-        if (_faceTurnPending) return; // предыдущий Turn ещё в процессе
+        if (_turnPending) return false; // предыдущий Turn ещё в процессе
+        if (IsFacing(player, target)) return true;
+        if (player.IsCasting) return false;
+        if (IsPlayerMoving(player)) return false;
 
         float needed = GetAngleTo(player, target);
         float diff = AngleDiff(player.Facing, needed);
 
-        // 1. Мгновенный клиентский поворот
         _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
 
-        // 2. Серверный Turn в фоне (80мс между Start и Stop)
-        _faceTurnPending = true;
-        string startCmd = diff > 0 ? "TurnLeftStart()" : "TurnRightStart()";
+        _turnPending = true;
+        string cmd = diff > 0 ? "TurnLeftStart()" : "TurnRightStart()";
         Task.Run(async () =>
         {
             try
             {
-                _hook.ExecuteLua(startCmd, 30);
+                _hook.ExecuteLua(cmd, 30);
                 await Task.Delay(80);
                 _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 30);
             }
             catch { }
-            finally { _faceTurnPending = false; }
+            finally { _turnPending = false; }
         });
+        return false;
     }
 
     /// <summary>

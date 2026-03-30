@@ -74,6 +74,18 @@ public class ClickToMove
     public float ReadY() => _memory.ReadFloat(CTM_Y);
     public float ReadZ() => _memory.ReadFloat(CTM_Z);
 
+    /// <summary>
+    /// Повернуться лицом к точке через CTM (action type 0x2 = Face)
+    /// </summary>
+    public void FaceTo(float x, float y, float z)
+    {
+        _memory.WriteFloat(CTM_X, x);
+        _memory.WriteFloat(CTM_Y, y);
+        _memory.WriteFloat(CTM_Z, z);
+        _memory.WriteFloat(CTM_Precision, 0.5f);
+        _memory.WriteInt32(CTM_Action, 0x2); // Face
+    }
+
     /// <summary>Обнулить CTM action (персонаж не двигается)</summary>
     public void ClearAction() => _memory.WriteInt32(CTM_Action, ActionNone);
 }

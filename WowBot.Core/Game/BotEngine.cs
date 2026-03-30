@@ -325,9 +325,11 @@ public class BotEngine : IDisposable
             // Бить если в дистанции
             if (distToTarget <= castRange && !player.IsCasting)
             {
-                _navigation.FaceInstant(player, slaveTarget);
-                string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-                _hook.ExecuteLua(script, 500);
+                if (_navigation.FaceInstant(player, slaveTarget))
+                {
+                    string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+                    _hook.ExecuteLua(script, 500);
+                }
             }
         }
         else
@@ -344,9 +346,11 @@ public class BotEngine : IDisposable
             else if (!player.IsCasting)
             {
                 // Стоим в дистанции — поворот + каст (без CTM!)
-                _navigation.FaceInstant(player, slaveTarget);
-                string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-                _hook.ExecuteLua(script, 500);
+                if (_navigation.FaceInstant(player, slaveTarget))
+                {
+                    string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+                    _hook.ExecuteLua(script, 500);
+                }
             }
         }
     }
@@ -600,8 +604,8 @@ public class BotEngine : IDisposable
                             Logger.Info($"HiveFollow ARRIVED: fHasTarget={fHasTarget} target={fTarget?.Name} alive={fTarget?.IsAlive} combat={fTarget?.InCombat}");
                             if (fHasTarget)
                             {
-                                if (_autoFace) _navigation.FaceInstant(player, fTarget!);
-                                _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
+                                if (_autoFace && !_navigation.FaceInstant(player, fTarget!)) { /* поворачиваемся */ }
+                                else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
                             }
                         }
                         break;
@@ -738,8 +742,8 @@ public class BotEngine : IDisposable
                         if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                         {
                             if (_logTick == 0) Logger.Info("HiveFollow: STOPPED — full rotation + face");
-                            if (hasTarget && targetInCombat && _autoFace && !IsHealer) _navigation.FaceInstant(player, target!);
-                            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + GetRotationScript(player), 500);
+                            if (hasTarget && targetInCombat && _autoFace && !IsHealer && !_navigation.FaceInstant(player, target!)) { }
+                            else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + GetRotationScript(player), 500);
                         }
                     }
                     return;
@@ -747,10 +751,15 @@ public class BotEngine : IDisposable
 
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (hasTarget && targetInCombat && _autoFace && !IsHealer) _navigation.FaceInstant(player, target!);
-                    string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
-                    if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
-                    _hook.ExecuteLua(script, 500);
+                    bool isMaster = Hivemind.CurrentRole == Hivemind.Role.Master;
+                    bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer && !isMaster;
+                    if (needFace && !_navigation.FaceInstant(player, target!)) { }
+                    else
+                    {
+                        string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
+                        if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
+                        _hook.ExecuteLua(script, 500);
+                    }
                 }
                 return;
             }
@@ -776,9 +785,13 @@ public class BotEngine : IDisposable
                 // В дистанции — полная ротация (только в бою)
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (hasTarget && targetInCombat && _autoFace) _navigation.FaceInstant(player, target!);
-                    string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
-                    _hook.ExecuteLua(script, 500);
+                    bool isMaster2 = Hivemind.CurrentRole == Hivemind.Role.Master;
+                    if (hasTarget && targetInCombat && _autoFace && !isMaster2 && !_navigation.FaceInstant(player, target!)) { }
+                    else
+                    {
+                        string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
+                        _hook.ExecuteLua(script, 500);
+                    }
                 }
             }
         }
