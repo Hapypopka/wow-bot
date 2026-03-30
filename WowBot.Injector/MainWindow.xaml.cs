@@ -216,10 +216,19 @@ public partial class MainWindow : Window
                 hive.CmdSetBuffToSlave(slaveName, "aura", key);
                 return;
             }
+            // Per-slave follow toggle
+            if (cmd == "follow")
+            {
+                var si = hive.ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
+                if (si?.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Follow)
+                    hive.SendCommandToSlave(slaveName, WowBot.Core.Game.Hivemind.Command.StopFollow);
+                else
+                    hive.SendCommandToSlave(slaveName, WowBot.Core.Game.Hivemind.Command.Follow);
+                return;
+            }
             var command = cmd switch
             {
                 "attack" => WowBot.Core.Game.Hivemind.Command.Attack,
-                "follow" => WowBot.Core.Game.Hivemind.Command.Follow,
                 "auto" => WowBot.Core.Game.Hivemind.Command.Auto,
                 "stop" => WowBot.Core.Game.Hivemind.Command.Stop,
                 _ => WowBot.Core.Game.Hivemind.Command.Stop

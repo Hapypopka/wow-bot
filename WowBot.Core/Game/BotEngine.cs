@@ -164,6 +164,7 @@ public class BotEngine : IDisposable
     public Hivemind Hivemind { get; private set; }
     public SlaveController SlaveCtrl { get; private set; }
     public double LastHiveCheck { get; set; }
+    private Hivemind.Command? _lastHiveCmd;
     // _slaveListenerInstalled хранится в Hivemind
 
     public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
@@ -249,6 +250,19 @@ public class BotEngine : IDisposable
         _followEnabled = false;
         _followGuid = 0;
         StopFollowMovement();
+    }
+
+    /// <summary>Полный стоп — выключить ротацию, follow, бафы напрямую</summary>
+    public void ForceStop()
+    {
+        _rotationEnabled = false;
+        _followEnabled = false;
+        _buffsEnabled = false;
+        _followGuid = 0;
+        HivemindFollowing = false;
+        Hivemind.Mode = Hivemind.SlaveMode.Idle;
+        Hivemind.ForceIdle = true; // не бить даже в Idle
+        Logger.Info("BotEngine: ForceStop — all disabled");
     }
 
     /// <summary>
@@ -477,9 +491,12 @@ public class BotEngine : IDisposable
                     if (response != null)
                     {
                         var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
-                        if (cmd != null && time > LastHiveCheck)
+                        // Выполнять если: новый таймстамп ИЛИ другая команда с тем же таймстампом
+                        bool isNew = time > LastHiveCheck || (time == LastHiveCheck && cmd != _lastHiveCmd);
+                        if (cmd != null && isNew)
                         {
                             LastHiveCheck = time;
+                            _lastHiveCmd = cmd;
                             // Слейв: игнорировать команды от чужих мастеров
                             if (Hivemind.CurrentRole == Hivemind.Role.Slave &&
                                 !string.IsNullOrEmpty(Hivemind.MasterName) &&
@@ -648,13 +665,17 @@ public class BotEngine : IDisposable
                         break;
 
                     case Hivemind.SlaveMode.Idle:
-                        // Стоп — не двигаемся, но бьём таргет если есть
+                        // ForceIdle (полный стоп) — ничего не делать
+                        if (Hivemind.ForceIdle) break;
+                        // Обычный Idle — бьём таргет если есть
                         var idleTarget = _objectManager.GetTarget();
                         if (idleTarget != null && idleTarget.IsAlive && idleTarget.Type != WowObjectType.Player && idleTarget.InCombat)
                         {
-                            _navigation.FaceUnit(player, idleTarget);
-                            string idleScript = enemyCountLua + SpellFlagsLua + _fullScript;
-                            _hook.ExecuteLua(idleScript, 500);
+                            if (_navigation.FaceInstant(player, idleTarget))
+                            {
+                                string idleScript = enemyCountLua + SpellFlagsLua + _fullScript;
+                                _hook.ExecuteLua(idleScript, 500);
+                            }
                         }
                         break;
                 }
@@ -751,8 +772,7 @@ public class BotEngine : IDisposable
 
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    bool isMaster = Hivemind.CurrentRole == Hivemind.Role.Master;
-                    bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer && !isMaster;
+                    bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer;
                     if (needFace && !_navigation.FaceInstant(player, target!)) { }
                     else
                     {
@@ -785,8 +805,7 @@ public class BotEngine : IDisposable
                 // В дистанции — полная ротация (только в бою)
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    bool isMaster2 = Hivemind.CurrentRole == Hivemind.Role.Master;
-                    if (hasTarget && targetInCombat && _autoFace && !isMaster2 && !_navigation.FaceInstant(player, target!)) { }
+                    if (hasTarget && targetInCombat && _autoFace && !_navigation.FaceInstant(player, target!)) { }
                     else
                     {
                         string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
