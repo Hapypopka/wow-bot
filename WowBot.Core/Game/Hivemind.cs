@@ -304,13 +304,6 @@ public class Hivemind
     {
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.RefreshGuid, name);
-        Task.Run(async () =>
-        {
-            await Task.Delay(500);
-            SendCommand(Command.RefreshGuid, name);
-            await Task.Delay(500);
-            SendCommand(Command.RefreshGuid, name);
-        });
     }
 
     /// <summary>Мастер: слейвы берут таргет мастера как нового "мастера" для follow</summary>
@@ -325,16 +318,8 @@ public class Hivemind
             targetName = luaName;
         }
         if (string.IsNullOrEmpty(targetName)) return;
-        // Отправляем имя таргета — слейв найдёт ближайшего по имени
         SendCommand(Command.RefreshGuid, targetName);
         Logger.Info($"Hivemind: MASTER GuidByTarget → {targetName}");
-        Task.Run(async () =>
-        {
-            await Task.Delay(500);
-            SendCommand(Command.RefreshGuid, targetName);
-            await Task.Delay(500);
-            SendCommand(Command.RefreshGuid, targetName);
-        });
     }
 
     /// <summary>Мастер: задать бафф конкретному слейву</summary>
@@ -606,27 +591,20 @@ public class Hivemind
             _masterGuid = 0;
         }
 
-        var player = _objectManager.LocalPlayer;
-        if (player == null) return null;
-
-        Entities.WowUnit? closest = null;
-        float closestDist = float.MaxValue;
-        foreach (var p in _objectManager.Players)
+        // Берём GUID из SlaveCtrl (он ищет по имени надёжно)
+        if (_botEngine?.SlaveCtrl != null && _botEngine.SlaveCtrl.MasterGuid != 0)
         {
-            if (p.Guid == _objectManager.LocalPlayerGuid) continue;
-            float d = player.DistanceTo(p);
-            if (d < closestDist)
+            _masterGuid = _botEngine.SlaveCtrl.MasterGuid;
+            var unit = _objectManager.GetUnitByGuid(_masterGuid);
+            if (unit != null)
             {
-                closestDist = d;
-                closest = p;
+                Logger.Info($"Hivemind: using SlaveCtrl GUID=0x{_masterGuid:X}");
+                return unit;
             }
+            _masterGuid = 0;
         }
-        if (closest != null)
-        {
-            _masterGuid = closest.Guid;
-            Logger.Info($"Hivemind: found master GUID=0x{_masterGuid:X} dist={closestDist:F1}");
-        }
-        return closest;
+
+        return null;
     }
 
     /// <summary>Получить юнит мастера</summary>
@@ -729,11 +707,15 @@ WB_HIVE_REG_TIME = 0
                     return;
                 }
             }
+            _masterGuid = 0; // сбросить кэш Hivemind
+            MasterName = cleanName; // обновить имя
             if (_botEngine?.SlaveCtrl != null)
             {
                 _botEngine.SlaveCtrl.ResetMasterGuid();
-                _botEngine.SlaveCtrl.InitMasterGuid(cleanName);
-                Logger.Info($"Hivemind: SLAVE refreshed master GUID for {cleanName}");
+                _botEngine.SlaveCtrl.MasterName = cleanName;
+                // НЕ вызываем FindMasterGuid тут — конфликтует с ротацией за Lua буфер
+                // FindMaster() найдёт на следующем тике follow автоматически
+                Logger.Info($"Hivemind: SLAVE reset GUID, will find '{cleanName}' on next tick");
             }
             return;
         }

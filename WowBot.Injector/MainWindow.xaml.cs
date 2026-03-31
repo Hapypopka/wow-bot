@@ -58,6 +58,7 @@ public partial class MainWindow : Window
     }
 
     private readonly MemoryReader _memory = new();
+    private System.Threading.Timer? _afkTimer;
     private ObjectManager? _objectManager;
     private EndSceneHook? _endSceneHook;
     private BotEngine? _botEngine;
@@ -436,6 +437,8 @@ public partial class MainWindow : Window
             LstObjects.ItemsSource = diag.Split('\n').ToList();
             TxtStatus.Text = $"Attached + Hooked (PID: {wow.Id})";
             TxtLuaStatus.Text = "Hook active. Enter Lua and press Run or Enter.";
+
+            // Антиафк теперь в BotEngine.Tick (0x00B499A4)
             BtnExecuteLua.IsEnabled = true;
 
             // Инициализируем LuaReader (чтение Lua через макрос)

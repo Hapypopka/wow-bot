@@ -177,20 +177,26 @@ public class BotEngine : IDisposable
         Hivemind.SetBotEngine(this);
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
-        // Антиафк — всегда пока бот заатачен
-        _afkTimer = new Timer(AfkTick, null, 30_000, 30_000); // каждые 30 сек
     }
 
-    private Timer? _afkTimer;
-    private void AfkTick(object? state)
+    // Антиафк — пишем TickCount + снимаем AFK через Lua каждые ~30с
+    private int _afkTickCounter;
+    private void AntiAfkTick()
     {
+        _afkTickCounter++;
+        if (_afkTickCounter < 200) return; // ~30с (200 * 150мс)
+        _afkTickCounter = 0;
         try
         {
-            // Снимаем AFK через Lua если стоит
-            _hook.ExecuteLua("if UnitIsAFK('player') then SendChatMessage('','AFK') end", 200);
-            Logger.Info("AntiAFK: Lua AFK check");
+            // 1. Пишем в память — предотвращаем будущий AFK
+            uint tickCount = (uint)Environment.TickCount;
+            _objectManager.Memory.WriteUInt32(0x00B499A4, tickCount);
+            // 2. Снимаем текущий AFK через Lua (если уже стоит)
+            if (_hook.IsHooked)
+                _hook.ExecuteLua("if UnitIsAFK('player') then SendChatMessage('','AFK') end", 100);
+            Logger.Info($"AntiAFK: wrote {tickCount} + lua clear");
         }
-        catch { /* hook может быть занят */ }
+        catch { }
     }
 
     public LuaReader? LuaReader { get; set; }
@@ -432,6 +438,8 @@ public class BotEngine : IDisposable
 
     private void Tick(object? state)
     {
+        AntiAfkTick(); // всегда, даже если бот неактивен
+
         if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) return;
         if (!_hook.IsHooked) return;
 
@@ -1404,7 +1412,5 @@ WB_AoE()
     public void Dispose()
     {
         StopAll();
-        _afkTimer?.Dispose();
-        _afkTimer = null;
     }
 }
