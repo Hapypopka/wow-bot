@@ -64,6 +64,9 @@ public static class Offsets
     public const uint LuaToLString = 0x0084E0E0;
     public const uint LuaSetTop = 0x0084DBF0;
 
+    // --- Terrain Click (ground-targeted AoE) ---
+    public const uint HandleTerrainClick = 0x00527830; // стандарт 12340, может быть другой на WoWCircle
+
     // --- Имена игроков (Name Store / Name Cache) ---
     public const uint NameStoreBase = 0x00C5D938;
     public const uint NameStoreBaseOffset = 0x08;

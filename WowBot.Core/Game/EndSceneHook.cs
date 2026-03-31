@@ -10,10 +10,11 @@ public class EndSceneHook : IDisposable
     private uint _allocBase;
     private uint _codecaveAddr;
     private uint _luaStringAddr;       // буфер для Lua-строки (4096)
-    private uint _flagAddr;            // флаг: 0=idle, 1=exec, 3=exec+read, 2=done
+    private uint _flagAddr;            // флаг: 0=idle, 1=exec, 3=exec+read, 4=readonly, 5=terrainclick, 2=done
     private uint _botStringAddr;       // "bot\0"
     private uint _varNameAddr;         // имя переменной для GetLocalizedText ("WB_R\0")
     private uint _returnPtrAddr;       // сюда запишем указатель на результат
+    private uint _terrainClickAddr;    // структура TerrainClick (24 байт: GUID8 + XYZ12 + btn4)
     private uint _endSceneAddr;
     private byte[] _originalBytes = Array.Empty<byte>();
     private int _stolenByteCount;
@@ -22,7 +23,7 @@ public class EndSceneHook : IDisposable
 
     private const int CodecaveSize = 512;  // увеличил под два пути
     private const int LuaBufferSize = 16384; // 16KB — per-class скрипты ~5KB
-    private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 128;
+    private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 160; // +32 для TerrainClick struct
 
     public bool IsHooked => _isHooked;
 
@@ -212,6 +213,8 @@ public class EndSceneHook : IDisposable
         _varNameAddr = _botStringAddr + 8;       // "WB_R\0"
         _returnPtrAddr = _varNameAddr + 8;       // 4 bytes for result pointer
 
+        _terrainClickAddr = _returnPtrAddr + 4;     // 24 байт: GUID(8) + X(4) + Y(4) + Z(4) + btn(4)
+
         _memory.WriteString(_botStringAddr, "bot");
         _memory.WriteString(_varNameAddr, "WB_R");
         _memory.WriteUInt32(_flagAddr, 0);
@@ -255,6 +258,11 @@ public class EndSceneHook : IDisposable
         // --- Проверка flag == 4 (read only — lua_getfield без DoString) ---
         asm.Add(0x83); asm.Add(0xF8); asm.Add(0x04); // cmp eax, 4
         int jeReadOnlyPos = asm.Count;
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
+
+        // --- Проверка flag == 5 (terrain click — ground AoE) ---
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x05); // cmp eax, 5
+        int jeTerrainPos = asm.Count;
         asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
 
         // --- Ничего не делаем → skip (rel32) ---
@@ -347,6 +355,26 @@ public class EndSceneHook : IDisposable
 
         EmitSetFlag(asm, 2);
 
+        // jmp to skip
+        int jmpSkip4Pos = asm.Count;
+        asm.Add(0xE9); asm.AddRange(new byte[4]);
+
+        // === flag==5: HandleTerrainClick(struct*) — ground AoE ===
+        int terrainLabel = asm.Count;
+        { int off = terrainLabel - jeTerrainPos - 6;
+          asm[jeTerrainPos+2]=(byte)(off&0xFF); asm[jeTerrainPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeTerrainPos+4]=(byte)((off>>16)&0xFF); asm[jeTerrainPos+5]=(byte)((off>>24)&0xFF); }
+
+        // push _terrainClickAddr (pointer to struct)
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(_terrainClickAddr));
+        // call HandleTerrainClick (cdecl)
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes(Offsets.HandleTerrainClick));
+        asm.Add(0xFF); asm.Add(0xD0); // call eax
+        // add esp, 4 (cdecl cleanup)
+        asm.Add(0x83); asm.Add(0xC4); asm.Add(0x04);
+
+        EmitSetFlag(asm, 2);
+
         // === skip label — patch jmp rel32 ===
         int skipLabel = asm.Count;
         { // jmpSkipPos (E9 rel32)
@@ -369,6 +397,13 @@ public class EndSceneHook : IDisposable
             asm[jmpSkip3Pos + 2] = (byte)((off >> 8) & 0xFF);
             asm[jmpSkip3Pos + 3] = (byte)((off >> 16) & 0xFF);
             asm[jmpSkip3Pos + 4] = (byte)((off >> 24) & 0xFF);
+        }
+        { // jmpSkip4Pos (E9 rel32) — terrain click
+            int off = skipLabel - jmpSkip4Pos - 5;
+            asm[jmpSkip4Pos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkip4Pos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkip4Pos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkip4Pos + 4] = (byte)((off >> 24) & 0xFF);
         }
 
         // popfd / popad
@@ -420,6 +455,25 @@ public class EndSceneHook : IDisposable
         if (!_isHooked) throw new InvalidOperationException("Hook not installed.");
         _memory.WriteString(_luaStringAddr, luaCode);
         _memory.WriteUInt32(_flagAddr, 1);
+        return WaitForCompletion(timeoutMs);
+    }
+
+    /// <summary>
+    /// Кликает по земле в указанных координатах (для ground-targeted AoE).
+    /// Спелл должен быть уже в режиме прицеливания (SpellIsTargeting).
+    /// </summary>
+    public bool CastTerrainClick(float x, float y, float z, int timeoutMs = 500)
+    {
+        if (!_isHooked) return false;
+        // Записываем структуру TerrainClick: GUID(8) + X(4) + Y(4) + Z(4) + MouseBtn(4)
+        _memory.WriteUInt32(_terrainClickAddr, 0);     // GUID low
+        _memory.WriteUInt32(_terrainClickAddr + 4, 0); // GUID high
+        _memory.WriteFloat(_terrainClickAddr + 8, x);
+        _memory.WriteFloat(_terrainClickAddr + 12, y);
+        _memory.WriteFloat(_terrainClickAddr + 16, z);
+        _memory.WriteUInt32(_terrainClickAddr + 20, 1); // Left click
+        // Триггерим flag=5
+        _memory.WriteUInt32(_flagAddr, 5);
         return WaitForCompletion(timeoutMs);
     }
 

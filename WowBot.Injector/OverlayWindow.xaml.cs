@@ -967,9 +967,16 @@ public partial class OverlayWindow : Window
         }
     }
 
+    private Slider _sliderAoeMin = null!;
+    public int AoeMinEnemies => (int)(_sliderAoeMin?.Value ?? GetSavedDouble("slider_aoeMin", 3));
+
     private void BuildAoeSubmenu()
     {
         string specKey = _playerSpec ?? "";
+
+        // Глобальный ползунок: мин. врагов для AoE (для всех классов)
+        _sliderAoeMin = AddSlider("Мин. врагов для AoE", _sliderAoeMin?.Value ?? GetSavedDouble("slider_aoeMin", 3), 2, 10, 1);
+        _sliderAoeMin.ValueChanged += (s, e) => SaveSettings();
 
         if (specKey == "Shadow Priest")
         {
@@ -984,10 +991,9 @@ public partial class OverlayWindow : Window
         }
         else if (specKey == "Balance Druid")
         {
-            AddLabel("AoE (в ротации — авто)");
+            AddLabel("AoE");
             var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
-            AddSpellIcon(wrap, "starfall.jpg", "Звездопад (авто)", true);
-            AddSpellIcon(wrap, "hurricane.jpg", "Гроза (в разработке)", false);
+            _spellToggles["Hurricane"] = AddSpellIcon(wrap, "hurricane.jpg", "Гроза (по порогу врагов)", _spellToggles.TryGetValue("Hurricane", out var hBtn) ? hBtn.IsChecked == true : GetSavedBool("spell_Hurricane", true));
             SubContent.Children.Add(wrap);
         }
         else if (specKey == "Ret Paladin" || specKey == "Prot Paladin")
@@ -1775,6 +1781,10 @@ public partial class OverlayWindow : Window
             }
         }
 
+        // Pre-create AoE spell toggles (не отображаются в ротации, но нужны для SpellFlagsLua)
+        if (specKey == "Balance Druid" && !_spellToggles.ContainsKey("Hurricane"))
+            _spellToggles["Hurricane"] = new ToggleButton { IsChecked = GetSavedBool("spell_Hurricane", true) };
+
         // Pre-create buff toggles from ClassBuffs
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
         // Дефолт оружия шамана по спеку
@@ -1856,7 +1866,7 @@ public partial class OverlayWindow : Window
             _autoFaceDefault = GetSavedBool("chk_autoFace", true);
 
             // Main toggles (AoE, Buffs)
-            BtnAoe.IsChecked = GetSavedBool("aoe", false);
+            BtnAoe.IsChecked = GetSavedBool("aoe", true);
             BtnAoe.Content = BtnAoe.IsChecked == true ? "ON" : "OFF";
             BtnBuffs.IsChecked = GetSavedBool("buffs", false);
             BtnBuffs.Content = BtnBuffs.IsChecked == true ? "ON" : "OFF";
@@ -1915,6 +1925,8 @@ public partial class OverlayWindow : Window
             else if (_saved.ContainsKey("slider_maxDots")) data["slider_maxDots"] = GetSavedDouble("slider_maxDots", 4);
             if (_sliderMindSear != null) data["slider_mindSear"] = _sliderMindSear.Value;
             else if (_saved.ContainsKey("slider_mindSear")) data["slider_mindSear"] = GetSavedDouble("slider_mindSear", 4);
+            if (_sliderAoeMin != null) data["slider_aoeMin"] = _sliderAoeMin.Value;
+            else if (_saved.ContainsKey("slider_aoeMin")) data["slider_aoeMin"] = GetSavedDouble("slider_aoeMin", 3);
             if (_sliderDist != null) data["slider_dist"] = _sliderDist.Value;
             else if (_saved.ContainsKey("slider_dist")) data["slider_dist"] = GetSavedDouble("slider_dist", 8);
             if (_sliderMaxRange != null) data["slider_maxRange"] = _sliderMaxRange.Value;

@@ -47,6 +47,7 @@ public class BotEngine : IDisposable
 
     // AoE properties
     public bool AoeEnabled { get => _aoeEnabled; set => _aoeEnabled = value; }
+    public int AoeMinEnemies { get; set; } = 3; // глобальный порог: от скольки врагов AoE
     public bool UseMultiDot { get => _useMultiDot; set => _useMultiDot = value; }
     public int MaxDotTargets { get => _maxDotTargets; set => _maxDotTargets = value; }
     public bool UseMindSear { get => _useMindSear; set => _useMindSear = value; }
@@ -91,6 +92,57 @@ public class BotEngine : IDisposable
             if (!unit.InCombat) continue;
             if (player.DistanceTo(unit) > range) continue;
             count++;
+        }
+        return count;
+    }
+
+    /// <summary>Пробуем кастовать ground AoE на таргет (Гроза, Метель и т.д.)</summary>
+    /// <returns>true если начали AoE каст</returns>
+    private bool TryGroundAoE(Entities.WowPlayer player, Entities.WowUnit target)
+    {
+        if (!_aoeEnabled) { Logger.Info("GroundAoE: skip — aoe disabled"); return false; }
+        if (player.IsCasting) return false;
+        // Проверяем channeling — если уже ченнелим (Гроза), не прерываем
+        if (player.ChannelingSpellId != 0) return false;
+
+        int nearTarget = CountEnemiesNearTarget(target, 10f);
+        if (nearTarget < AoeMinEnemies) { Logger.Info($"GroundAoE: skip — enemies={nearTarget} < min={AoeMinEnemies}"); return false; }
+
+        bool hurricaneEnabled = IsSpellEnabled("Hurricane");
+        Logger.Info($"GroundAoE: class={PlayerClass} spec={_specName} Hurricane={hurricaneEnabled} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 100))}\"");
+
+        // Определяем AoE спелл по классу
+        string? aoeSpell = PlayerClass switch
+        {
+            "DRUID" when _specName?.Contains("Balance") == true => hurricaneEnabled ? "Гроза" : null,
+            // Сюда добавлять другие классы: MAGE → Метель, WARLOCK → Дождь Огня и т.д.
+            _ => null
+        };
+
+        if (aoeSpell == null) { Logger.Info($"GroundAoE: skip — no spell for class={PlayerClass} spec={_specName}"); return false; }
+
+        // Каст спелла → terrain click на позицию таргета
+        _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
+        System.Threading.Thread.Sleep(100);
+        bool ok = _hook.CastTerrainClick(target.X, target.Y, target.Z);
+        Logger.Info($"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok={ok}");
+        return ok;
+    }
+
+    private bool IsSpellEnabled(string key) => SpellFlagsLua?.Contains($"{key}=true") == true;
+
+    /// <summary>Считаем живых врагов в бою рядом с таргетом (для AoE решений)</summary>
+    private int CountEnemiesNearTarget(Entities.WowUnit target, float range = 10f)
+    {
+        int count = 0;
+        foreach (var unit in _objectManager.Units)
+        {
+            if (!unit.IsAlive) continue;
+            float dx = unit.X - target.X;
+            float dy = unit.Y - target.Y;
+            float dz = unit.Z - target.Z;
+            if (dx * dx + dy * dy + dz * dz <= range * range)
+                count++;
         }
         return count;
     }
@@ -631,7 +683,8 @@ public class BotEngine : IDisposable
                             Logger.Info($"HiveFollow ARRIVED: fHasTarget={fHasTarget} target={fTarget?.Name} alive={fTarget?.IsAlive} combat={fTarget?.InCombat}");
                             if (fHasTarget)
                             {
-                                if (_autoFace && !_navigation.FaceInstant(player, fTarget!)) { /* поворачиваемся */ }
+                                if (TryGroundAoE(player, fTarget!)) { }
+                                else if (_autoFace && !_navigation.FaceInstant(player, fTarget!)) { /* поворачиваемся */ }
                                 else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
                             }
                         }
@@ -688,7 +741,8 @@ public class BotEngine : IDisposable
                                 else
                                 {
                                     // Стоим рядом с мастером — полная ротация + поворот к мобу
-                                    if (_autoFace && !_navigation.FaceInstant(player, autoTarget!)) { }
+                                    if (TryGroundAoE(player, autoTarget!)) { }
+                                    else if (_autoFace && !_navigation.FaceInstant(player, autoTarget!)) { }
                                     else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
                                 }
                             }
@@ -696,13 +750,14 @@ public class BotEngine : IDisposable
                         break;
 
                     case Hivemind.SlaveMode.Idle:
-                        // ForceIdle (полный стоп) — ничего не делать
-                        if (Hivemind.ForceIdle) break;
+                        // ForceIdle (полный стоп) или ротация выключена — ничего не делать
+                        if (Hivemind.ForceIdle || !_rotationEnabled) break;
                         // Обычный Idle — бьём таргет если есть
                         var idleTarget = _objectManager.GetTarget();
                         if (idleTarget != null && idleTarget.IsAlive && idleTarget.Type != WowObjectType.Player && idleTarget.InCombat)
                         {
-                            if (_navigation.FaceInstant(player, idleTarget))
+                            if (TryGroundAoE(player, idleTarget)) { }
+                            else if (_navigation.FaceInstant(player, idleTarget))
                             {
                                 string idleScript = enemyCountLua + SpellFlagsLua + _fullScript;
                                 _hook.ExecuteLua(idleScript, 500);
@@ -716,7 +771,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 80))}\""); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); }
 
             // === БАФФЫ ===
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
@@ -803,13 +858,18 @@ public class BotEngine : IDisposable
 
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer;
-                    if (needFace && !_navigation.FaceInstant(player, target!)) { }
+                    // Ground AoE (Гроза и т.д.) — если врагов >= порог
+                    if (hasTarget && targetInCombat && target != null && TryGroundAoE(player, target)) { }
                     else
                     {
-                        string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
-                        if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
-                        _hook.ExecuteLua(script, 500);
+                        bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer;
+                        if (needFace && !_navigation.FaceInstant(player, target!)) { }
+                        else
+                        {
+                            string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
+                            if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
+                            _hook.ExecuteLua(script, 500);
+                        }
                     }
                 }
                 return;
@@ -836,7 +896,10 @@ public class BotEngine : IDisposable
                 // В дистанции — полная ротация (только в бою)
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    if (hasTarget && targetInCombat && _autoFace && !_navigation.FaceInstant(player, target!)) { }
+                    // Ground AoE (Гроза и т.д.) — если врагов >= порог
+                    if (hasTarget && targetInCombat && target != null && TryGroundAoE(player, target))
+                    { /* AoE каст начат, пропускаем обычную ротацию */ }
+                    else if (hasTarget && targetInCombat && _autoFace && !_navigation.FaceInstant(player, target!)) { }
                     else
                     {
                         string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);

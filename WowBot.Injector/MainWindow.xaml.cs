@@ -608,6 +608,27 @@ public partial class MainWindow : Window
                 if (_endSceneHook == null) return null;
                 try
                 {
+                    // !terrain → тест ground AoE
+                    if (cmd == "!terrain" && _objectManager != null)
+                    {
+                        var target = _objectManager.GetTarget();
+                        if (target == null) return "Нет таргета!";
+                        float tx = target.X, ty = target.Y, tz = target.Z;
+                        _endSceneHook.ExecuteLua("CastSpellByName('Гроза')", 300);
+                        System.Threading.Thread.Sleep(150);
+                        bool ok = _endSceneHook.CastTerrainClick(tx, ty, tz);
+                        WowBot.Core.Logger.Info($"TerrainClick: ({tx:F1},{ty:F1},{tz:F1}) ok={ok}");
+                        return ok ? $"Terrain → ({tx:F1},{ty:F1},{tz:F1}) OK" : "Terrain FAIL";
+                    }
+                    // !dump 0xADDR → дамп памяти
+                    if (cmd.StartsWith("!dump ") && _memory != null)
+                    {
+                        uint addr = Convert.ToUInt32(cmd[6..].Trim(), 16);
+                        byte[] bytes = _memory.ReadBytes(addr, 32);
+                        string hex = string.Join(" ", bytes.Select(b => $"{b:X2}"));
+                        WowBot.Core.Logger.Info($"Dump 0x{addr:X8}: {hex}");
+                        return $"0x{addr:X8}: {hex}";
+                    }
                     // Если команда содержит WB_R= — вернуть результат
                     if (cmd.Contains("WB_R="))
                         return _endSceneHook.ExecuteLuaWithResult(cmd);
@@ -787,6 +808,27 @@ public partial class MainWindow : Window
         {
             // ?выражение → ExecuteLuaWithResult (тест GetLocalizedText)
             // !0xАДРЕС → прочитать 4 байта из памяти WoW
+            // !terrain → тест ground AoE: каст Гроза + terrain click на таргет
+            WowBot.Core.Logger.Info($"LuaConsole: [{lua}] len={lua.Length} hook={_endSceneHook != null} om={_objectManager != null}");
+            if (lua == "!terrain" && _endSceneHook != null && _objectManager != null)
+            {
+                try
+                {
+                    var target = _objectManager.GetTarget();
+                    if (target == null) { TxtLuaStatus.Text = "Нет таргета!"; return; }
+                    float tx = target.X, ty = target.Y, tz = target.Z;
+                    TxtLuaStatus.Text = $"Terrain click → ({tx:F1}, {ty:F1}, {tz:F1})";
+                    // 1. Каст Грозу
+                    _endSceneHook.ExecuteLua("CastSpellByName('Гроза')", 300);
+                    System.Threading.Thread.Sleep(100); // ждём targeting mode
+                    // 2. Кликаем по земле
+                    bool ok = _endSceneHook.CastTerrainClick(tx, ty, tz);
+                    TxtLuaStatus.Text += ok ? " OK!" : " FAIL";
+                    WowBot.Core.Logger.Info($"TerrainClick test: ({tx:F1},{ty:F1},{tz:F1}) ok={ok}");
+                }
+                catch (Exception ex) { TxtLuaStatus.Text = $"Terrain error: {ex.Message}"; }
+                return;
+            }
             // !scan → найти все функции (пролог 55 8B EC) в диапазоне lua функций
             if (lua == "!scan" && _memory != null)
             {
@@ -998,6 +1040,7 @@ public partial class MainWindow : Window
                 _botEngine.AutoSelectTarget = _overlay.AutoSelectTarget;
                 _botEngine.MaxTargetRange = _overlay.MaxTargetRange;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
+                _botEngine.AoeMinEnemies = _overlay.AoeMinEnemies;
                 _botEngine.UseMultiDot = _overlay.UseMultiDot;
                 _botEngine.MaxDotTargets = _overlay.MaxDotTargets;
                 _botEngine.UseMindSear = _overlay.UseMindSear;
