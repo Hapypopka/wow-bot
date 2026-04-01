@@ -15,6 +15,7 @@ public class EndSceneHook : IDisposable
     private uint _varNameAddr;         // имя переменной для GetLocalizedText ("WB_R\0")
     private uint _returnPtrAddr;       // сюда запишем указатель на результат
     private uint _terrainClickAddr;    // структура TerrainClick (24 байт: GUID8 + XYZ12 + btn4)
+    private uint _ctmCallAddr;          // структура CTM call (20 байт: clickType4 + GUID8 + XYZ12 + precision4)
     private uint _endSceneAddr;
     private byte[] _originalBytes = Array.Empty<byte>();
     private int _stolenByteCount;
@@ -23,7 +24,7 @@ public class EndSceneHook : IDisposable
 
     private const int CodecaveSize = 512;  // увеличил под два пути
     private const int LuaBufferSize = 16384; // 16KB — per-class скрипты ~5KB
-    private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 160; // +32 для TerrainClick struct
+    private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 192; // +32 TerrainClick + 28 CTM call
 
     public bool IsHooked => _isHooked;
 
@@ -214,6 +215,7 @@ public class EndSceneHook : IDisposable
         _returnPtrAddr = _varNameAddr + 8;       // 4 bytes for result pointer
 
         _terrainClickAddr = _returnPtrAddr + 4;     // 24 байт: GUID(8) + X(4) + Y(4) + Z(4) + btn(4)
+        _ctmCallAddr = _terrainClickAddr + 24;       // 28 байт: clickType(4) + GUID(8) + X(4) + Y(4) + Z(4) + precision(4)
 
         _memory.WriteString(_botStringAddr, "bot");
         _memory.WriteString(_varNameAddr, "WB_R");
@@ -263,6 +265,11 @@ public class EndSceneHook : IDisposable
         // --- Проверка flag == 5 (terrain click — ground AoE) ---
         asm.Add(0x83); asm.Add(0xF8); asm.Add(0x05); // cmp eax, 5
         int jeTerrainPos = asm.Count;
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
+
+        // --- Проверка flag == 6 (CTM call — CGPlayer_C__ClickToMove) ---
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x06); // cmp eax, 6
+        int jeCtmCallPos = asm.Count;
         asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
 
         // --- Ничего не делаем → skip (rel32) ---
@@ -375,6 +382,36 @@ public class EndSceneHook : IDisposable
 
         EmitSetFlag(asm, 2);
 
+        // jmp to skip
+        int jmpSkip5Pos = asm.Count;
+        asm.Add(0xE9); asm.AddRange(new byte[4]);
+
+        // === flag==6: CGPlayer_C__ClickToMove(this, clickType, guidPtr, posPtr, precision) ===
+        int ctmCallLabel = asm.Count;
+        { int off = ctmCallLabel - jeCtmCallPos - 6;
+          asm[jeCtmCallPos+2]=(byte)(off&0xFF); asm[jeCtmCallPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeCtmCallPos+4]=(byte)((off>>16)&0xFF); asm[jeCtmCallPos+5]=(byte)((off>>24)&0xFF); }
+
+        // Получаем playerBase: [ClientConnection] → [+ObjMgrOffset] → [+LocalPlayerOffset]
+        // Проще: читаем из ObjectManager — playerBase уже известен C#-стороне, запишем в struct
+        // _ctmCallAddr layout: clickType(4) + GUID(8) + X(4) + Y(4) + Z(4) + precision(4) + playerBase(4)
+        // precision float через FPU
+        // push precision (float) — загружаем из struct+24
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(_ctmCallAddr + 24)); // push [precision]
+        // push posPtr (указатель на X,Y,Z в struct+12)
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(_ctmCallAddr + 12)); // push posAddr
+        // push guidPtr (указатель на GUID в struct+4)
+        asm.Add(0x68); asm.AddRange(BitConverter.GetBytes(_ctmCallAddr + 4)); // push guidAddr
+        // push clickType
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(_ctmCallAddr)); // push [clickType]
+        // mov ecx, [playerBase] — из struct+28
+        asm.Add(0x8B); asm.Add(0x0D); asm.AddRange(BitConverter.GetBytes(_ctmCallAddr + 28)); // mov ecx, [playerBase]
+        // call CGPlayer_C__ClickToMove (0x00727400)
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes((uint)0x00727400));
+        asm.Add(0xFF); asm.Add(0xD0); // call eax
+
+        EmitSetFlag(asm, 2);
+
         // === skip label — patch jmp rel32 ===
         int skipLabel = asm.Count;
         { // jmpSkipPos (E9 rel32)
@@ -404,6 +441,13 @@ public class EndSceneHook : IDisposable
             asm[jmpSkip4Pos + 2] = (byte)((off >> 8) & 0xFF);
             asm[jmpSkip4Pos + 3] = (byte)((off >> 16) & 0xFF);
             asm[jmpSkip4Pos + 4] = (byte)((off >> 24) & 0xFF);
+        }
+        { // jmpSkip5Pos (E9 rel32) — ctm call
+            int off = skipLabel - jmpSkip5Pos - 5;
+            asm[jmpSkip5Pos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkip5Pos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkip5Pos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkip5Pos + 4] = (byte)((off >> 24) & 0xFF);
         }
 
         // popfd / popad
@@ -474,6 +518,26 @@ public class EndSceneHook : IDisposable
         _memory.WriteUInt32(_terrainClickAddr + 20, 1); // Left click
         // Триггерим flag=5
         _memory.WriteUInt32(_flagAddr, 5);
+        return WaitForCompletion(timeoutMs);
+    }
+
+    /// <summary>
+    /// Вызывает настоящую CGPlayer_C__ClickToMove через EndScene (flag=6).
+    /// Корректно инициализирует CTM-систему, поворачивает модель, работает с холодного старта.
+    /// </summary>
+    public bool CallClickToMove(float x, float y, float z, uint playerBase, int clickType = 4, float precision = 0.5f, int timeoutMs = 500)
+    {
+        if (!_isHooked) return false;
+        // struct layout: clickType(4) + GUID(8) + X(4) + Y(4) + Z(4) + precision(4) + playerBase(4)
+        _memory.WriteInt32(_ctmCallAddr, clickType);
+        _memory.WriteUInt32(_ctmCallAddr + 4, 0);   // GUID low
+        _memory.WriteUInt32(_ctmCallAddr + 8, 0);   // GUID high
+        _memory.WriteFloat(_ctmCallAddr + 12, x);
+        _memory.WriteFloat(_ctmCallAddr + 16, y);
+        _memory.WriteFloat(_ctmCallAddr + 20, z);
+        _memory.WriteFloat(_ctmCallAddr + 24, precision);
+        _memory.WriteUInt32(_ctmCallAddr + 28, playerBase);
+        _memory.WriteUInt32(_flagAddr, 6);
         return WaitForCompletion(timeoutMs);
     }
 

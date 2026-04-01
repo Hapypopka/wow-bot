@@ -491,6 +491,22 @@ public partial class MainWindow : Window
             // Инициализируем BotEngine
             WowBot.Core.Logger.Info("Creating BotEngine...");
             var ctm = new ClickToMove(_memory);
+            // Прогрев CTM — PostMessage правый клик под ноги (инициализирует movement system)
+            try
+            {
+                var hwnd = wow.MainWindowHandle;
+                // Кликаем прямо под ноги персонажа (центр-низ экрана)
+                int centerX = 400, centerY = 500;
+                int lParam = centerY << 16 | centerX;
+                WowBot.Core.Memory.WinApi.PostMessage(hwnd, 0x0204, 0, lParam); // WM_RBUTTONDOWN
+                System.Threading.Thread.Sleep(30);
+                WowBot.Core.Memory.WinApi.PostMessage(hwnd, 0x0205, 0, lParam); // WM_RBUTTONUP
+                // Сразу стопаем CTM чтобы не убежал
+                System.Threading.Thread.Sleep(50);
+                ctm.Stop();
+                WowBot.Core.Logger.Info("CTM warmup: PostMessage RightClick + Stop");
+            }
+            catch (Exception ex) { WowBot.Core.Logger.Error("CTM warmup PostMessage failed", ex); }
             var navigation = new Navigation(_memory, _endSceneHook);
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
@@ -620,6 +636,79 @@ public partial class MainWindow : Window
                         WowBot.Core.Logger.Info($"TerrainClick: ({tx:F1},{ty:F1},{tz:F1}) ok={ok}");
                         return ok ? $"Terrain → ({tx:F1},{ty:F1},{tz:F1}) OK" : "Terrain FAIL";
                     }
+                    // !move → полный дамп movement state (для диагностики follow)
+                    if (cmd == "!move" && _memory != null && _objectManager != null)
+                    {
+                        var lp = _objectManager.LocalPlayer;
+                        if (lp == null) return "No player";
+                        uint pb = lp.BaseAddress;
+                        var sb = new System.Text.StringBuilder();
+                        sb.AppendLine($"=== MOVEMENT DUMP ===");
+                        sb.AppendLine($"PlayerBase=0x{pb:X8}");
+
+                        // Movement struct pointer
+                        uint movPtr = _memory.ReadUInt32(pb + 0xD8);
+                        sb.AppendLine($"MovementPtr [+D8]=0x{movPtr:X8}");
+                        if (movPtr != 0 && movPtr < 0x7FFFFFFF)
+                        {
+                            byte[] movData = _memory.ReadBytes(movPtr, 256);
+                            sb.AppendLine($"Mov 00-3F: {string.Join(" ", movData.Take(64).Select(x => $"{x:X2}"))}");
+                            sb.AppendLine($"Mov 40-7F: {string.Join(" ", movData.Skip(64).Take(64).Select(x => $"{x:X2}"))}");
+                            sb.AppendLine($"Mov 80-BF: {string.Join(" ", movData.Skip(128).Take(64).Select(x => $"{x:X2}"))}");
+                            sb.AppendLine($"Mov C0-FF: {string.Join(" ", movData.Skip(192).Take(64).Select(x => $"{x:X2}"))}");
+                        }
+
+                        // Player facing
+                        float facing = _memory.ReadFloat(pb + 0x7A8);
+                        sb.AppendLine($"Facing [+7A8]={facing:F4}");
+
+                        // CTM activate
+                        uint ctmActPtr = _memory.ReadUInt32(0xBD08F4);
+                        sb.AppendLine($"CTM_ActivatePtr=0x{ctmActPtr:X8}");
+                        if (ctmActPtr != 0 && ctmActPtr < 0x7FFFFFFF)
+                        {
+                            int ctmEnabled = _memory.ReadInt32(ctmActPtr + 0x30);
+                            sb.AppendLine($"CTM_Enabled [+30]={ctmEnabled}");
+                            // Дамп вокруг
+                            byte[] ctmAct = _memory.ReadBytes(ctmActPtr, 64);
+                            sb.AppendLine($"CTM_Act 0-3F: {string.Join(" ", ctmAct.Select(x => $"{x:X2}"))}");
+                        }
+
+                        // CTM struct
+                        uint ctmB = 0x00CA11D8;
+                        sb.AppendLine($"CTM action={_memory.ReadInt32(ctmB+0x1C)}");
+                        sb.AppendLine($"CTM X={_memory.ReadFloat(ctmB+0x8C):F2} Y={_memory.ReadFloat(ctmB+0x90):F2} Z={_memory.ReadFloat(ctmB+0x94):F2}");
+
+                        // Unit flags
+                        sb.AppendLine($"Player pos=({lp.X:F1},{lp.Y:F1},{lp.Z:F1})");
+
+                        WowBot.Core.Logger.Info(sb.ToString());
+                        return sb.ToString();
+                    }
+                    // !ctm → дамп CTM структуры
+                    if (cmd == "!ctm" && _memory != null)
+                    {
+                        uint b = 0x00CA11D8;
+                        var sb = new System.Text.StringBuilder();
+                        sb.AppendLine($"CTM Base=0x{b:X8}");
+                        sb.AppendLine($"+00 unk:  {_memory.ReadInt32(b):X8}");
+                        sb.AppendLine($"+04 time: {_memory.ReadInt32(b+4):X8}");
+                        sb.AppendLine($"+08 GUID: {_memory.ReadUInt32(b+8):X8} {_memory.ReadUInt32(b+12):X8}");
+                        sb.AppendLine($"+0C prec: {_memory.ReadFloat(b+0x0C):F2}");
+                        sb.AppendLine($"+10 unk1: {_memory.ReadFloat(b+0x10):F2}");
+                        sb.AppendLine($"+14 unk2: {_memory.ReadFloat(b+0x14):F2}");
+                        sb.AppendLine($"+18 face: {_memory.ReadFloat(b+0x18):F4}");
+                        sb.AppendLine($"+1C act:  {_memory.ReadInt32(b+0x1C)} (4=move,5=interact,D=stop)");
+                        sb.AppendLine($"+8C X:    {_memory.ReadFloat(b+0x8C):F2}");
+                        sb.AppendLine($"+90 Y:    {_memory.ReadFloat(b+0x90):F2}");
+                        sb.AppendLine($"+94 Z:    {_memory.ReadFloat(b+0x94):F2}");
+                        // Дамп 0x00-0x20 raw
+                        byte[] raw = _memory.ReadBytes(b, 0xA0);
+                        sb.AppendLine($"RAW 0-1F: {string.Join(" ", raw.Take(32).Select(x => $"{x:X2}"))}");
+                        sb.AppendLine($"RAW 80-9F: {string.Join(" ", raw.Skip(0x80).Take(32).Select(x => $"{x:X2}"))}");
+                        WowBot.Core.Logger.Info(sb.ToString());
+                        return sb.ToString();
+                    }
                     // !dump 0xADDR → дамп памяти
                     if (cmd.StartsWith("!dump ") && _memory != null)
                     {
@@ -684,8 +773,19 @@ public partial class MainWindow : Window
             _botEngine.MaxTargetRange = savedRange;
             // Экспортировать встроенные скрипты в scripts/ (если ещё нет)
             WowBot.Core.Game.Rotations.AllRotations.ExportScripts();
+            // Проверяем use-эффект перчаток (слот 10)
+            bool hasGlovesUse = false;
+            try
+            {
+                string glovesLua = "GameTooltip:SetOwner(UIParent,'ANCHOR_NONE') GameTooltip:SetInventoryItem('player',10) local h=false for i=1,GameTooltip:NumLines() do local t=_G['GameTooltipTextLeft'..i] if t and t:GetText() and t:GetText():find('Использование:') then h=true break end end GameTooltip:Hide() WB_R=h and '1' or '0'";
+                string? glovesResult = _endSceneHook.ExecuteLuaWithResult(glovesLua);
+                hasGlovesUse = glovesResult == "1";
+                WowBot.Core.Logger.Info($"GlovesCheck: use={hasGlovesUse} result=[{glovesResult}]");
+            }
+            catch (Exception ex) { WowBot.Core.Logger.Error("GlovesCheck failed", ex); }
+
             _overlay.UpdateStatus(specName);
-            _overlay.SetPlayerClass(playerClass, specName, charName);
+            _overlay.SetPlayerClass(playerClass, specName, charName, hasGlovesUse);
             WowBot.Core.Logger.Info("Showing overlay...");
             _overlay.Show();
             WowBot.Core.Logger.Info("Overlay shown OK");

@@ -11,7 +11,6 @@ public class ClickToMove
     private readonly MemoryReader _memory;
 
     // Стандартные адреса для 3.3.5a build 12340
-    // Могут отличаться на WoWCircle — нужно проверить
     private const uint CTM_Base = 0x00CA11D8;
     private const uint CTM_Action = CTM_Base + 0x1C;
     private const uint CTM_X = CTM_Base + 0x8C;
@@ -28,6 +27,29 @@ public class ClickToMove
     public ClickToMove(MemoryReader memory)
     {
         _memory = memory;
+        // Активация CTM — на холодном клиенте [0xBD08F4]+0x30 = 0, CTM игнорируется
+        try
+        {
+            uint ptr = _memory.ReadUInt32(0x00BD08F4);
+            if (ptr != 0 && ptr < 0x7FFFFFFF)
+            {
+                _memory.WriteInt32(ptr + 0x30, 1);
+                Logger.Info($"CTM activated: 0x{ptr + 0x30:X8} = 1");
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Прогрев CTM — записываем action=3 (stop) чтобы инициализировать rotation system</summary>
+    public void WarmupMovement(uint playerBase)
+    {
+        try
+        {
+            // action=3 — тот же stop что делает /follow при завершении
+            _memory.WriteInt32(CTM_Action, 3);
+            Logger.Info("CTM warmup: action=3 (follow-stop)");
+        }
+        catch (Exception ex) { Logger.Error("CTM warmup failed", ex); }
     }
 
     /// <summary>

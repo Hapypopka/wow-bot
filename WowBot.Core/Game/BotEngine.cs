@@ -518,7 +518,8 @@ public class BotEngine : IDisposable
             // Считаем мобов рядом для AoE (Залп охотника и т.п.)
             int nearbyEnemies = CountNearbyEnemies(player);
             int combatEnemies = CountNearbyCombatEnemies(player);
-            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} ";
+            string glovesLua = IsSpellEnabled("Gloves") ? "do local s,d=GetInventoryItemCooldown('player',10) if s==0 and UnitAffectingCombat('player') then UseInventoryItem(10) end end " : "";
+            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} " + glovesLua;
 
             // === HIVEMIND: слушаем addon messages (и мастер, и слейв) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave || Hivemind.CurrentRole == Hivemind.Role.Master)
@@ -785,7 +786,7 @@ public class BotEngine : IDisposable
                     string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
                     if (!string.IsNullOrEmpty(buffScript))
                     {
-                        if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal}");
+                        if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal} aura={SelectedAura} bless={SelectedBlessing} script={buffScript.Substring(0, Math.Min(buffScript.Length, 500))}");
                         _hook.ExecuteLua(buffScript, 500);
                         if (fullBuffCheck) _blessingCooldown = 40;
                         // Хилер-слейв: не прерываем — должен хилить после баффов
@@ -1073,6 +1074,7 @@ WB_AoE()
     {
         var sb = new System.Text.StringBuilder();
         sb.Append("local function WB_CB() ");
+        sb.Append("if IsMounted() then return end ");
         sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
 
         bool hasAnything = false;
@@ -1199,6 +1201,7 @@ WB_AoE()
         // Всё в одну строку — многострочный Lua через AppendLine триггерит taint WeakAuras
         var sb = new System.Text.StringBuilder();
         sb.Append("local function WB_Buff() ");
+        sb.Append("if IsMounted() then return end ");
         sb.Append("if UnitCastingInfo('player') or UnitChannelInfo('player') then return end ");
         sb.Append("if UnitIsDeadOrGhost('player') then return end ");
         sb.Append("local function HasB(unit,name) for i=1,40 do local n=UnitBuff(unit,i) if not n then return false end if n==name then return true end end return false end ");

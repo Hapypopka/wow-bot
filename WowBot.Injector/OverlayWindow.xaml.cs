@@ -292,7 +292,6 @@ public partial class OverlayWindow : Window
         // ==================== WARRIOR ====================
         ["Arms Warrior"] = new[]
         {
-            ("Reck", "recklessness.jpg", "Безрассудство", true),
             ("MS", "mortal_strike.jpg", "Смертельный удар", true),
             ("Rend", "rend.jpg", "Кровопускание", true),
             ("OP", "overpower.jpg", "Превосходство", true),
@@ -302,7 +301,6 @@ public partial class OverlayWindow : Window
         },
         ["Fury Warrior"] = new[]
         {
-            ("Reck", "recklessness.jpg", "Безрассудство", true),
             ("BT", "bloodthirst.jpg", "Кровожадность", true),
             ("WW", "whirlwind.jpg", "Вихрь", true),
             ("Execute", "execute.jpg", "Казнь", true),
@@ -324,7 +322,6 @@ public partial class OverlayWindow : Window
         // ==================== PALADIN ====================
         ["Ret Paladin"] = new[]
         {
-            ("AW", "avenging_wrath.jpg", "Гнев карателя", true),
             ("Judge", "judgement.jpg", "Правосудие", true),
             ("CS", "crusader_strike.jpg", "Удар воина Света", true),
             ("DS", "divine_storm.jpg", "Божественная буря", true),
@@ -336,7 +333,6 @@ public partial class OverlayWindow : Window
         ["Prot Paladin"] = new[]
         {
             ("Plea", "divine_plea.jpg", "Святая клятва", true),
-            ("AW", "avenging_wrath.jpg", "Гнев карателя", true),
             ("HoR", "hammer_righteous.jpg", "Молот праведника", true),
             ("ShoR", "shield_righteousness.jpg", "Щит праведности", true),
             ("HolyShield", "holy_shield.jpg", "Щит небес", true),
@@ -364,8 +360,6 @@ public partial class OverlayWindow : Window
             ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
-            ("BW", "beast_within.jpg", "Повелитель зверей", true),
-            ("Bestial", "bestial_wrath.jpg", "Звериный гнев", true),
             ("Kill2", "kill_command.jpg", "Команда Взять", true),
             ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
             ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
@@ -379,9 +373,7 @@ public partial class OverlayWindow : Window
             ("Dragonhawk", "aimed_shot.jpg", "Дух дракондора (в бою)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
-            ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", true),
             ("Kill2", "kill_command.jpg", "Команда Взять", true),
-            ("CotW", "call_wild.jpg", "Зов дикой природы", true),
             ("Chimera", "chimera_shot.jpg", "Выстрел химеры", true),
             ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
             ("Volley", "aimed_shot.jpg", "Залп (AoE, если >1 цели)", true),
@@ -407,14 +399,12 @@ public partial class OverlayWindow : Window
         // ==================== ROGUE ====================
         ["Assassination Rogue"] = new[]
         {
-            ("HFB", "hunger_blood.jpg", "Жажда убийства", true),
             ("Envenom", "envenom.jpg", "Расправа", true),
             ("Rupture", "rupture.jpg", "Рваная рана", true),
             ("Mutilate", "mutilate.jpg", "Увечье", true),
         },
         ["Combat Rogue"] = new[]
         {
-            ("KS", "killing_spree.jpg", "Череда убийств", true),
             ("SnD", "slice_dice.jpg", "Потрошение", true),
             ("Rupture", "rupture.jpg", "Рваная рана", true),
             ("Evis", "eviscerate.jpg", "Потрошение", true),
@@ -467,14 +457,12 @@ public partial class OverlayWindow : Window
             ("HS", "heart_strike.jpg", "Удар в сердце", true),
             ("BS", "blood_strike.jpg", "Кровавый удар", true),
             ("RS", "rune_strike.jpg", "Рунический удар", true),
-            ("VB", "vampiric_blood.jpg", "Кровь вампира", true),
         },
         ["Frost DK"] = new[]
         {
             ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
             ("PS", "plague_strike.jpg", "Удар чумы", true),
             ("Pest", "pestilence.jpg", "Мор (обновление)", true),
-            ("UA", "unbreakable_armor.jpg", "Несокрушимая броня", true),
             ("HB", "howling_blast.jpg", "Воющий ветер (Rime прок)", true),
             ("Oblit", "obliterate.jpg", "Уничтожение", true),
             ("BS", "blood_strike.jpg", "Кровавый удар", true),
@@ -488,7 +476,6 @@ public partial class OverlayWindow : Window
             ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
             ("PS", "plague_strike.jpg", "Удар чумы", true),
             ("Pest", "pestilence.jpg", "Мор", true),
-            ("Gargoyle", "gargoyle.jpg", "Призыв горгульи", true),
             ("UB", "unholy_blight.jpg", "Нечестивая порча", true),
             ("DnD", "death_decay.jpg", "Смерть и разложение", true),
             ("SS", "scourge_strike.jpg", "Удар Плети", true),
@@ -510,7 +497,6 @@ public partial class OverlayWindow : Window
             ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
             ("Searing", "flametongue_totem.jpg", "Тотем опаляющего пламени (авто)", true),
             ("LS", "lightning_shield.jpg", "Щит молний", true),
-            ("Wolves", "feral_spirit.jpg", "Дух дикого волка", true),
             ("SR", "shamanistic_rage.jpg", "Ярость шамана", true),
             ("SS", "stormstrike.jpg", "Удар бури", true),
             ("FS", "flame_shock.jpg", "Огненный шок", true),
@@ -533,8 +519,6 @@ public partial class OverlayWindow : Window
         {
             ("Rebirth", "rebirth.jpg", "Возрождение", true),
             ("Moonkin", "moonkin.jpg", "Облик лунного совуха", true),
-            ("Starfall", "starfall.jpg", "Звездопад", true),
-            ("Treants", "treants.jpg", "Сила Природы", true),
             ("FF", "faerie_fire.jpg", "Волшебный огонь", true),
             ("IS", "insect_swarm.jpg", "Рой насекомых", true),
             ("MF_d", "moonfire.jpg", "Лунный огонь", true),
@@ -547,8 +531,6 @@ public partial class OverlayWindow : Window
             ("Rebirth", "rebirth.jpg", "Возрождение", true),
             // Кот
             ("Roar", "savage_roar.jpg", "Дикий рев", true),
-            ("TF", "tigers_fury.jpg", "Тигриное неистовство", true),
-            ("Berserk", "berserk.jpg", "Берсерк", true),
             ("FF_cat", "faerie_fire.jpg", "Волшебный огонь (зверь)", true),
             ("Mangle", "mangle_cat.jpg", "Увечье (кошка)", true),
             ("Rake", "faerie_fire.jpg", "Глубокая рана", true),
@@ -577,7 +559,6 @@ public partial class OverlayWindow : Window
         // ==================== MAGE ====================
         ["Arcane Mage"] = new[]
         {
-            ("AP", "arcane_power.jpg", "Мощь тайной магии", true),
             ("Mirror", "mirror_image.jpg", "Зеркальное изображение", true),
             ("Barrage", "arcane_missiles.jpg", "Чародейские стрелы", true),
             ("Evoc", "evocation.jpg", "Прилив сил", true),
@@ -614,7 +595,6 @@ public partial class OverlayWindow : Window
         },
         ["Demonology Lock"] = new[]
         {
-            ("Meta", "meta.jpg", "Метаморфоза", true),
             ("DemonEmpower", "demon_empower.jpg", "Демоническое могущество", true),
             ("ImmoAura", "immo_aura.jpg", "Жертвенный костер", true),
             ("Corruption", "corruption.jpg", "Порча", true),
@@ -636,6 +616,27 @@ public partial class OverlayWindow : Window
             ("LTGlyph", "life_tap.jpg", "Символ Жизнеотвода", false),
         },
         // DRUID toggles в SpecSpells
+    };
+
+    // Бурсты по спекам: отображаются отдельной секцией, по дефолту OFF (юзер включает сам)
+    private static readonly Dictionary<string, (string key, string icon, string tooltip, bool on)[]> SpecBursts = new()
+    {
+        ["Arms Warrior"] = new[] { ("Reck", "recklessness.jpg", "Безрассудство", false) },
+        ["Fury Warrior"] = new[] { ("Reck", "recklessness.jpg", "Безрассудство", false), ("BR", "blood_fury.jpg", "Кровавая ярость", false) },
+        ["Ret Paladin"] = new[] { ("AW", "avenging_wrath.jpg", "Гнев карателя", false) },
+        ["Prot Paladin"] = new[] { ("AW", "avenging_wrath.jpg", "Гнев карателя", false) },
+        ["Feral Druid"] = new[] { ("Berserk", "berserk.jpg", "Берсерк", false), ("TF", "tigers_fury.jpg", "Тигриное неистовство", false) },
+        ["Balance Druid"] = new[] { ("Treants", "treants.jpg", "Сила Природы", false), ("Starfall", "starfall.jpg", "Звездопад", false) },
+        ["Demonology Lock"] = new[] { ("Meta", "meta.jpg", "Метаморфоза", false) },
+        ["BM Hunter"] = new[] { ("BW", "beast_within.jpg", "Повелитель зверей", false), ("Bestial", "bestial_wrath.jpg", "Звериный гнев", false) },
+        ["MM Hunter"] = new[] { ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", false), ("CotW", "call_wild.jpg", "Зов дикой природы", false) },
+        ["Arcane Mage"] = new[] { ("AP", "arcane_power.jpg", "Мощь тайной магии", false) },
+        ["Enhancement Shaman"] = new[] { ("Wolves", "feral_spirit.jpg", "Дух дикого волка", false) },
+        ["Assassination Rogue"] = new[] { ("HFB", "hunger_blood.jpg", "Жажда убийства", false) },
+        ["Combat Rogue"] = new[] { ("KS", "killing_spree.jpg", "Череда убийств", false) },
+        ["Blood DK"] = new[] { ("VB", "vampiric_blood.jpg", "Кровь вампира", false) },
+        ["Frost DK"] = new[] { ("UA", "unbreakable_armor.jpg", "Несокрушимая броня", false) },
+        ["Unholy DK"] = new[] { ("Gargoyle", "gargoyle.jpg", "Призыв горгульи", false) },
     };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
     public bool UseMultiDot => _chkMultiDot?.IsChecked == true;
@@ -889,6 +890,33 @@ public partial class OverlayWindow : Window
                 _spellToggles[key] = AddSpellIcon(wrap, icon, tooltip, wasChecked);
             }
             SubContent.Children.Add(wrap);
+        }
+
+        // Секция бурстов
+        bool hasBursts = SpecBursts.ContainsKey(specKey) || _hasGlovesUse;
+        if (hasBursts)
+        {
+            AddLabel("Бурсты");
+            var burstWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            if (SpecBursts.TryGetValue(specKey, out var bursts))
+            {
+                foreach (var (key, icon, tooltip, defaultOn) in bursts)
+                {
+                    bool wasChecked = _spellToggles.TryGetValue(key, out var old)
+                        ? old.IsChecked == true
+                        : GetSavedBool($"spell_{key}", defaultOn);
+                    _spellToggles[key] = AddSpellIcon(burstWrap, icon, tooltip, wasChecked);
+                }
+            }
+            // Перчатки (use-эффект)
+            if (_hasGlovesUse)
+            {
+                bool glovesOn = _spellToggles.TryGetValue("Gloves", out var gOld)
+                    ? gOld.IsChecked == true
+                    : GetSavedBool("spell_Gloves", false);
+                _spellToggles["Gloves"] = AddSpellIcon(burstWrap, "gloves.jpg", "Перчатки (use)", glovesOn);
+            }
+            SubContent.Children.Add(burstWrap);
         }
 
         if (specKey == "Shadow Priest")
@@ -1678,11 +1706,13 @@ public partial class OverlayWindow : Window
     }
 
     // --- Buff setup ---
-    public void SetPlayerClass(string playerClass, string specName = "", string charName = "")
+    private bool _hasGlovesUse;
+    public void SetPlayerClass(string playerClass, string specName = "", string charName = "", bool hasGlovesUse = false)
     {
         _playerClass = playerClass;
         _playerSpec = specName;
         _charName = charName;
+        _hasGlovesUse = hasGlovesUse;
         // Перегружаем настройки из файла этого персонажа
         LoadSettings();
         _spellToggles.Clear();
@@ -1780,6 +1810,20 @@ public partial class OverlayWindow : Window
                 _spellToggles[key] = toggle;
             }
         }
+
+        // Pre-create burst toggles from SpecBursts
+        if (SpecBursts.TryGetValue(specKey, out var burstSpells))
+        {
+            foreach (var (key, icon, label, defaultOn) in burstSpells)
+            {
+                if (!_spellToggles.ContainsKey(key))
+                    _spellToggles[key] = new ToggleButton { IsChecked = GetSavedBool($"spell_{key}", defaultOn), ToolTip = label, Tag = icon };
+            }
+        }
+
+        // Перчатки (use-эффект) — динамический бурст
+        if (_hasGlovesUse && !_spellToggles.ContainsKey("Gloves"))
+            _spellToggles["Gloves"] = new ToggleButton { IsChecked = GetSavedBool("spell_Gloves", false), ToolTip = "Перчатки (use)" };
 
         // Pre-create AoE spell toggles (не отображаются в ротации, но нужны для SpellFlagsLua)
         if (specKey == "Balance Druid" && !_spellToggles.ContainsKey("Hurricane"))

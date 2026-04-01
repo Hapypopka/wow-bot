@@ -30,6 +30,7 @@ public static class AllRotations
 ";
 
     private const string PreChecksDPS = @"
+    if IsMounted() then return end
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
@@ -40,6 +41,7 @@ public static class AllRotations
 ";
 
     private const string PreChecksHealer = @"
+    if IsMounted() then return end
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
@@ -128,7 +130,7 @@ public static class AllRotations
         -- RET
         if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
-        if WB_S.AW~=false and IsReady('Гнев карателя') then CastSpellByName('Гнев карателя') return end
+        if WB_S.AW~=false then local _,_,_,stk=UnitDebuff('target','Священное возмездие') if (stk or 0)>=3 and IsReady('Гнев карателя') then CastSpellByName('Гнев карателя') return end end
         if WB_S.HoW~=false and THP()<0.2 and IsReady('Молот гнева') then CastSpellByName('Молот гнева') return end
         if WB_S.Judge~=false and IsReady(judgeSpell) then CastSpellByName(judgeSpell) return end
         if WB_S.DS~=false and IsReady('Божественная буря') then CastSpellByName('Божественная буря') return end
