@@ -100,13 +100,13 @@ public class BotEngine : IDisposable
     /// <returns>true если начали AoE каст</returns>
     private bool TryGroundAoE(Entities.WowPlayer player, Entities.WowUnit target)
     {
-        if (!_aoeEnabled) { Logger.Info("GroundAoE: skip — aoe disabled"); return false; }
+        if (!_aoeEnabled) return false;
         if (player.IsCasting) return false;
         // Проверяем channeling — если уже ченнелим (Гроза), не прерываем
         if (player.ChannelingSpellId != 0) return false;
 
         int nearTarget = CountEnemiesNearTarget(target, 10f);
-        if (nearTarget < AoeMinEnemies) { Logger.Info($"GroundAoE: skip — enemies={nearTarget} < min={AoeMinEnemies}"); return false; }
+        if (nearTarget < AoeMinEnemies) return false;
 
         bool hurricaneEnabled = IsSpellEnabled("Hurricane");
         Logger.Info($"GroundAoE: class={PlayerClass} spec={_specName} Hurricane={hurricaneEnabled} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 100))}\"");
@@ -153,6 +153,7 @@ public class BotEngine : IDisposable
     public string SelectedStance { get; set; } = "";
     public string SelectedPresence { get; set; } = "";
     public string SelectedFeralForm { get; set; } = "";
+    public string SelectedPet { get; set; } = "";
     public bool AoeSealSwap { get; set; } = false;
     public bool AutoPveEnabled { get; set; } = false;
     public BossTactics BossTactics { get; private set; }
@@ -519,7 +520,7 @@ public class BotEngine : IDisposable
             int nearbyEnemies = CountNearbyEnemies(player);
             int combatEnemies = CountNearbyCombatEnemies(player);
             string glovesLua = IsSpellEnabled("Gloves") ? "do local s,d=GetInventoryItemCooldown('player',10) if s==0 and UnitAffectingCombat('player') then UseInventoryItem(10) end end " : "";
-            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} " + glovesLua;
+            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_AEMIN={AoeMinEnemies} " + glovesLua;
 
             // === HIVEMIND: слушаем addon messages (и мастер, и слейв) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave || Hivemind.CurrentRole == Hivemind.Role.Master)
@@ -1413,6 +1414,29 @@ WB_AoE()
             sb.Append("if not hasEnch then ");
             sb.Append("if GetItemCount('Могучий камень чар')>0 then UseItemByName('Могучий камень чар') PickupInventoryItem(16) return end ");
             sb.Append("CastSpellByName('Создание камня чар') return end ");
+        }
+
+        // Призыв пета варлока (радио-выбор, только вне боя, смена пета → dismiss + призыв)
+        if (PlayerClass == "WARLOCK" && !string.IsNullOrEmpty(SelectedPet))
+        {
+            int petSpellId = SelectedPet switch
+            {
+                "Felguard" => 30146,
+                "Felhunter" => 691,
+                "Imp" => 688,
+                "Voidwalker" => 697,
+                "Succubus" => 712,
+                _ => 0
+            };
+            if (petSpellId != 0)
+            {
+                sb.Append($"if not UnitAffectingCombat('player') then ");
+                sb.Append($"if not UnitExists('pet') then WB_PET=nil local n=GetSpellInfo({petSpellId}) if n then CastSpellByName(n) end return ");
+                sb.Append($"end ");
+                sb.Append($"if UnitExists('pet') and not WB_PET then WB_PET={petSpellId} end ");
+                sb.Append($"if UnitExists('pet') and WB_PET and WB_PET~={petSpellId} then PetDismiss() WB_PET=nil return end ");
+                sb.Append($"end ");
+            }
         }
 
 

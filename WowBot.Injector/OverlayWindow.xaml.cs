@@ -88,6 +88,18 @@ public partial class OverlayWindow : Window
         ("CoE", "curse_elements.jpg", "Проклятие стихий"),
     };
 
+    // Pet selection (radio-style) — WARLOCK only
+    private string _selectedPet = "";
+    private readonly Dictionary<string, ToggleButton> _petToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] PetOptions =
+    {
+        ("Felguard", "demon_empower.jpg", "Страж Скверны"),
+        ("Felhunter", "felhunter.jpg", "Охотник Скверны"),
+        ("Imp", "imp.jpg", "Бес"),
+        ("Voidwalker", "voidwalker.jpg", "Демон Бездны"),
+        ("Succubus", "succubus.jpg", "Суккуб"),
+    };
+
     // Totem selection (radio-style, 4 elements) — SHAMAN only
     private string _selectedTotemEarth = "";
     private string _selectedTotemFire = "";
@@ -275,6 +287,7 @@ public partial class OverlayWindow : Window
     public string SelectedStance => _selectedStance;
     public string SelectedPresence => _selectedPresence;
     public string SelectedFeralForm => _selectedFeralForm;
+    public string SelectedPet => _selectedPet;
     public string SelectedTotemEarth => _selectedTotemEarth;
     public string SelectedTotemFire => _selectedTotemFire;
     public string SelectedTotemWater => _selectedTotemWater;
@@ -1034,9 +1047,12 @@ public partial class OverlayWindow : Window
             _aoeSocToggle = btn;
             SubContent.Children.Add(wrap);
         }
-        else if (specKey == "Demonology Lock")
+        else if (specKey == "Demonology Lock" || specKey == "Affliction Lock" || specKey == "Destruction Lock")
         {
-            AddLabel("AoE в разработке");
+            AddLabel("AoE");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            _spellToggles["SeedOfC"] = AddSpellIcon(wrap, "corruption.jpg", "Семя порчи (по порогу врагов)", _spellToggles.TryGetValue("SeedOfC", out var scBtn) ? scBtn.IsChecked == true : GetSavedBool("spell_SeedOfC", true));
+            SubContent.Children.Add(wrap);
         }
         else
         {
@@ -1090,6 +1106,34 @@ public partial class OverlayWindow : Window
             }
         }
         SubContent.Children.Add(wrap);
+
+        // Выбор пета для варлока (радио)
+        if (_playerClass == "WARLOCK")
+        {
+            AddLabel("Выбор пета");
+            var petWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            _petToggles.Clear();
+            foreach (var (key, icon, tooltip) in PetOptions)
+            {
+                bool isSelected = _selectedPet == key;
+                var toggle = AddSpellIcon(petWrap, icon, tooltip, isSelected);
+                _petToggles[key] = toggle;
+
+                var pKey = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedPet = pKey;
+                    foreach (var (k, btn) in _petToggles)
+                        if (k != pKey) btn.IsChecked = false;
+                    SaveSettings();
+                };
+                toggle.Unchecked += (s, e) =>
+                {
+                    if (_selectedPet == pKey) _selectedPet = "";
+                };
+            }
+            SubContent.Children.Add(petWrap);
+        }
 
         // Выбор ауры для паладина (радио)
         if (_playerClass == "PALADIN")
@@ -1776,6 +1820,7 @@ public partial class OverlayWindow : Window
             _selectedPresence = "";
         }
         _selectedCurse = playerClass == "WARLOCK" ? GetSavedString("curse", "CoA") : "";
+        _selectedPet = playerClass == "WARLOCK" ? GetSavedString("pet", "") : "";
 
         // Тотемы шамана: дефолты по спеку
         if (playerClass == "SHAMAN")
@@ -1828,6 +1873,8 @@ public partial class OverlayWindow : Window
         // Pre-create AoE spell toggles (не отображаются в ротации, но нужны для SpellFlagsLua)
         if (specKey == "Balance Druid" && !_spellToggles.ContainsKey("Hurricane"))
             _spellToggles["Hurricane"] = new ToggleButton { IsChecked = GetSavedBool("spell_Hurricane", true) };
+        if (playerClass == "WARLOCK" && !_spellToggles.ContainsKey("SeedOfC"))
+            _spellToggles["SeedOfC"] = new ToggleButton { IsChecked = GetSavedBool("spell_SeedOfC", true) };
 
         // Pre-create buff toggles from ClassBuffs
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
@@ -1934,6 +1981,7 @@ public partial class OverlayWindow : Window
 
             // Curse
             data["curse"] = _selectedCurse;
+            data["pet"] = _selectedPet;
             data["seal"] = _selectedSeal;
             data["blessing"] = _selectedBlessing;
             data["judgement"] = _selectedJudgement;

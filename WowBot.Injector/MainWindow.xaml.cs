@@ -501,8 +501,10 @@ public partial class MainWindow : Window
                 WowBot.Core.Memory.WinApi.PostMessage(hwnd, 0x0204, 0, lParam); // WM_RBUTTONDOWN
                 System.Threading.Thread.Sleep(30);
                 WowBot.Core.Memory.WinApi.PostMessage(hwnd, 0x0205, 0, lParam); // WM_RBUTTONUP
-                // Сразу стопаем CTM чтобы не убежал
-                System.Threading.Thread.Sleep(50);
+                // Стопаем CTM несколько раз чтобы точно остановить
+                System.Threading.Thread.Sleep(100);
+                ctm.Stop();
+                System.Threading.Thread.Sleep(100);
                 ctm.Stop();
                 WowBot.Core.Logger.Info("CTM warmup: PostMessage RightClick + Stop");
             }
@@ -515,6 +517,7 @@ public partial class MainWindow : Window
             _botEngine.PlayerClass = playerClass;
             _botEngine.SpecName = specName;
             _botEngine.LuaReader = _luaReader;
+            AllRotations.ExportScripts(); // экспорт ПЕРЕД загрузкой — гарантирует актуальные скрипты
             var fullScript = AllRotations.GetFullScript(playerClass);
             var instantScript = AllRotations.GetInstantScript(playerClass);
             WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
@@ -771,8 +774,7 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.Info($"Applying sliders: followDist={savedDist} maxRange={savedRange}");
             _botEngine.FollowDistance = savedDist;
             _botEngine.MaxTargetRange = savedRange;
-            // Экспортировать встроенные скрипты в scripts/ (если ещё нет)
-            WowBot.Core.Game.Rotations.AllRotations.ExportScripts();
+            // ExportScripts уже вызван выше при загрузке ротации
             // Проверяем use-эффект перчаток (слот 10)
             bool hasGlovesUse = false;
             try
@@ -1158,6 +1160,7 @@ public partial class MainWindow : Window
                 _botEngine.SelectedStance = _overlay.SelectedStance;
                 _botEngine.SelectedPresence = _overlay.SelectedPresence;
                 _botEngine.SelectedFeralForm = _overlay.SelectedFeralForm;
+                _botEngine.SelectedPet = _overlay.SelectedPet;
                 _botEngine.SelectedTotemEarth = _overlay.SelectedTotemEarth;
                 _botEngine.SelectedTotemFire = _overlay.SelectedTotemFire;
                 _botEngine.SelectedTotemWater = _overlay.SelectedTotemWater;
