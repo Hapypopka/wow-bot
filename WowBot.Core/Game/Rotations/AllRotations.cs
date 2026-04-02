@@ -36,11 +36,100 @@ public static class AllRotations
     local function NR(u,id,cid) local sn=SN(id) if not sn then return true end for i=1,40 do local n,_,_,_,_,_,exp=UnitDebuff(u,i) if not n then return true end if n==sn then local left=exp-GetTime() local _,_,_,ct=GetSpellInfo(cid or id) return left<=(ct or 1500)/1000 end end return true end
 ";
 
+    // Break-CC: автоматическое снятие контроля (стан/страх/корень)
+    // Spell IDs: BerserkerRage=18499, EveryManForHimself=59752, WillOfForsaken=7744,
+    // EscapeArtist=20589, Lichborne=49039, HandOfFreedom=1044, IceboundFortitude=48792,
+    // Blink=1953, DivineShield=642, CloakOfShadows=31224, Trinket(PvP)=42292
+    private const string BreakCC = @"
+    do
+        -- Проверка CC: не можем действовать? (проверяем через movement flags + конкретные дебаффы)
+        local isCC = false
+        local ccType = ''
+        for i=1,40 do
+            local n,_,_,_,dt,dur,exp,_,_,_,id = UnitDebuff('player',i)
+            if not n then break end
+            -- Известные CC механики по debuffType + имени
+            if dt == 'Magic' or dt == nil then
+                -- Fear/Stun/Root/Incapacitate/Sleep — проверяем через aura
+                -- Простой способ: если debuff и мы не можем двигаться/кастить
+            end
+        end
+        -- Альтернативная проверка: если юнит не может атаковать (HasFullControl в 3.3.5 нет)
+        -- Проверяем: есть ли конкретные известные CC дебаффы
+        local ccSpells = {
+            -- FEAR (страх)
+            [8122]=1,[10888]=1,[10890]=1,[10892]=1,[48125]=1, -- Ментальный крик (прист)
+            [5782]=1,[6213]=1,[6215]=1, -- Страх (варлок)
+            [5484]=1,[17928]=1, -- Вой ужаса (варлок)
+            [6789]=1,[17925]=1,[17926]=1,[27223]=1,[47859]=1,[47860]=1, -- Лик смерти (варлок)
+            [5246]=1, -- Устрашающий крик (воин)
+            -- STUN (оглушение)
+            [853]=1,[5588]=1,[5589]=1,[10308]=1, -- Молот правосудия (пал)
+            [408]=1,[8643]=1, -- Удар по почкам (рога)
+            [1833]=1, -- Подлый трюк (рога)
+            [46968]=1, -- Ударная волна (воин)
+            [12809]=1, -- Сотрясение (воин)
+            [44572]=1, -- Глубокая заморозка (маг)
+            [49203]=1, -- Леденящий холод (ДК)
+            [30283]=1, -- Неистовство Тьмы (варлок)
+            -- ROOT (корни/обездвиживание)
+            [339]=1,[1062]=1,[5195]=1,[5196]=1,[9852]=1,[9853]=1,[26989]=1,[53308]=1, -- Гнев деревьев (друид)
+            [122]=1,[865]=1,[6131]=1,[10230]=1,[27088]=1,[42917]=1, -- Кольцо льда (маг)
+            [45524]=1, -- Оковы льда (ДК)
+            -- POLYMORPH / INCAPACITATE
+            [118]=1,[12824]=1,[12825]=1,[28271]=1,[28272]=1,[61305]=1, -- Превращение (маг)
+            [51514]=1, -- Порча (шаман)
+            [20066]=1, -- Покаяние (пал)
+            [2094]=1, -- Ослепление (рога)
+            [6770]=1, -- Ошеломление (рога)
+            [1776]=1, -- Выбивание (рога)
+            [710]=1, -- Изгнание (варлок)
+            [9484]=1,[9485]=1,[10955]=1, -- Оковы нежити (прист)
+            -- SLEEP
+            [19386]=1,[24132]=1,[24133]=1,[27068]=1,[49011]=1,[49012]=1, -- Укус виверны (хант)
+            -- HORROR
+            [64044]=1, -- Психический ужас (прист)
+            -- BOSS CC (рейдовые)
+            [66012]=1, -- Ледяная хватка Синдрагосы
+            [69057]=1, -- Костяной шип Лорда Ребрада
+            [72293]=1, -- Отметина бессмертного чемпиона (ЛК)
+            [68981]=1, -- Исступленная жатва (ЛК — Ужас)
+            [69200]=1, -- Леденящий захват (ЛК — Вал'кирия)
+            [70337]=1, -- Укус Нерожденного (Синдрагоса)
+            [71289]=1, -- Властная порча (Леди Смертный Шепот)
+        }
+        for i=1,40 do
+            local n,_,_,_,_,_,_,_,_,_,id = UnitDebuff('player',i)
+            if not n then break end
+            if ccSpells[id] then isCC = true break end
+        end
+        if isCC and UnitAffectingCombat('player') then
+            local _,c = UnitClass('player')
+            local _,r = UnitRace('player')
+            -- Расовые антистан
+            if r == 'Human' and IR(59752) then Cast(59752) return end
+            if r == 'Scourge' and IR(7744) then Cast(7744) return end
+            if r == 'Gnome' and IR(20589) then Cast(20589) return end
+            -- Классовые антистан
+            if c == 'WARRIOR' and IR(18499) then Cast(18499) return end
+            if c == 'DEATHKNIGHT' and IR(48792) then Cast(48792) return end
+            if c == 'PALADIN' and IR(1044) then CastSpellByName(SN(1044),'player') return end
+            if c == 'MAGE' and IR(1953) then Cast(1953) return end
+            if c == 'ROGUE' and IR(31224) then Cast(31224) return end
+            if c == 'DRUID' and IR(49039) then Cast(49039) return end
+            -- PvP тринкет (слот 13/14)
+            local s,d = GetInventoryItemCooldown('player',13) if s == 0 then UseInventoryItem(13) return end
+            s,d = GetInventoryItemCooldown('player',14) if s == 0 then UseInventoryItem(14) return end
+        end
+    end
+";
+
     private const string PreChecksDPS = @"
     if IsMounted() then return end
-    if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
+" + BreakCC + @"
+    if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if not UnitAffectingCombat('target') then return end
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
@@ -49,9 +138,10 @@ public static class AllRotations
 
     private const string PreChecksHealer = @"
     if IsMounted() then return end
-    if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
+" + BreakCC + @"
+    if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
 ";
 
     private const string HealerFindTarget = @"
