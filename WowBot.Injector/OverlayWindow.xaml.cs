@@ -1404,10 +1404,27 @@ public partial class OverlayWindow : Window
         _sliderDist.ValueChanged += (s, e) => OnFollowDistanceChanged?.Invoke((float)e.NewValue);
     }
 
+    private CheckBox _chkMoveBehind = null!;
+    public bool MoveBehindEnabled => _chkMoveBehind?.IsChecked == true;
+
     private void BuildTargetSubmenu()
     {
         _chkAutoFace = AddCheckBox("Автоповорот к таргету", _chkAutoFace?.IsChecked ?? GetSavedBool("chk_autoFace", true));
         _chkAutoTarget = AddCheckBox("Автовыбор таргета", _chkAutoTarget?.IsChecked ?? GetSavedBool("chk_autoTarget", true));
+        // Дефолт: ON для мили ДПС, OFF для танков/кастеров/хилеров
+        bool moveBehindDefault = _playerClass is "ROGUE" ||
+            (_playerClass == "WARRIOR" && _playerSpec != "Prot Warrior") ||
+            (_playerClass == "PALADIN" && _playerSpec == "Ret Paladin") ||
+            (_playerClass == "DRUID" && _playerSpec == "Feral Druid") ||
+            (_playerClass == "SHAMAN" && _playerSpec == "Enhancement Shaman") ||
+            (_playerClass == "DEATHKNIGHT" && _playerSpec != "Blood DK");
+        _chkMoveBehind = AddCheckBox("Забегание за спину", _chkMoveBehind?.IsChecked ?? GetSavedBool("chk_moveBehind", moveBehindDefault));
+        _chkMoveBehind.Checked += (s, e) =>
+        {
+            // Забегание за спину требует автоповорот — включаем если выключен
+            if (_chkAutoFace != null && _chkAutoFace.IsChecked != true)
+                _chkAutoFace.IsChecked = true;
+        };
         _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? GetSavedDouble("slider_maxRange", 30), 10, 45, 5);
     }
 
@@ -2035,6 +2052,7 @@ public partial class OverlayWindow : Window
             // Checkboxes — если UI не создан, сохраняем предыдущее значение из _saved
             data["chk_autoFace"] = _chkAutoFace != null ? _chkAutoFace.IsChecked == true : GetSavedBool("chk_autoFace", true);
             data["chk_autoTarget"] = _chkAutoTarget != null ? _chkAutoTarget.IsChecked == true : GetSavedBool("chk_autoTarget", true);
+            data["chk_moveBehind"] = _chkMoveBehind != null ? _chkMoveBehind.IsChecked == true : GetSavedBool("chk_moveBehind", true);
             if (_chkMultiDot != null) data["chk_multiDot"] = _chkMultiDot.IsChecked == true;
             else if (_saved.ContainsKey("chk_multiDot")) data["chk_multiDot"] = GetSavedBool("chk_multiDot", true);
             if (_chkMindSear != null) data["chk_mindSear"] = _chkMindSear.IsChecked == true;

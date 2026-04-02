@@ -1140,6 +1140,7 @@ public partial class MainWindow : Window
             {
                 _botEngine.AutoFace = _overlay.AutoFace;
                 _botEngine.AutoSelectTarget = _overlay.AutoSelectTarget;
+                _botEngine.MoveBehindEnabled = _overlay.MoveBehindEnabled;
                 _botEngine.MaxTargetRange = _overlay.MaxTargetRange;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
                 _botEngine.AoeMinEnemies = _overlay.AoeMinEnemies;

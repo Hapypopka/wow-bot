@@ -230,7 +230,17 @@ public class BotEngine : IDisposable
         Hivemind.SetBotEngine(this);
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
+        _combatPositioning = new CombatPositioning(ctm);
     }
+
+    private readonly CombatPositioning _combatPositioning;
+
+    public bool MoveBehindEnabled { get; set; }
+
+    public bool IsMeleeSpec => PlayerClass is "WARRIOR" or "ROGUE" or "DEATHKNIGHT" ||
+        (PlayerClass == "PALADIN" && _specName != "Holy Paladin") ||
+        (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
+        (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
 
     // Антиафк — пишем TickCount + снимаем AFK через Lua каждые ~30с
     private int _afkTickCounter;
@@ -860,6 +870,18 @@ public class BotEngine : IDisposable
 
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
+                    // Позиционирование в бою (MoveBehind для мили, RangedPos для ранж)
+                    _combatPositioning.IsMelee = IsMeleeSpec;
+                    _combatPositioning.IsTank = false; // TODO: определение танка
+                    _combatPositioning.IsHealer = IsHealer;
+                    _combatPositioning.PlayerClass = PlayerClass;
+                    _combatPositioning.SpecName = _specName;
+                    if (MoveBehindEnabled && hasTarget && targetInCombat && target != null)
+                    {
+                        if (_combatPositioning.TryMoveBehind(player, target)) { _navigation.FaceInstant(player, target); }
+                        else if (_combatPositioning.TryRangedPosition(player, target)) { _navigation.FaceInstant(player, target); }
+                    }
+
                     // Ground AoE (Гроза и т.д.) — если врагов >= порог
                     if (hasTarget && targetInCombat && target != null && TryGroundAoE(player, target)) { }
                     else
