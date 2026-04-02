@@ -115,14 +115,17 @@ public class BotEngine : IDisposable
         string? aoeSpell = PlayerClass switch
         {
             "DRUID" when _specName?.Contains("Balance") == true => hurricaneEnabled ? "Гроза" : null,
-            // Сюда добавлять другие классы: MAGE → Метель, WARLOCK → Дождь Огня и т.д.
+            "HUNTER" => IsSpellEnabled("Volley") ? "WB_VOLLEY" : null,
             _ => null
         };
 
         if (aoeSpell == null) { Logger.Info($"GroundAoE: skip — no spell for class={PlayerClass} spec={_specName}"); return false; }
 
         // Каст спелла → terrain click на позицию таргета
-        _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
+        if (aoeSpell == "WB_VOLLEY")
+            _hook.ExecuteLua("local n=GetSpellInfo(1510) if n then CastSpellByName(n) end", 200);
+        else
+            _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
         System.Threading.Thread.Sleep(100);
         bool ok = _hook.CastTerrainClick(target.X, target.Y, target.Z);
         Logger.Info($"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok={ok}");
@@ -1466,6 +1469,15 @@ WB_AoE()
             }
         }
 
+
+        // Призыв пета хантера (через тогл в баффах)
+        if (PlayerClass == "HUNTER" && selfBuffs.Remove("WB_HUNTER_PET"))
+        {
+            sb.Append("if not UnitAffectingCombat('player') then ");
+            sb.Append("if not UnitExists('pet') then CastSpellByName('Призыв питомца') return end ");
+            sb.Append("if UnitIsDead('pet') then CastSpellByName('Воскрешение питомца') return end ");
+            sb.Append("end ");
+        }
 
         // Оружие шамана (проверка через GetWeaponEnchantInfo + смена выбора)
         string? shamanWeapon = null;

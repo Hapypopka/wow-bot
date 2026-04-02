@@ -33,6 +33,21 @@ public static class AllRotations
     local function HB(id) local sn=SN(id) if not sn then return false end return HasBuff(sn) end
     local function HD(u,id) local sn=SN(id) if not sn then return false end return HasDebuff(u,sn) end
     local function IU(id) local n=SN(id) if not n then return false end return IsUsable(n) end
+    local function CastOn(u,id) local n=SN(id) if n and u then RunMacroText('/cast [@'..u..'] '..n) end end
+    if not WB_RES then WB_RES={} end
+    local function TryRes(spellId)
+        if WB_S and WB_S.AutoRes==false then return false end
+        if UnitAffectingCombat('player') then return false end
+        if not IR(spellId) then return false end
+        local now=GetTime()
+        local nr=GetNumRaidMembers()
+        if nr>0 then
+            for i=1,nr do local u='raid'..i local g=UnitGUID(u) if g and UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and (not WB_RES[g] or now-WB_RES[g]>60) then WB_RES[g]=now TargetUnit(u) Cast(spellId) return true end end
+        else
+            for i=1,4 do local u='party'..i local g=UnitGUID(u) if g and UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and (not WB_RES[g] or now-WB_RES[g]>60) then WB_RES[g]=now TargetUnit(u) Cast(spellId) return true end end
+        end
+        return false
+    end
     local function NR(u,id,cid) local sn=SN(id) if not sn then return true end for i=1,40 do local n,_,_,_,_,_,exp=UnitDebuff(u,i) if not n then return true end if n==sn then local left=exp-GetTime() local _,_,_,ct=GetSpellInfo(cid or id) return left<=(ct or 1500)/1000 end end return true end
 ";
 
@@ -327,16 +342,9 @@ public static class AllRotations
     else
         -- HOLY
 " + HealerFindTarget + @"
-        -- Resurrect вне боя
-        if not UnitAffectingCombat('player') then
-            if IR(7328) then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(7328) return end end
-                else
-                    for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(7328) return end end
-                end
-            end
+        -- Resurrect вне боя (Paladin)
+        if TryRes(7328) then return end
+        if false then
         end
         -- Dispel: scan group for dispellable debuffs
         if WB_S.Dispel~=false then
@@ -357,7 +365,7 @@ public static class AllRotations
                     for i=1,4 do du = HasDispellableDebuff('party'..i) if du then break end end
                 end
             end
-            if du and IR(4987) then TargetUnit(du) Cast(4987) return end
+            if du and IR(4987) then CastOn(du,4987) return end
         end
         -- Mana potion если мана < 20%
         if MP() < 0.2 then
@@ -387,7 +395,7 @@ public static class AllRotations
                 return nil
             end
             local bt = FindTankWithout(bn)
-            if bt then TargetUnit(bt) Cast(53563) TargetLastTarget() return end
+            if bt then CastOn(bt,53563) return end
         end
         if WB_S.SS~=false and IR(53601) then
             local sn=SN(53601)
@@ -406,7 +414,7 @@ public static class AllRotations
                 return nil
             end
             local st = FindWithoutBuff(sn)
-            if st then TargetUnit(st) Cast(53601) TargetLastTarget() return end
+            if st then CastOn(st,53601) return end
         end
         if WB_S.Plea~=false and MP()<0.7 and IR(54428) then
             if IR(31884) then Cast(31884)
@@ -421,30 +429,29 @@ public static class AllRotations
         -- Критично: urgency=2 (predicted HP < 0) → кулдауны + быстрый хил
         if urgency>=2 then
             if WB_S.DF~=false and IR(20216) then Cast(20216) end -- Divine Favor (крит)
-            if WB_S.LoH~=false and bestHP<0.15 and IR(633) then TargetUnit(best) Cast(633) return end -- Lay on Hands
+            if WB_S.LoH~=false and bestHP<0.15 and IR(633) then CastOn(best,633) return end -- Lay on Hands
         end
         -- Срочно: urgency=1 (predicted < 20%) → Holy Shock (инстант) + Flash
-        if urgency>=1 and WB_S.HS~=false and IR(20473) then TargetUnit(best) Cast(20473) return end
+        if urgency>=1 and WB_S.HS~=false and IR(20473) then CastOn(best,20473) return end
         -- Обычный хил
-        if WB_S.LoH~=false and bestHP<0.15 and IR(633) then TargetUnit(best) Cast(633) return end
-        if WB_S.HS~=false and bestHP<0.97 and IR(20473) then TargetUnit(best) Cast(20473) return end
-        if urgency>=1 and WB_S.FL~=false then TargetUnit(best) Cast(19750) return end -- Flash при urgency
-        if WB_S.HL~=false and bestHP<0.97 then TargetUnit(best) Cast(635) return end -- Holy Light (основной)
-        if WB_S.FL~=false and bestHP<0.97 then TargetUnit(best) Cast(19750) return end
+        if WB_S.LoH~=false and bestHP<0.15 and IR(633) then CastOn(best,633) return end
+        if WB_S.HS~=false and bestHP<0.97 and IR(20473) then CastOn(best,20473) return end
+        if urgency>=1 and WB_S.FL~=false then CastOn(best,19750) return end -- Flash при urgency
+        if WB_S.HL~=false and bestHP<0.97 then CastOn(best,635) return end -- Holy Light (основной)
+        if WB_S.FL~=false and bestHP<0.97 then CastOn(best,19750) return end
     end
 ");
 
     private static string Hunter() => Wrap(@"
     if UnitCastingInfo('player') or UnitChannelInfo('player') then if WB_S then if WB_S.Rapid~=false and IR(3045) then Cast(3045) end if WB_S.Kill2~=false and IR(34026) then Cast(34026) end if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end end return end
     if not WB_S then WB_S={} end
-    if WB_S.Pet~=false and UnitExists('pet') and not UnitIsDead('pet') then
+    -- Управление петом (всегда если пет жив)
+    if UnitExists('pet') and not UnitIsDead('pet') then
         if HasBuffById(5384) or UnitIsDeadOrGhost('player') then WB_FD=GetTime() PetPassiveMode() PetFollow() return end
         if WB_FD and GetTime()-WB_FD<5 then PetPassiveMode() PetFollow() return end
     end
     if UnitIsDeadOrGhost('player') then return end
-    if WB_S.Pet~=false then
-        if not UnitExists('pet') then CastSpellByName('Призыв питомца') return end
-        if UnitIsDead('pet') then CastSpellByName('Воскрешение питомца') return end
+    if UnitExists('pet') and not UnitIsDead('pet') then
         if not UnitAffectingCombat('player') then PetPassiveMode() PetFollow() return end
         if not WB_FD or GetTime()-WB_FD>=5 then if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') then PetAttack() end end
     end
@@ -453,6 +460,26 @@ public static class AllRotations
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
     if WB_S.Track~=false then local ct=UnitCreatureType('target') local tr if ct=='Животное' then tr='Выслеживание животных' elseif ct=='Демон' then tr='Выслеживание демонов' elseif ct=='Дракон' then tr='Выслеживание драконов' elseif ct=='Элементаль' then tr='Выслеживание элементалей' elseif ct=='Великан' then tr='Выслеживание великанов' elseif ct=='Гуманоид' then tr='Выслеживание гуманоидов' elseif ct=='Нежить' then tr='Выслеживание нежити' end if tr and not HasBuff(tr) then CastSpellByName(tr) return end end
+    -- [NPCBots] Mend Pet: хилим пета если HP < 75%
+    if UnitExists('pet') and not UnitIsDead('pet') and UnitHealth('pet')/UnitHealthMax('pet')<0.75 and IR(136) then Cast(136) end
+    -- [NPCBots] Aspect of the Viper: мана < 20% → Viper, мана > 50% → обратно Dragonhawk
+    if MP()<0.2 and not HB(34074) and IR(34074) then Cast(34074) return end
+    if MP()>0.5 and HB(34074) then if IR(61846) then Cast(61846) elseif IR(13165) then Cast(13165) end return end
+    -- [NPCBots] Feign Death: если топ-угроза и враг бьёт не нас
+    if UnitThreatSituation('player') and UnitThreatSituation('player')>=3 and IR(5384) then local tv=UnitName('targettarget') local pn=UnitName('player') if tv and tv~=pn then Cast(5384) return end end
+    -- [NPCBots] Disengage: если враг в мили-дистанции (НЕ для трапера)
+    if not WB_S.Trapper and CheckInteractDistance('target',3) and IR(781) then Cast(781) return end
+    -- [NPCBots] Misdirection: на танка в группе (каждые 30с)
+    if IR(34477) and (not WB_MD or GetTime()-WB_MD>30) then
+        local function FindTank()
+            local nr=GetNumRaidMembers()
+            if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and CheckInteractDistance(u,4) then for j=1,40 do local _,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,j) if not id then break end if id==48263 or id==48266 or id==25780 or id==5487 or id==9634 then return u end end end end
+            else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and CheckInteractDistance(u,4) then for j=1,40 do local _,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,j) if not id then break end if id==48263 or id==48266 or id==25780 or id==5487 or id==9634 then return u end end end end end
+            return nil
+        end
+        local tank=FindTank()
+        if tank then WB_MD=GetTime() CastOn(tank,34477) end
+    end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
@@ -466,19 +493,22 @@ public static class AllRotations
         if WB_S.Arcane~=false and IR(3044) then Cast(3044) return end
         if WB_S.Steady~=false then Cast(56641) end
     elseif t2>=t1 and t2>=t3 then
-        -- MM Hunter priority rotation + trap weaving
+        -- MM Hunter priority rotation
         if WB_S.Dragonhawk~=false and not HB(61847) and MP()>0.3 then Cast(61847) return end
-        if WB_S.Volley~=false and (WB_NE or 0)>1 and IR(1510) then Cast(1510) return end
-        -- CDs: Rapid Fire + Kill Command + pet abilities (off-GCD or weave)
+        -- Volley: через ground AoE (TerrainClick) в BotEngine (приоритет)
+        -- Multi-Shot: только если стоим (не на бегу)
+        if WB_S.MultiShot~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
+        -- CDs: Rapid Fire + Kill Command + pet abilities (off-GCD)
         if WB_S.Rapid~=false and IR(3045) then Cast(3045) end
         if WB_S.Kill2~=false and IR(34026) then Cast(34026) end
         if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end
-        -- Priority: Serpent Sting > Chimera > Silencing > Aimed > Trap > Steady
+        -- Priority: Serpent Sting > Chimera > Silencing > Aimed > Steady
         if WB_S.Serpent~=false and not HD('target',1978) then Cast(1978) return end
         if WB_S.Chimera~=false and IR(53209) then Cast(53209) return end
         if WB_S.Silence~=false and IR(34490) then Cast(34490) return end
         if WB_S.Aimed~=false and IR(19434) then Cast(19434) return end
-        if WB_S.Trap~=false and IR(13813) then Cast(13813) return end
+        -- Trapper: Explosive Trap между основными кастами
+        if WB_S.Trapper==true and WB_S.Trap~=false and IR(13813) then Cast(13813) return end
         -- Readiness: reset CDs when Chimera + Rapid Fire both on CD
         if WB_S.Readiness~=false and IR(23989) and not IR(53209) and not IR(3045) then Cast(23989) return end
         if WB_S.Steady~=false then Cast(56641) end
@@ -539,16 +569,9 @@ public static class AllRotations
     elseif t1>=t2 then
         -- DISC (urgency-aware)
 " + HealerFindTarget + @"
-        -- Resurrect вне боя
-        if not UnitAffectingCombat('player') then
-            if IR(2006) then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(2006) return end end
-                else
-                    for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(2006) return end end
-                end
-            end
+        -- Resurrect вне боя (Priest)
+        if TryRes(2006) then return end
+        if false then
         end
         -- Dispel: scan group for dispellable debuffs
         if WB_S.Dispel~=false then
@@ -570,10 +593,9 @@ public static class AllRotations
                 end
             end
             if du then
-                TargetUnit(du)
-                if ddt=='Magic' and IR(527) then Cast(527) return end
-                if ddt=='Disease' and IR(552) then Cast(552) return
-                elseif ddt=='Disease' and IR(528) then Cast(528) return end
+                if ddt=='Magic' and IR(527) then CastOn(du,527) return end
+                if ddt=='Disease' and IR(552) then CastOn(du,552) return
+                elseif ddt=='Disease' and IR(528) then CastOn(du,528) return end
             end
         end
         -- Mana potion если мана < 20%
@@ -585,40 +607,33 @@ public static class AllRotations
         end
         if bestHP>=1.0 then return end
         -- Критично: Pain Suppression
-        if WB_S.PS~=false and urgency>=2 and IR(33206) then TargetUnit(best) Cast(33206) return end
+        if WB_S.PS~=false and urgency>=2 and IR(33206) then CastOn(best,33206) return end
         -- PW:Shield (инстант, приоритет при urgency)
-        if WB_S.PW~=false and IR(17) then TargetUnit(best) Cast(17) return end
+        if WB_S.PW~=false and IR(17) then CastOn(best,17) return end
         -- Prayer of Mending проактивно на танка
         if WB_S.PoM~=false and IR(33076) then
             local pomn = SN(33076)
             local hasPom = false
             if pomn and best then for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n==pomn then hasPom=true break end end end
-            if not hasPom and best then TargetUnit(best) Cast(33076) return end
+            if not hasPom and best then CastOn(best,33076) return end
         end
         -- Inner Focus + Penance (лучший хил диска)
         if WB_S.Penance~=false and bestHP<0.95 and IR(47540) then
             if IR(14751) and MP()<0.7 then Cast(14751) end
-            TargetUnit(best) Cast(47540) return
+            CastOn(best,47540) return
         end
         -- Pain Suppression при низком HP
-        if WB_S.PS~=false and bestHP<0.4 and IR(33206) then TargetUnit(best) Cast(33206) return end
+        if WB_S.PS~=false and bestHP<0.4 and IR(33206) then CastOn(best,33206) return end
         -- Flash Heal (urgency → Flash вместо ожидания)
-        if urgency>=1 and WB_S.Flash~=false then TargetUnit(best) Cast(2061) return end
-        if WB_S.Renew~=false and needHoT then TargetUnit(best) Cast(139) return end
-        if WB_S.Flash~=false and bestHP<0.95 then TargetUnit(best) Cast(2061) return end
+        if urgency>=1 and WB_S.Flash~=false then CastOn(best,2061) return end
+        if WB_S.Renew~=false and needHoT then CastOn(best,139) return end
+        if WB_S.Flash~=false and bestHP<0.95 then CastOn(best,2061) return end
     else
         -- HOLY (urgency-aware, mass heal)
 " + HealerFindTarget + @"
-        -- Resurrect вне боя
-        if not UnitAffectingCombat('player') then
-            if IR(2006) then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(2006) return end end
-                else
-                    for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(2006) return end end
-                end
-            end
+        -- Resurrect вне боя (Priest)
+        if TryRes(2006) then return end
+        if false then
         end
         -- Dispel: scan group for dispellable debuffs
         if WB_S.Dispel~=false then
@@ -640,10 +655,9 @@ public static class AllRotations
                 end
             end
             if du then
-                TargetUnit(du)
-                if ddt=='Magic' and IR(527) then Cast(527) return end
-                if ddt=='Disease' and IR(552) then Cast(552) return
-                elseif ddt=='Disease' and IR(528) then Cast(528) return end
+                if ddt=='Magic' and IR(527) then CastOn(du,527) return end
+                if ddt=='Disease' and IR(552) then CastOn(du,552) return
+                elseif ddt=='Disease' and IR(528) then CastOn(du,528) return end
             end
         end
         -- Mana potion если мана < 20%
@@ -655,29 +669,29 @@ public static class AllRotations
         end
         if bestHP>=1.0 then return end
         -- Критично: Guardian Spirit
-        if WB_S.Guardian~=false and urgency>=2 and IR(47788) then TargetUnit(best) Cast(47788) return end
+        if WB_S.Guardian~=false and urgency>=2 and IR(47788) then CastOn(best,47788) return end
         -- Mass heal: Circle of Healing если 2+ людей < 85%
         if WB_S.CoH~=false and lowCount>=2 and IR(34861) then Cast(34861) return end
-        if WB_S.Guardian~=false and bestHP<0.2 and IR(47788) then TargetUnit(best) Cast(47788) return end
+        if WB_S.Guardian~=false and bestHP<0.2 and IR(47788) then CastOn(best,47788) return end
         -- Prayer of Mending проактивно на танка
         if WB_S.PoM~=false and IR(33076) then
             local pomn = SN(33076)
             local hasPom = false
             if pomn and best then for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n==pomn then hasPom=true break end end end
-            if not hasPom and best then TargetUnit(best) Cast(33076) return end
+            if not hasPom and best then CastOn(best,33076) return end
         end
         -- Проактивный HoT
-        if WB_S.Renew~=false and needHoT then TargetUnit(best) Cast(139) return end
-        if WB_S.Renew~=false and bestHP<0.95 then TargetUnit(best) Cast(139) return end
+        if WB_S.Renew~=false and needHoT then CastOn(best,139) return end
+        if WB_S.Renew~=false and bestHP<0.95 then CastOn(best,139) return end
         -- Urgency → Flash Heal
-        if urgency>=1 and WB_S.Flash~=false then TargetUnit(best) Cast(2061) return end
+        if urgency>=1 and WB_S.Flash~=false then CastOn(best,2061) return end
         -- Inner Focus + Greater Heal
         if WB_S.GHeal~=false and bestHP<0.6 then
             if IR(14751) and MP()<0.7 then Cast(14751) end
-            TargetUnit(best) Cast(2060) return
+            CastOn(best,2060) return
         end
-        if WB_S.Flash~=false and bestHP<0.95 then TargetUnit(best) Cast(2061) return end
-        if WB_S.Binding~=false and bestHP<0.95 then TargetUnit(best) Cast(32546) return end
+        if WB_S.Flash~=false and bestHP<0.95 then CastOn(best,2061) return end
+        if WB_S.Binding~=false and bestHP<0.95 then CastOn(best,32546) return end
     end
 ");
 
@@ -753,16 +767,9 @@ public static class AllRotations
     if t3>=t1 and t3>=t2 then
         -- RESTO (urgency-aware, mass heal, proactive)
 " + HealerFindTarget + @"
-        -- Resurrect вне боя
-        if not UnitAffectingCombat('player') then
-            if IR(2008) then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(2008) return end end
-                else
-                    for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(2008) return end end
-                end
-            end
+        -- Resurrect вне боя (Shaman)
+        if TryRes(2008) then return end
+        if false then
         end
         -- Dispel: scan group for dispellable debuffs
         if WB_S.Dispel~=false then
@@ -784,9 +791,8 @@ public static class AllRotations
                 end
             end
             if du then
-                TargetUnit(du)
-                if IR(51886) then Cast(51886) return end
-                if IR(526) then Cast(526) return end
+                if IR(51886) then CastOn(du,51886) return end
+                if IR(526) then CastOn(du,526) return end
             end
         end
         -- Mana potion если мана < 20%
@@ -799,27 +805,27 @@ public static class AllRotations
         -- Earth Shield на танке (фокус) — проактивно
         if WB_S.ES~=false and UnitExists('focus') and IR(974) then
             local esn=SN(974) local hasES=false if esn then for i=1,40 do local n=UnitBuff('focus',i) if not n then break end if n==esn then hasES=true break end end end
-            if not hasES then TargetUnit('focus') Cast(974) TargetLastTarget() return end
+            if not hasES then CastOn('focus',974) return end
         end
         -- Проактивный Riptide если needHoT
-        if needHoT and WB_S.RT~=false and IR(61295) and best then TargetUnit(best) Cast(61295) return end
+        if needHoT and WB_S.RT~=false and IR(61295) and best then CastOn(best,61295) return end
         if bestHP>=1.0 then return end
         -- Критично: NS + Healing Wave (инстант большой хил)
-        if WB_S.NS~=false and urgency>=2 and IR(16188) then Cast(16188) TargetUnit(best) Cast(331) return end
+        if WB_S.NS~=false and urgency>=2 and IR(16188) then Cast(16188) CastOn(best,331) return end
         -- Riptide (инстант HoT + хил)
-        if WB_S.RT~=false and IR(61295) then TargetUnit(best) Cast(61295) return end
+        if WB_S.RT~=false and IR(61295) then CastOn(best,61295) return end
         -- Mass heal: Chain Heal если 2+ людей < 85%
-        if WB_S.CH~=false and lowCount>=2 and IR(1064) then TargetUnit(best) Cast(1064) return end
+        if WB_S.CH~=false and lowCount>=2 and IR(1064) then CastOn(best,1064) return end
         -- NS при < 30%
         if WB_S.NS~=false and bestHP<0.3 and IR(16188) then Cast(16188) return end
         -- Urgency → Lesser Healing Wave (быстрый)
-        if urgency>=1 and WB_S.LHW~=false then TargetUnit(best) Cast(8004) return end
+        if urgency>=1 and WB_S.LHW~=false then CastOn(best,8004) return end
         -- Chain Heal при нескольких раненых
-        if WB_S.CH~=false and lowCount>=2 and bestHP<0.9 and IR(1064) then TargetUnit(best) Cast(1064) return end
+        if WB_S.CH~=false and lowCount>=2 and bestHP<0.9 and IR(1064) then CastOn(best,1064) return end
         -- Healing Wave (большой хил)
-        if WB_S.HW~=false and bestHP<0.6 then TargetUnit(best) Cast(331) return end
+        if WB_S.HW~=false and bestHP<0.6 then CastOn(best,331) return end
         -- Lesser Healing Wave (филлер)
-        if WB_S.LHW~=false and bestHP<0.95 then TargetUnit(best) Cast(8004) return end
+        if WB_S.LHW~=false and bestHP<0.95 then CastOn(best,8004) return end
     else
         if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
@@ -1044,16 +1050,9 @@ public static class AllRotations
         -- Tree of Life: пробуем каст, но НЕ блокируем ротацию если не получилось
         if WB_S.ToL~=false and GetShapeshiftForm()~=5 and IR(33891) then Cast(33891) end
 " + HealerFindTarget + @"
-        -- Resurrect вне боя
-        if not UnitAffectingCombat('player') then
-            if IR(50769) then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(50769) return end end
-                else
-                    for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) then TargetUnit(u) Cast(50769) return end end
-                end
-            end
+        -- Resurrect вне боя (Druid)
+        if TryRes(50769) then return end
+        if false then
         end
         -- Dispel: scan group for dispellable debuffs
         if WB_S.Dispel~=false then
@@ -1075,9 +1074,8 @@ public static class AllRotations
                 end
             end
             if du then
-                TargetUnit(du)
-                if ddt=='Curse' and IR(2782) then Cast(2782) return end
-                if ddt=='Poison' and IR(2893) then Cast(2893) return end
+                if ddt=='Curse' and IR(2782) then CastOn(du,2782) return end
+                if ddt=='Poison' and IR(2893) then CastOn(du,2893) return end
             end
         end
         -- Mana potion если мана < 20%
@@ -1087,47 +1085,89 @@ public static class AllRotations
             if s13==0 then UseInventoryItem(13) end
             if s14==0 then UseInventoryItem(14) end
         end
-        -- Innervate: на себя или хилера с маной < 20%
+        -- Innervate: на себя или ХИЛЕРА с маной < 20% (не на ДПС)
         if IR(29166) then
             if MP() < 0.2 then CastSpellByName(SN(29166), 'player') return end
+            local function IsHealerUnit(u)
+                for i=1,40 do local n,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,i) if not n then break end
+                    if id==33891 or id==48438 or id==974 or id==48068 or id==33076 or id==47788 or id==33206 or id==53563 then return true end
+                end return false
+            end
             local nr = GetNumRaidMembers()
             if nr > 0 then
-                for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitPowerType(u)==0 and UnitMana(u)/UnitManaMax(u)<0.2 then TargetUnit(u) Cast(29166) return end end
+                for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitPowerType(u)==0 and UnitMana(u)/UnitManaMax(u)<0.2 and IsHealerUnit(u) then CastOn(u,29166) return end end
             else
-                for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitPowerType(u)==0 and UnitMana(u)/UnitManaMax(u)<0.2 then TargetUnit(u) Cast(29166) return end end
+                for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitPowerType(u)==0 and UnitMana(u)/UnitManaMax(u)<0.2 and IsHealerUnit(u) then CastOn(u,29166) return end end
             end
         end
         -- Проактивный HoT: Rejuv на танка если нет HoT
         if needHoT and WB_S.Rejuv~=false then
             local rjn=SN(774) local hasRejuv=false if rjn then for i=1,40 do local n=UnitBuff(best or 'player',i) if not n then break end if n==rjn then hasRejuv=true break end end end
-            if not hasRejuv and best then TargetUnit(best) Cast(774) return end
+            if not hasRejuv and best then CastOn(best,774) return end
         end
-        if bestHP>=1.0 then return end
+        if bestHP>=1.0 then
+            -- Все здоровы: раскидываем Rejuv по рейду/пати (проактивно)
+            if WB_S.Rejuv~=false and UnitAffectingCombat('player') and MP()>0.5 then
+                local rjn=SN(774)
+                if rjn then
+                    local nr=GetNumRaidMembers()
+                    if nr>0 then
+                        for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and CheckInteractDistance(u,4) then local has=false for j=1,40 do local n=UnitBuff(u,j) if not n then break end if n==rjn then has=true break end end if not has then CastOn(u,774) return end end end
+                    else
+                        for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and CheckInteractDistance(u,4) then local has=false for j=1,40 do local n=UnitBuff(u,j) if not n then break end if n==rjn then has=true break end end if not has then CastOn(u,774) return end end end
+                    end
+                    -- На себя тоже
+                    local has=false for j=1,40 do local n=UnitBuff('player',j) if not n then break end if n==rjn then has=true break end end
+                    if not has then Cast(774) return end
+                end
+            end
+            -- Rejuv раскидан, все на фуле → Regrowth на танков/хилов без HoT
+            if WB_S.Regrowth~=false and MP()>0.4 then
+                local rgn=SN(8936)
+                if rgn then
+                    local function NeedRegrowth(u)
+                        if not UnitExists(u) or UnitIsDeadOrGhost(u) or not CheckInteractDistance(u,4) then return false end
+                        if not IsTankUnit(u) then return false end
+                        for j=1,40 do local n=UnitBuff(u,j) if not n then break end if n==rgn then return false end end
+                        return true
+                    end
+                    local nr=GetNumRaidMembers()
+                    if nr>0 then for i=1,nr do local u='raid'..i if NeedRegrowth(u) then CastOn(u,8936) return end end
+                    else for i=1,4 do local u='party'..i if NeedRegrowth(u) then CastOn(u,8936) return end end end
+                end
+            end
+            -- Wild Growth на группу если КД готов
+            if WB_S.WG~=false and IR(48438) and MP()>0.3 then Cast(48438) return end
+            return
+        end
         -- Критично: NS + Nourish (инстант большой хил)
-        if WB_S.NS~=false and urgency>=2 and IR(17116) then Cast(17116) TargetUnit(best) Cast(50464) return end
+        if WB_S.NS~=false and urgency>=2 and IR(17116) then Cast(17116) CastOn(best,50464) return end
         -- Swiftmend (инстант, требует HoT)
         if WB_S.SM~=false and (urgency>=1 or bestHP<0.7) and IR(18562) then
             local rjn,rgn=SN(774),SN(8936) local hasHot=false for i=1,40 do local n=UnitBuff(best,i) if not n then break end if (rjn and n==rjn) or (rgn and n==rgn) then hasHot=true break end end
-            if hasHot then TargetUnit(best) Cast(18562) return end
+            if hasHot then CastOn(best,18562) return end
         end
         -- Mass heal: Wild Growth если 2+ людей < 85%
-        if WB_S.WG~=false and lowCount>=2 and IR(48438) then TargetUnit(best) Cast(48438) return end
+        if WB_S.WG~=false and lowCount>=2 and IR(48438) then CastOn(best,48438) return end
         -- Lifebloom на танке (фокус) — 3 стака
         if WB_S.LB~=false and UnitExists('focus') then
             local lbn=SN(33763) local lbCount=0 if lbn then for i=1,40 do local n,_,_,c=UnitBuff('focus',i) if not n then break end if n==lbn then lbCount=c or 1 break end end end
-            if lbCount<3 then TargetUnit('focus') Cast(33763) TargetLastTarget() return end
+            if lbCount<3 then CastOn('focus',33763) return end
         end
         -- Rejuv если нет на цели
         if WB_S.Rejuv~=false and bestHP<0.95 then
             local rjn=SN(774) local hasRejuv=false if rjn then for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n==rjn then hasRejuv=true break end end end
-            if not hasRejuv then TargetUnit(best) Cast(774) return end
+            if not hasRejuv then CastOn(best,774) return end
         end
         -- Wild Growth одиночный при нехватке HoT
-        if WB_S.WG~=false and bestHP<0.9 and IR(48438) then TargetUnit(best) Cast(48438) return end
-        -- Regrowth при сильном уроне или urgency
-        if WB_S.Regrowth~=false and (urgency>=1 or bestHP<0.7) then TargetUnit(best) Cast(8936) return end
+        if WB_S.WG~=false and bestHP<0.9 and IR(48438) then CastOn(best,48438) return end
+        -- Regrowth при сильном уроне или urgency (проверяем что HoT не висит)
+        if WB_S.Regrowth~=false and (urgency>=1 or bestHP<0.7) then
+            local rgn=SN(8936) local hasRG=false if rgn and best then for i=1,40 do local n=UnitBuff(best,i) if not n then break end if n==rgn then hasRG=true break end end end
+            if not hasRG then CastOn(best,8936) return end
+        end
         -- Nourish — филлер (сильнее если HoT на цели)
-        if WB_S.Nourish~=false and bestHP<0.95 then TargetUnit(best) Cast(50464) return end
+        if WB_S.Nourish~=false and bestHP<0.95 then CastOn(best,50464) return end
     end
 ");
 

@@ -366,11 +366,11 @@ public partial class OverlayWindow : Window
             ("DF", "divine_favor.jpg", "Божественное одобрение", true),
             ("LoH", "lay_on_hands.jpg", "Возложение рук", false),
             ("Dispel", "cleanse.jpg", "Автодиспел", true),
+            ("AutoRes", "rebirth.jpg", "Авторес", true),
         },
         // ==================== HUNTER ====================
         ["BM Hunter"] = new[]
         {
-            ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
             ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
@@ -382,24 +382,20 @@ public partial class OverlayWindow : Window
         },
         ["MM Hunter"] = new[]
         {
-            ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
             ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
-            ("Dragonhawk", "aimed_shot.jpg", "Дух дракондора (в бою)", true),
+            ("Dragonhawk", "dragonhawk.jpg", "Дух дракондора (в бою)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
             ("Kill2", "kill_command.jpg", "Команда Взять", true),
             ("Chimera", "chimera_shot.jpg", "Выстрел химеры", true),
             ("Serpent", "serpent_sting.jpg", "Укус змеи", true),
-            ("Volley", "aimed_shot.jpg", "Залп (AoE, если >1 цели)", true),
             ("Aimed", "aimed_shot.jpg", "Прицельный выстрел", true),
-            ("Trap", "explosive_shot.jpg", "Взрывная ловушка (по КД)", true),
-            ("Readiness", "rapid_fire.jpg", "Готовность (сброс КД)", true),
+            ("Readiness", "readiness.jpg", "Готовность (сброс КД)", true),
             ("Silence", "silencing_shot.jpg", "Глушащий выстрел", true),
             ("Steady", "steady_shot.jpg", "Верный выстрел", true),
         },
         ["Survival Hunter"] = new[]
         {
-            ("Pet", "kill_command.jpg", "Питомец (призыв/атака)", true),
             ("Track", "hunters_mark.jpg", "Выслеживание (авто по цели)", true),
             ("Mark", "hunters_mark.jpg", "Метка охотника", true),
             ("Kill", "kill_shot.jpg", "Убийственный выстрел", true),
@@ -451,6 +447,7 @@ public partial class OverlayWindow : Window
             ("PoM", "prayer_mending.jpg", "Молитва восстановления", true),
             ("Renew", "renew.jpg", "Обновление", true),
             ("Dispel", "cleanse.jpg", "Автодиспел", true),
+            ("AutoRes", "rebirth.jpg", "Авторес", true),
         },
         ["Holy Priest"] = new[]
         {
@@ -462,6 +459,7 @@ public partial class OverlayWindow : Window
             ("GHeal", "greater_heal.jpg", "Великое исцеление", true),
             ("Binding", "binding_heal.jpg", "Связующее исцеление", true),
             ("Dispel", "cleanse.jpg", "Автодиспел", true),
+            ("AutoRes", "rebirth.jpg", "Авторес", true),
         },
         // ==================== DEATH KNIGHT ====================
         ["Blood DK"] = new[]
@@ -530,6 +528,7 @@ public partial class OverlayWindow : Window
             ("HW", "healing_wave.jpg", "Волна исцеления", true),
             ("ES", "earth_shield.jpg", "Щит земли", true),
             ("Dispel", "cleanse.jpg", "Автодиспел", true),
+            ("AutoRes", "rebirth.jpg", "Авторес", true),
         },
         // ==================== DRUID ====================
         ["Balance Druid"] = new[]
@@ -573,6 +572,7 @@ public partial class OverlayWindow : Window
             ("Regrowth", "regrowth.jpg", "Восстановление", true),
             ("Nourish", "nourish.jpg", "Покровительство Природы", true),
             ("Dispel", "cleanse.jpg", "Автодиспел", true),
+            ("AutoRes", "rebirth.jpg", "Авторес", true),
         },
         // ==================== MAGE ====================
         ["Arcane Mage"] = new[]
@@ -725,8 +725,10 @@ public partial class OverlayWindow : Window
         // WARRIOR: крики и стойки через радио-выбор (ShoutOptions/StanceOptions), не здесь
         ["HUNTER"] = new[]
         {
-            ("Дух дракондора", "aimed_shot.jpg", "Дух дракондора", true),
-            ("Дух гадюки", "serpent_sting.jpg", "Дух гадюки", true),
+            ("Дух дракондора", "aspect_dragonhawk.jpg", "Дух дракондора", true),
+            ("Дух гадюки", "aspect_viper.jpg", "Дух гадюки", false),
+            ("Дух ястреба", "aspect_hawk.jpg", "Дух ястреба", false),
+            ("WB_HUNTER_PET", "kill_command.jpg", "Авто-призыв и управление петом", true),
         },
         ["ROGUE"] = Array.Empty<(string, string, string, bool)>(),
         // DEATHKNIGHT: власти через радио-выбор (PresenceOptions), не здесь
@@ -1059,9 +1061,13 @@ public partial class OverlayWindow : Window
             _spellToggles["SeedOfC"] = AddSpellIcon(wrap, "corruption.jpg", "Семя порчи (по порогу врагов)", _spellToggles.TryGetValue("SeedOfC", out var scBtn) ? scBtn.IsChecked == true : GetSavedBool("spell_SeedOfC", true));
             SubContent.Children.Add(wrap);
         }
-        else
+        else if (specKey == "MM Hunter" || specKey == "BM Hunter" || specKey == "Survival Hunter")
         {
-            AddLabel("AoE для этого спека в разработке");
+            AddLabel("AoE");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            _spellToggles["Volley"] = AddSpellIcon(wrap, "volley.jpg", "Залп (по порогу врагов)", _spellToggles.TryGetValue("Volley", out var vBtn) ? vBtn.IsChecked == true : GetSavedBool("spell_Volley", true));
+            _spellToggles["MultiShot"] = AddSpellIcon(wrap, "multishot.jpg", "Град стрел (по порогу врагов)", _spellToggles.TryGetValue("MultiShot", out var msBtn) ? msBtn.IsChecked == true : GetSavedBool("spell_MultiShot", true));
+            SubContent.Children.Add(wrap);
         }
     }
 
@@ -1138,6 +1144,24 @@ public partial class OverlayWindow : Window
                 };
             }
             SubContent.Children.Add(petWrap);
+        }
+
+        // Выбор режима для MM хантера (Стандартный / Трапер)
+        if (_playerSpec == "MM Hunter")
+        {
+            AddLabel("Режим");
+            var modeWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+            bool isTrap = _spellToggles.TryGetValue("Trapper", out var trOld) ? trOld.IsChecked == true : GetSavedBool("spell_Trapper", false);
+
+            var btnStd = AddSpellIcon(modeWrap, "aimed_shot.jpg", "Стандартный ММ", !isTrap);
+            var btnTrap = AddSpellIcon(modeWrap, "explosive_trap.jpg", "Трапер (ловушки)", isTrap);
+
+            btnStd.Checked += (s, e) => { btnTrap.IsChecked = false; _spellToggles["Trapper"] = new ToggleButton { IsChecked = false }; SaveSettings(); };
+            btnTrap.Checked += (s, e) => { btnStd.IsChecked = false; _spellToggles["Trapper"] = new ToggleButton { IsChecked = true }; SaveSettings(); };
+            btnStd.Unchecked += (s, e) => { if (btnTrap.IsChecked != true) btnStd.IsChecked = true; };
+            btnTrap.Unchecked += (s, e) => { if (btnStd.IsChecked != true) btnTrap.IsChecked = true; };
+
+            SubContent.Children.Add(modeWrap);
         }
 
         // Выбор ауры для паладина (радио)
@@ -1897,6 +1921,15 @@ public partial class OverlayWindow : Window
             _spellToggles["Hurricane"] = new ToggleButton { IsChecked = GetSavedBool("spell_Hurricane", true) };
         if (playerClass == "WARLOCK" && !_spellToggles.ContainsKey("SeedOfC"))
             _spellToggles["SeedOfC"] = new ToggleButton { IsChecked = GetSavedBool("spell_SeedOfC", true) };
+        if (playerClass == "HUNTER")
+        {
+            if (!_spellToggles.ContainsKey("Volley"))
+                _spellToggles["Volley"] = new ToggleButton { IsChecked = GetSavedBool("spell_Volley", true) };
+            if (!_spellToggles.ContainsKey("MultiShot"))
+                _spellToggles["MultiShot"] = new ToggleButton { IsChecked = GetSavedBool("spell_MultiShot", true) };
+            if (!_spellToggles.ContainsKey("Trapper"))
+                _spellToggles["Trapper"] = new ToggleButton { IsChecked = GetSavedBool("spell_Trapper", false) };
+        }
 
         // Pre-create buff toggles from ClassBuffs
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
