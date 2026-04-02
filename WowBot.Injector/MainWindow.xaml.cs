@@ -722,8 +722,23 @@ public partial class MainWindow : Window
                         return $"0x{addr:X8}: {hex}";
                     }
                     // Если команда содержит WB_R= — вернуть результат
-                    if (cmd.Contains("WB_R="))
-                        return _endSceneHook.ExecuteLuaWithResult(cmd);
+                    if (cmd.Contains("WB_R=") || cmd.Contains("WB_R ="))
+                    {
+                        _botEngine?.PauseTick();
+                        try
+                        {
+                            System.Threading.Thread.Sleep(200);
+                            // Способ 1: ExecuteLuaWithResult (flag=1 + flag=4)
+                            var result = _endSceneHook.ExecuteLuaWithResult(cmd);
+                            if (result != null) return result;
+                            // Способ 2: fallback — ExecuteLua + читаем WB_R отдельно
+                            _endSceneHook.ExecuteLua(cmd, 500);
+                            System.Threading.Thread.Sleep(100);
+                            var result2 = _endSceneHook.ExecuteLuaWithResult("WB_R=tostring(WB_R)");
+                            return result2 ?? "(null — WB_R не удалось прочитать)";
+                        }
+                        finally { _botEngine?.ResumeTick(); }
+                    }
                     _endSceneHook.ExecuteLua(cmd, 500);
                     return "(ok)";
                 }

@@ -365,6 +365,7 @@ public partial class OverlayWindow : Window
             ("Plea", "divine_plea.jpg", "Святая клятва", true),
             ("DF", "divine_favor.jpg", "Божественное одобрение", true),
             ("LoH", "lay_on_hands.jpg", "Возложение рук", false),
+            ("Dispel", "cleanse.jpg", "Автодиспел", true),
         },
         // ==================== HUNTER ====================
         ["BM Hunter"] = new[]
@@ -449,6 +450,7 @@ public partial class OverlayWindow : Window
             ("Flash", "flash_heal.jpg", "Быстрое исцеление", true),
             ("PoM", "prayer_mending.jpg", "Молитва восстановления", true),
             ("Renew", "renew.jpg", "Обновление", true),
+            ("Dispel", "cleanse.jpg", "Автодиспел", true),
         },
         ["Holy Priest"] = new[]
         {
@@ -459,6 +461,7 @@ public partial class OverlayWindow : Window
             ("Flash", "flash_heal.jpg", "Быстрое исцеление", true),
             ("GHeal", "greater_heal.jpg", "Великое исцеление", true),
             ("Binding", "binding_heal.jpg", "Связующее исцеление", true),
+            ("Dispel", "cleanse.jpg", "Автодиспел", true),
         },
         // ==================== DEATH KNIGHT ====================
         ["Blood DK"] = new[]
@@ -526,6 +529,7 @@ public partial class OverlayWindow : Window
             ("LHW", "lesser_hw.jpg", "Малая волна исцеления", true),
             ("HW", "healing_wave.jpg", "Волна исцеления", true),
             ("ES", "earth_shield.jpg", "Щит земли", true),
+            ("Dispel", "cleanse.jpg", "Автодиспел", true),
         },
         // ==================== DRUID ====================
         ["Balance Druid"] = new[]
@@ -568,6 +572,7 @@ public partial class OverlayWindow : Window
             ("LB", "lifebloom.jpg", "Жизнецвет", true),
             ("Regrowth", "regrowth.jpg", "Восстановление", true),
             ("Nourish", "nourish.jpg", "Покровительство Природы", true),
+            ("Dispel", "cleanse.jpg", "Автодиспел", true),
         },
         // ==================== MAGE ====================
         ["Arcane Mage"] = new[]

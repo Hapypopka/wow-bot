@@ -23,7 +23,7 @@ public class EndSceneHook : IDisposable
     private bool _isHooked;
 
     private const int CodecaveSize = 512;  // увеличил под два пути
-    private const int LuaBufferSize = 16384; // 16KB — per-class скрипты ~5KB
+    private const int LuaBufferSize = 32768; // 32KB — хилерские скрипты ~16KB с dispel/resurrect
     private const int TotalAllocSize = CodecaveSize + LuaBufferSize + 192; // +32 TerrainClick + 28 CTM call
 
     public bool IsHooked => _isHooked;

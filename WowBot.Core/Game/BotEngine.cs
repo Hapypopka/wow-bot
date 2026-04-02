@@ -475,6 +475,10 @@ public class BotEngine : IDisposable
         OnStatusChanged?.Invoke("Stopped");
     }
 
+    private volatile bool _tickPaused;
+    public void PauseTick() => _tickPaused = true;
+    public void ResumeTick() => _tickPaused = false;
+
     public void EnsureRunning()
     {
         if (_timer != null) return;
@@ -501,6 +505,7 @@ public class BotEngine : IDisposable
 
     private void Tick(object? state)
     {
+        if (_tickPaused) return;
         AntiAfkTick(); // всегда, даже если бот неактивен
 
         if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) return;
@@ -800,8 +805,8 @@ public class BotEngine : IDisposable
                         if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal} aura={SelectedAura} bless={SelectedBlessing} script={buffScript.Substring(0, Math.Min(buffScript.Length, 500))}");
                         _hook.ExecuteLua(buffScript, 500);
                         if (fullBuffCheck) _blessingCooldown = 40;
-                        // Хилер-слейв: не прерываем — должен хилить после баффов
-                        if (!(Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer))
+                        // Хилеры: не прерываем — должны хилить после баффов
+                        if (!IsHealer)
                             return;
                     }
                 }
