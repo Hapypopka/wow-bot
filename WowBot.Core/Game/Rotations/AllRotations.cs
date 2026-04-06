@@ -33,7 +33,28 @@ public static class AllRotations
     local function HB(id) local sn=SN(id) if not sn then return false end return HasBuff(sn) end
     local function HD(u,id) local sn=SN(id) if not sn then return false end return HasDebuff(u,sn) end
     local function IU(id) local n=SN(id) if not n then return false end return IsUsable(n) end
+    -- Танк: автотаунт на моба который бьёт НЕ танка
+    local function TryTaunt(tauntId)
+        if not WB_S or WB_S.AutoTaunt==false then return false end
+        if not IR(tauntId) then return false end
+        local tv=UnitName('targettarget') local pn=UnitName('player')
+        if tv and tv~=pn and UnitAffectingCombat('target') then Cast(tauntId) return true end
+        return false
+    end
+    -- Танк: деф КД по HP порогу (один за раз)
+    local function TryDefCD(...)
+        if not WB_S or WB_S.DefCD==false then return false end
+        local hp=PHP()
+        local threshold=(WB_S.DefHP or 40)/100
+        if hp>threshold then return false end
+        for i=1,select('#',...),2 do
+            local id=select(i,...) local buffCheck=select(i+1,...)
+            if IR(id) and (not buffCheck or not HB(id)) then Cast(id) return true end
+        end
+        return false
+    end
     local function CastOn(u,id) local n=SN(id) if n and u then RunMacroText('/cast [@'..u..'] '..n) end end
+    local function IsTankUnit(u) for i=1,40 do local n,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,i) if not n then return false end if id==48263 or id==25780 or id==5487 or id==9634 then return true end end return false end
     if not WB_RES then WB_RES={} end
     local function TryRes(spellId)
         if WB_S and WB_S.AutoRes==false then return false end
@@ -171,14 +192,7 @@ public static class AllRotations
     local urgency = 0
     local needHoT = false
     local lowCount = 0
-    local function IsTankUnit(u)
-        for i=1,40 do
-            local n,_,_,_,_,_,_,_,_,_,id = UnitBuff(u,i)
-            if not n then return false end
-            if id==48263 or id==48266 or id==25780 or id==5487 or id==9634 then return true end
-        end
-        return false
-    end
+    -- IsTankUnit уже определён в Helpers
     local function HasHoT(u)
         for i=1,40 do
             local n,_,_,_,_,_,_,_,_,_,id = UnitBuff(u,i)
@@ -277,25 +291,15 @@ public static class AllRotations
         if WB_S.Slam~=false and HB(46916) then Cast(1464) return end
         Cast(47449)
     else
-        -- PROT
+        -- PROT WARRIOR
+        -- [ТАНК] Автотаунт
+        if TryTaunt(355) then return end
+        -- [ТАНК] Деф КД: Shield Wall(871) → Last Stand(12975) → Shield Block(2565)
+        if TryDefCD(871,true, 12975,true, 2565,true) then return end
+        -- [ТАНК] AoE угроза: Thunder Clap если 2+ врагов
+        if WB_S.AoEThreat~=false and (WB_NCE or 0)>=2 and IR(6343) then Cast(6343) return end
         if WB_S.HS~=false and UnitMana('player')>50 and IR(47449) then Cast(47449) end
         if WB_S.BR==true and UnitMana('player')<30 and IR(2687) then Cast(2687) return end
-        local defHP = (WB_S.DefHP or 40) / 100
-        if PHP()<=defHP then
-            local hasSW = HB(871)
-            local hasLS = HB(12975)
-            local anyDef = hasSW or hasLS
-            if WB_S.DefAll==true then
-                if WB_S.SW~=false and not hasSW and IR(871) then Cast(871) return end
-                if WB_S.LS~=false and not hasLS and IR(12975) then Cast(12975) return end
-            else
-                if not anyDef then
-                    if WB_S.SW~=false and IR(871) then Cast(871) return end
-                    if WB_S.LS~=false and IR(12975) then Cast(12975) return end
-                end
-            end
-        end
-        if WB_S.SB~=false and not HB(2565) and IR(2565) then Cast(2565) return end
         if WB_S.ShieldSlam~=false and IR(23922) then Cast(23922) return end
         if WB_S.Revenge~=false then local rn=SN(6572) if rn then local u,_=IsUsableSpell(rn) if u then CastSpellByName(rn) return end end end
         if WB_S.TC~=false and IR(6343) then Cast(6343) return end
@@ -326,19 +330,38 @@ public static class AllRotations
         if WB_S.Exo~=false and HB(59578) and IR(879) then Cast(879) return end
         if WB_S.SS~=false and not HB(53601) and IR(53601) then Cast(53601) return end
     elseif t2>=t1 and t2>=t3 then
-        -- PROT
+        -- PROT PALADIN (NPCBots-inspired)
         if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
+        -- [ТАНК] Автотаунт: Hand of Reckoning (62124) — на таргет
+        if TryTaunt(62124) then return end
+        -- [ТАНК] Righteous Defense (31789) — на союзника которого бьют (переводит 3 моба)
+        if WB_S.AutoTaunt~=false and IR(31789) then
+            local nr=GetNumRaidMembers()
+            if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitAffectingCombat(u) and UnitHealth(u)/UnitHealthMax(u)<0.8 and not IsTankUnit(u) and CheckInteractDistance(u,4) then CastOn(u,31789) return end end
+            else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitAffectingCombat(u) and UnitHealth(u)/UnitHealthMax(u)<0.8 and not IsTankUnit(u) and CheckInteractDistance(u,4) then CastOn(u,31789) return end end end
+        end
+        -- [ТАНК] Деф КД: Divine Protection(498) → Holy Shield(20925)
+        if TryDefCD(498,true, 20925,true) then return end
+        -- [ТАНК] Hand of Protection на союзника < 20% HP
+        if IR(1022) then
+            local nr=GetNumRaidMembers()
+            if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitHealth(u)/UnitHealthMax(u)<0.2 and not IsTankUnit(u) and CheckInteractDistance(u,4) then CastOn(u,1022) return end end
+            else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitHealth(u)/UnitHealthMax(u)<0.2 and not IsTankUnit(u) and CheckInteractDistance(u,4) then CastOn(u,1022) return end end end
+        end
+        -- [ТАНК] AoE угроза: Consecration если 2+ врагов
+        if WB_S.AoEThreat~=false and (WB_NCE or 0)>=2 and IR(26573) then Cast(26573) return end
+        -- Divine Plea + Holy Shield — поддерживать баффы
         if WB_S.Plea~=false and not HB(54428) and IR(54428) then Cast(54428) return end
-        if WB_S.AW~=false and IR(31884) then Cast(31884) return end
+        if WB_S.HolyShield~=false and not HB(20925) and IR(20925) then Cast(20925) return end
+        if WB_S.SS~=false and not HB(53601) and IR(53601) then Cast(53601) return end
+        -- Ротация: AS → HoR → ShoR → Judge → Cons → Holy Wrath
+        if WB_S.AS~=false and IR(31935) then Cast(31935) return end
         if WB_S.HoR~=false and IR(53595) then Cast(53595) return end
         if WB_S.ShoR~=false and IR(53600) then Cast(53600) return end
-        if WB_S.HolyShield~=false and IR(20925) then Cast(20925) return end
         if WB_S.Judge~=false and judgeSpell and IsReady(judgeSpell) then CastSpellByName(judgeSpell) return end
         if WB_S.Cons~=false and IR(26573) then Cast(26573) return end
         if WB_S.HW~=false and IR(2812) then Cast(2812) return end
-        if WB_S.AS~=false and IR(31935) then Cast(31935) return end
-        if WB_S.SS~=false and not HB(53601) and IR(53601) then Cast(53601) return end
     else
         -- HOLY
 " + HealerFindTarget + @"
@@ -346,27 +369,7 @@ public static class AllRotations
         if TryRes(7328) then return end
         if false then
         end
-        -- Dispel: scan group for dispellable debuffs
-        if WB_S.Dispel~=false then
-            local function HasDispellableDebuff(u)
-                for i=1,40 do
-                    local n,_,_,_,dt = UnitDebuff(u,i)
-                    if not n then return nil end
-                    if dt=='Magic' or dt=='Disease' or dt=='Poison' then return u end
-                end
-                return nil
-            end
-            local du = HasDispellableDebuff('player')
-            if not du then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do du = HasDispellableDebuff('raid'..i) if du then break end end
-                else
-                    for i=1,4 do du = HasDispellableDebuff('party'..i) if du then break end end
-                end
-            end
-            if du and IR(4987) then CastOn(du,4987) return end
-        end
+        -- Dispel перенесён ПОСЛЕ хила (хил приоритетнее)
         -- Mana potion если мана < 20%
         if MP() < 0.2 then
             local s13,_=GetInventoryItemCooldown('player',13)
@@ -376,26 +379,29 @@ public static class AllRotations
         end
         local judgeSpell = WB_S.JoL==true and SN(20271) or SN(53408)
         if UnitAffectingCombat('player') and not HB(53657) and UnitExists('target') and UnitCanAttack('player','target') and judgeSpell and IsReady(judgeSpell) then CastSpellByName(judgeSpell) return end
-        -- Beacon of Light + Sacred Shield: автоматически на танка в группе (или фокус)
+        -- Beacon of Light: на фокус (приоритет) или первого танка (один раз, не перекидывать)
         if WB_S.Beacon~=false and IR(53563) then
             local bn=SN(53563)
-            -- Ищем танка без Beacon
-            local function FindTankWithout(buffName)
-                local function Check(u)
-                    if not UnitExists(u) or UnitIsDeadOrGhost(u) then return false end
-                    if not IsTankUnit(u) then return false end
-                    if not CheckInteractDistance(u,4) then return false end
-                    if buffName then for i=1,40 do local n=UnitBuff(u,i) if not n then break end if n==buffName then return false end end end
-                    return true
+            -- Проверяем: Beacon уже висит на ком-то в группе?
+            local function AnyoneHasBeacon()
+                if bn then
+                    local function HasBn(u) if not UnitExists(u) then return false end for i=1,40 do local n=UnitBuff(u,i) if not n then return false end if n==bn then return true end end return false end
+                    if HasBn('player') then return true end
+                    local nr=GetNumRaidMembers()
+                    if nr>0 then for i=1,nr do if HasBn('raid'..i) then return true end end
+                    else for i=1,4 do if HasBn('party'..i) then return true end end end
                 end
-                if UnitExists('focus') and Check('focus') then return 'focus' end
-                local nr=GetNumRaidMembers()
-                if nr>0 then for i=1,nr do local u='raid'..i if Check(u) then return u end end
-                else for i=1,4 do local u='party'..i if Check(u) then return u end end end
-                return nil
+                return false
             end
-            local bt = FindTankWithout(bn)
-            if bt then CastOn(bt,53563) return end
+            if not AnyoneHasBeacon() then
+                -- Фокус приоритет, потом первый танк
+                if UnitExists('focus') and not UnitIsDeadOrGhost('focus') and CheckInteractDistance('focus',4) then CastOn('focus',53563) return
+                else
+                    local nr=GetNumRaidMembers()
+                    if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and IsTankUnit(u) and CheckInteractDistance(u,4) then CastOn(u,53563) return end end
+                    else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and IsTankUnit(u) and CheckInteractDistance(u,4) then CastOn(u,53563) return end end end
+                end
+            end
         end
         if WB_S.SS~=false and IR(53601) then
             local sn=SN(53601)
@@ -439,6 +445,37 @@ public static class AllRotations
         if urgency>=1 and WB_S.FL~=false then CastOn(best,19750) return end -- Flash при urgency
         if WB_S.HL~=false and bestHP<0.97 then CastOn(best,635) return end -- Holy Light (основной)
         if WB_S.FL~=false and bestHP<0.97 then CastOn(best,19750) return end
+        -- Dispel ПОСЛЕ хила (хил приоритетнее)
+        if WB_S.Dispel~=false then
+            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil end if dt=='Magic' or dt=='Disease' or dt=='Poison' then return u end end return nil end
+            local du=HasDD('player')
+            if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du=HasDD('raid'..i) if du then break end end else for i=1,4 do du=HasDD('party'..i) if du then break end end end end
+            if du and IR(4987) then CastOn(du,4987) return end
+        end
+        -- [NPCBots] Hand of Freedom (1044) — снятие рутов/замедлений с союзника
+        if IR(1044) then
+            local function HasRoot(u)
+                if not UnitExists(u) or UnitIsDeadOrGhost(u) or not CheckInteractDistance(u,4) then return false end
+                for i=1,40 do local n,_,_,_,dt,_,_,_,_,_,id=UnitDebuff(u,i) if not n then return false end
+                    if dt=='Magic' then
+                        -- Проверяем известные руты/замедления
+                        local rootIds={[339]=1,[122]=1,[45524]=1,[116]=1,[120]=1,[8056]=1,[3600]=1}
+                        if rootIds[id] then return true end
+                    end
+                end
+                return false
+            end
+            local nr=GetNumRaidMembers()
+            if nr>0 then for i=1,nr do local u='raid'..i if HasRoot(u) then CastOn(u,1044) return end end
+            else for i=1,4 do local u='party'..i if HasRoot(u) then CastOn(u,1044) return end end end
+            if HasRoot('player') then CastOn('player',1044) return end
+        end
+        -- [NPCBots] Hand of Salvation (1038) — сброс угрозы с ДД который агрит
+        if IR(1038) then
+            local nr=GetNumRaidMembers()
+            if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and not IsTankUnit(u) and CheckInteractDistance(u,4) then local ts=UnitThreatSituation(u) if ts and ts>=3 then CastOn(u,1038) return end end end
+            else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and not IsTankUnit(u) and CheckInteractDistance(u,4) then local ts=UnitThreatSituation(u) if ts and ts>=3 then CastOn(u,1038) return end end end end
+        end
     end
 ");
 
@@ -702,7 +739,13 @@ public static class AllRotations
     local hasFF = HD('target',55095)
     local hasBP = HD('target',55078)
     if t1>=t2 and t1>=t3 then
-        -- BLOOD (tank)
+        -- BLOOD DK (tank)
+        -- [ТАНК] Автотаунт: Dark Command (56222)
+        if TryTaunt(56222) then return end
+        -- [ТАНК] Деф КД: Icebound Fortitude(48792) → Vampiric Blood(55233) → Bone Shield(49222)
+        if TryDefCD(48792,true, 55233,true, 49222,true) then return end
+        -- [ТАНК] AoE угроза: Death and Decay если 2+ врагов
+        if WB_S.AoEThreat~=false and (WB_NCE or 0)>=2 and IR(43265) then Cast(43265) return end
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
         if WB_S.Pest~=false and hasFF and hasBP and IR(50842) then Cast(50842) return end
@@ -1038,6 +1081,12 @@ public static class AllRotations
             Cast(1082)
         else
             -- BEAR TANK
+            -- [ТАНК] Автотаунт: Growl (6795)
+            if TryTaunt(6795) then return end
+            -- [ТАНК] Деф КД: Survival Instincts(61336) → Frenzied Regeneration(22842) → Barkskin(22812)
+            if TryDefCD(61336,true, 22842,true, 22812,true) then return end
+            -- [ТАНК] AoE угроза: Swipe если 2+ врагов
+            if WB_S.AoEThreat~=false and (WB_NCE or 0)>=2 and IR(779) then Cast(779) return end
             if WB_S.Maul~=false and UnitMana('player')>15 then Cast(6807) end
             if WB_S.FF_bear~=false and not HD('target',16857) and IR(16857) then Cast(16857) return end
             if WB_S.Mangle_b~=false and IR(33878) then Cast(33878) return end

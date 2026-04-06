@@ -730,6 +730,10 @@ public partial class OverlayWindow : Window
             ("Дух ястреба", "aspect_hawk.jpg", "Дух ястреба", false),
             ("WB_HUNTER_PET", "kill_command.jpg", "Авто-призыв и управление петом", true),
         },
+        ["PALADIN"] = new[]
+        {
+            ("Праведное неистовство", "righteous_fury.jpg", "Праведное неистовство (танк)", true),
+        },
         ["ROGUE"] = Array.Empty<(string, string, string, bool)>(),
         // DEATHKNIGHT: власти через радио-выбор (PresenceOptions), не здесь
         ["PALADIN"] = Array.Empty<(string, string, string, bool)>(),
@@ -1012,6 +1016,20 @@ public partial class OverlayWindow : Window
                 };
             }
             SubContent.Children.Add(judgeWrap);
+        }
+
+        // Танкование — для танковых спеков
+        bool isTankSpec = _playerSpec is "Prot Warrior" or "Prot Paladin" or "Blood DK" ||
+            (_playerClass == "DRUID" && _playerSpec == "Feral Druid");
+        if (isTankSpec)
+        {
+            AddLabel("Танкование");
+            var tankWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            _spellToggles["AutoTaunt"] = AddSpellIcon(tankWrap, "warrior.jpg", "Автотаунт (на мобов бьющих группу)", _spellToggles.TryGetValue("AutoTaunt", out var atBtn) ? atBtn.IsChecked == true : GetSavedBool("spell_AutoTaunt", true));
+            _spellToggles["DefCD"] = AddSpellIcon(tankWrap, "shield_block.jpg", "Защитные КД (авто по HP)", _spellToggles.TryGetValue("DefCD", out var dcBtn) ? dcBtn.IsChecked == true : GetSavedBool("spell_DefCD", true));
+            _spellToggles["AoEThreat"] = AddSpellIcon(tankWrap, "thunder_clap.jpg", "AoE угроза (2+ врагов)", _spellToggles.TryGetValue("AoEThreat", out var aeBtn) ? aeBtn.IsChecked == true : GetSavedBool("spell_AoEThreat", true));
+            SubContent.Children.Add(tankWrap);
+            _sliderDefHP = AddSlider("HP деф. КД %", _sliderDefHP?.Value ?? GetSavedDouble("slider_defHP", 40), 10, 80, 5);
         }
     }
 
@@ -1921,6 +1939,15 @@ public partial class OverlayWindow : Window
             _spellToggles["Hurricane"] = new ToggleButton { IsChecked = GetSavedBool("spell_Hurricane", true) };
         if (playerClass == "WARLOCK" && !_spellToggles.ContainsKey("SeedOfC"))
             _spellToggles["SeedOfC"] = new ToggleButton { IsChecked = GetSavedBool("spell_SeedOfC", true) };
+        // Tank toggles
+        bool isTank = specKey is "Prot Warrior" or "Prot Paladin" or "Blood DK" || (playerClass == "DRUID" && specKey == "Feral Druid");
+        if (isTank)
+        {
+            if (!_spellToggles.ContainsKey("AutoTaunt")) _spellToggles["AutoTaunt"] = new ToggleButton { IsChecked = GetSavedBool("spell_AutoTaunt", true) };
+            if (!_spellToggles.ContainsKey("DefCD")) _spellToggles["DefCD"] = new ToggleButton { IsChecked = GetSavedBool("spell_DefCD", true) };
+            if (!_spellToggles.ContainsKey("AoEThreat")) _spellToggles["AoEThreat"] = new ToggleButton { IsChecked = GetSavedBool("spell_AoEThreat", true) };
+        }
+
         if (playerClass == "HUNTER")
         {
             if (!_spellToggles.ContainsKey("Volley"))

@@ -149,6 +149,60 @@ public class BotEngine : IDisposable
         }
         return count;
     }
+
+    /// <summary>
+    /// Умный таунт: ищет моба в ObjectManager который бьёт союзника (не нас).
+    /// Переключает таргет на моба и кастует таунт через Lua.
+    /// </summary>
+    private int _smartTauntTick;
+    private bool TrySmartTaunt(Entities.WowPlayer player)
+    {
+        if (!IsSpellEnabled("AutoTaunt")) return false;
+        _smartTauntTick++;
+        if (_smartTauntTick < 5) return false; // каждые ~750мс
+        _smartTauntTick = 0;
+
+        ulong myGuid = _objectManager.LocalPlayerGuid;
+
+        // Ищем моба который бьёт НЕ нас и в радиусе 30м
+        foreach (var unit in _objectManager.Units)
+        {
+            if (!unit.IsAlive || !unit.InCombat) continue;
+            if (unit.TargetGuid == 0 || unit.TargetGuid == myGuid) continue; // бьёт нас или никого
+            if (player.DistanceTo(unit) > 30f) continue;
+
+            // Проверяем: бьёт ли моб кого-то из нашей группы?
+            bool hitsAlly = false;
+            foreach (var p in _objectManager.Players)
+            {
+                if (p.Guid == myGuid) continue;
+                if (p.Guid == unit.TargetGuid) { hitsAlly = true; break; }
+            }
+            if (!hitsAlly) continue;
+
+            // Нашли моба бьющего союзника — таргетим + таунт
+            string mobName = unit.Name.Replace("'", "\\'");
+            if (string.IsNullOrEmpty(mobName)) continue;
+
+            // Определяем таунт по классу
+            int tauntId = PlayerClass switch
+            {
+                "WARRIOR" => 355,      // Taunt
+                "PALADIN" => 62124,    // Hand of Reckoning
+                "DEATHKNIGHT" => 56222, // Dark Command
+                "DRUID" => 6795,       // Growl
+                _ => 0
+            };
+            if (tauntId == 0) return false;
+
+            string lua = $"TargetUnit('{mobName}') local n=GetSpellInfo({tauntId}) if n then CastSpellByName(n) end";
+            _hook.ExecuteLua(lua, 300);
+            Logger.Info($"SmartTaunt: {mobName} → {tauntId}");
+            return true;
+        }
+        return false;
+    }
+
     public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
     public string SelectedAura { get; set; } = "AuRet";
@@ -239,6 +293,9 @@ public class BotEngine : IDisposable
     private readonly CombatPositioning _combatPositioning;
 
     public bool MoveBehindEnabled { get; set; }
+
+    public bool IsTankSpec => _specName is "Prot Warrior" or "Prot Paladin" or "Blood DK" ||
+        (PlayerClass == "DRUID" && _specName == "Feral Druid");
 
     public bool IsMeleeSpec => PlayerClass is "WARRIOR" or "ROGUE" or "DEATHKNIGHT" ||
         (PlayerClass == "PALADIN" && _specName != "Holy Paladin") ||
@@ -876,11 +933,15 @@ public class BotEngine : IDisposable
                     return;
                 }
 
+                // Умный таунт: C# сканирует ObjectManager на мобов бьющих союзников
+                if (playerInCombat && !IsHealer)
+                    TrySmartTaunt(player);
+
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
                     // Позиционирование в бою (MoveBehind для мили, RangedPos для ранж)
                     _combatPositioning.IsMelee = IsMeleeSpec;
-                    _combatPositioning.IsTank = false; // TODO: определение танка
+                    _combatPositioning.IsTank = IsTankSpec;
                     _combatPositioning.IsHealer = IsHealer;
                     _combatPositioning.PlayerClass = PlayerClass;
                     _combatPositioning.SpecName = _specName;
