@@ -318,16 +318,32 @@ public static class AllRotations
     local judgeSpell = WB_S.JoL==true and SN(20271) or SN(53408)
 
     if t3>=t1 and t3>=t2 then
-        -- RET
+        -- RET (NPCBots-inspired)
         if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
+        -- [SURVIVAL] Lay on Hands: HP < 20% (на себя)
+        if PHP()<0.2 and IR(633) then CastSpellByName(SN(633),'player') return end
+        -- [SURVIVAL] Divine Shield: HP < 15% бабл
+        if PHP()<0.15 and IR(642) then Cast(642) return end
+        -- [SURVIVAL] Art of War прок → Flash of Light на себя если HP < 50%
+        if PHP()<0.5 and HB(59578) and IR(19750) then CastSpellByName(SN(19750),'player') return end
+        -- Divine Plea: мана < 10%
+        if WB_S.Plea~=false and MP()<0.1 and not HB(54428) and IR(54428) then Cast(54428) return end
+        -- Бурст: Avenging Wrath при 3+ стаках Holy Vengeance
         if WB_S.AW~=false then local _,_,_,stk=UnitDebuff('target',SN(31803) or '') if (stk or 0)>=3 and IR(31884) then Cast(31884) return end end
+        -- Hammer of Wrath: добивание < 20%
         if WB_S.HoW~=false and THP()<0.2 and IR(24275) then Cast(24275) return end
+        -- Judgement
         if WB_S.Judge~=false and judgeSpell and IsReady(judgeSpell) then CastSpellByName(judgeSpell) return end
+        -- Divine Storm
         if WB_S.DS~=false and IR(53385) then Cast(53385) return end
+        -- Crusader Strike
         if WB_S.CS~=false and IR(35395) then Cast(35395) return end
-        if WB_S.Cons~=false and IR(26573) then Cast(26573) return end
+        -- Consecration: только 2+ врагов и враг не двигается (NPCBots)
+        if WB_S.Cons~=false and (WB_NCE or 0)>=2 and (GetUnitSpeed('target') or 0)==0 and IR(26573) then Cast(26573) return end
+        -- Exorcism: только с Art of War проком (инстант)
         if WB_S.Exo~=false and HB(59578) and IR(879) then Cast(879) return end
+        -- Sacred Shield
         if WB_S.SS~=false and not HB(53601) and IR(53601) then Cast(53601) return end
     elseif t2>=t1 and t2>=t3 then
         -- PROT PALADIN (NPCBots-inspired)
