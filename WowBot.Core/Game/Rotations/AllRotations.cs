@@ -170,6 +170,7 @@ public static class AllRotations
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
+    RunMacroText('/startattack')
 ";
 
     private const string PreChecksHealer = @"
@@ -1027,10 +1028,11 @@ public static class AllRotations
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
-    -- Возрождение (боевой рес) — если кто-то в пати/рейде мертв
+    -- Возрождение (боевой рес) — если кто-то в пати/рейде мертв (с guard 120с)
     if WB_S.Rebirth~=false and UnitAffectingCombat('player') and IR(20484) then
-        local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) then TargetUnit(u) Cast(20484) return end end
-        else for i=1,4 do local u='party'..i if UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) then TargetUnit(u) Cast(20484) return end end end
+        if not WB_RES then WB_RES={} end local now=GetTime()
+        local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do local u='raid'..i local g=UnitGUID(u) if g and UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and (not WB_RES[g] or now-WB_RES[g]>120) then WB_RES[g]=now TargetUnit(u) Cast(20484) return end end
+        else for i=1,4 do local u='party'..i local g=UnitGUID(u) if g and UnitExists(u) and UnitIsDeadOrGhost(u) and UnitIsConnected(u) and CheckInteractDistance(u,4) and (not WB_RES[g] or now-WB_RES[g]>120) then WB_RES[g]=now TargetUnit(u) Cast(20484) return end end end
     end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
@@ -1063,37 +1065,42 @@ public static class AllRotations
         if GetTime()-WB_FLOG>2 then WB_FLOG=GetTime() end
         if form~=1 and form~=3 then return end
         if form==3 then
-            -- CAT DPS (приоритетная система с комбо-поинтами)
-            local hasRoar = HB(52610)
-            local hasBerserk = HB(50334)
-            local hasRip = HD('target',1079)
+            -- CAT DPS (NPCBots + гайды WotLK)
+            local hasBerserk = HasBuffById(50334) -- по aura ID (прок пухи не 50334)
             local hasMangle = HD('target',33876)
             local hasRake = HD('target',1822)
-            -- Тигриное неистовство — по КД, не в берсерке (даёт +60 энергии + бафф урона)
-            if WB_S.TF~=false and not hasBerserk and IR(5217) then Cast(5217) return end
-            -- === ФИНИШЕРЫ (5 КП) ===
-            if cp>=5 then
-                -- Дикий рев спал → обновить (приоритет над рипом)
-                if WB_S.Roar~=false and not hasRoar then Cast(52610) return end
-                -- Разорвать не висит → повесить
-                if WB_S.Rip~=false and not hasRip then Cast(1079) return end
-                -- Всё висит → Свирепый укус
-                if WB_S.FB~=false and hasRoar and hasRip then Cast(22568) return end
+            -- Время оставшееся Дикий рев / Разорвать
+            local roarLeft,ripLeft = 0,0
+            local roarN,ripN = SN(52610),SN(1079)
+            if roarN then for i=1,40 do local n,_,_,_,_,_,exp=UnitBuff('player',i) if not n then break end if n==roarN then roarLeft=exp-GetTime() break end end end
+            if ripN then for i=1,40 do local n,_,_,_,_,_,exp=UnitDebuff('target',i) if not n then break end if n==ripN then ripLeft=exp-GetTime() break end end end
+            -- Тигриное неистовство — только при энергии < 40, НЕ в Берсерке
+            if WB_S.TF~=false and not hasBerserk and (UnitPower('player') or 0)<40 and IR(5217) then Cast(5217) return end
+            -- Берсерк — ПОСЛЕ Тигриного (TF на КД = только что использовали)
+            if WB_S.Berserk~=false and not IR(5217) and roarLeft>5 and IR(50334) then Cast(50334) return end
+            -- === ФИНИШЕРЫ ===
+            if cp>=1 then
+                -- Дикий рев: обновить если < 5с осталось (любое кол-во КП)
+                if WB_S.Roar~=false and roarLeft<5 then Cast(52610) return end
             end
-            -- Дикий рев спал и есть хоть 1 КП → срочно обновить
-            if WB_S.Roar~=false and not hasRoar and cp>=1 then Cast(52610) return end
-            -- Берсерк — только если рев и рип уже висят
-            if WB_S.Berserk~=false and hasRoar and hasRip and IR(50334) then Cast(50334) return end
-            -- === БИЛДЕРЫ (набираем КП) ===
-            -- Волшебный огонь — бесплатно, -5% брони
+            if cp>=5 then
+                -- Разорвать: 5 КП, обновлять в пандемик окне (< 4с осталось), только на жирных
+                if WB_S.Rip~=false and ripLeft<4 and THP()>0.25 then Cast(1079) return end
+                -- Свирепый укус: только если Рев>10с И Рип>10с (или моб дохлый)
+                if WB_S.FB~=false and (THP()<0.25 or (roarLeft>10 and ripLeft>10)) then Cast(22568) return end
+            end
+            -- === AoE: Размах (кот) если врагов >= порог ===
+            if WB_S.SwipeCat~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(62078) then Cast(62078) return end
+            -- === БИЛДЕРЫ ===
+            -- Волшебный огонь — бесплатно
             if WB_S.FF_cat~=false and not HD('target',16857) and IR(16857) then Cast(16857) return end
-            -- Увечье — поддерживать дебафф (+30% блид урон)
+            -- Увечье — поддерживать дебафф
             if WB_S.Mangle~=false and not hasMangle then Cast(33876) return end
-            -- Растерзать (Rake) — поддерживать ДоТ (даёт 1 КП)
+            -- Растерзать — поддерживать ДоТ
             if WB_S.Rake~=false and not hasRake then Cast(1822) return end
-            -- Полоснуть (Shred) — основной билдер КП
+            -- Полоснуть — основной (TODO: проверка за спиной)
             if WB_S.Shred~=false then Cast(5221) return end
-            -- Цапнуть — фоллбэк (если не за спиной для Полоснуть)
+            -- Цапнуть — фоллбэк
             Cast(1082)
         else
             -- BEAR TANK

@@ -522,6 +522,46 @@ public partial class MainWindow : Window
             var instantScript = AllRotations.GetInstantScript(playerClass);
             WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
             _botEngine.LoadRotation(instantScript, fullScript);
+
+            // AoE Avoidance: регистрируем COMBAT_LOG_EVENT для определения "стоим в луже"
+            try
+            {
+                string aoeDetect = @"
+                    if WB_AOE_FRAME then WB_AOE_FRAME:UnregisterAllEvents() WB_AOE_FRAME=nil end
+                    if not WB_AOE_FRAME then
+                        WB_AOE_HIT=0 WB_AOE_TIME=0
+                        -- Известные ground AoE (лужи) по spell ID
+                        WB_AOE_BAD={
+                            [43265]=1,[49936]=1,[49937]=1,[49938]=1,[52212]=1, -- Death and Decay (все ранги + WoWCircle)
+                            [2121]=1,[8422]=1,[8423]=1,[10215]=1,[10216]=1,[27086]=1,[42925]=1,[42926]=1, -- Flamestrike
+                            [10]=1,[42208]=1,[42209]=1,[42210]=1,[42211]=1,[42212]=1,[42213]=1,[42198]=1, -- Blizzard
+                            [5740]=1,[42218]=1,[42223]=1,[42224]=1,[42225]=1,[42226]=1, -- Rain of Fire
+                            [26573]=1,[48818]=1,[48819]=1, -- Consecration
+                            [16914]=1,[48295]=1, -- Hurricane
+                            [69146]=1,[71441]=1,[71442]=1,[71443]=1, -- ICC: Ooze Flood (Rotface)
+                            [69507]=1,[69504]=1, -- ICC: Slime Spray
+                            [72856]=1,[72857]=1,[72858]=1,[72859]=1, -- ICC: Lich King Defile
+                            [70461]=1,[72133]=1,[72134]=1,[72135]=1, -- ICC: Val'kyr Shadow
+                            [69762]=1,[69774]=1, -- ICC: Unchained Magic (Sindragosa)
+                            [71001]=1,[72091]=1,[72092]=1,[72093]=1, -- ICC: Malleable Goo (Putricide)
+                        }
+                        WB_AOE_FRAME=CreateFrame('Frame')
+                        WB_AOE_FRAME:RegisterEvent('COMBAT_LOG_EVENT_UNFILTERED')
+                        WB_AOE_FRAME:SetScript('OnEvent', function(self, event, ...)
+                            local ts,sub,_,_,_,dGUID,_,_,spId = select(1,...)
+                            if not sub or not dGUID then return end
+                            if dGUID~=UnitGUID('player') then return end
+                            if (sub=='SPELL_DAMAGE' or sub=='SPELL_PERIODIC_DAMAGE' or sub=='SPELL_PERIODIC_MISSED') and spId then
+                                if WB_AOE_BAD[spId] then
+                                    WB_AOE_HIT=spId WB_AOE_TIME=GetTime()
+                                end
+                            end
+                        end)
+                    end";
+                _endSceneHook.ExecuteLua(aoeDetect, 500);
+                WowBot.Core.Logger.Info("AoE Avoidance: COMBAT_LOG_EVENT registered");
+            }
+            catch (Exception ex) { WowBot.Core.Logger.Error("AoE event register failed", ex); }
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
 
@@ -1156,6 +1196,7 @@ public partial class MainWindow : Window
                 _botEngine.AutoFace = _overlay.AutoFace;
                 _botEngine.AutoSelectTarget = _overlay.AutoSelectTarget;
                 _botEngine.MoveBehindEnabled = _overlay.MoveBehindEnabled;
+                _botEngine.AoeAvoidEnabled = _overlay.AoeAvoidEnabled;
                 _botEngine.MaxTargetRange = _overlay.MaxTargetRange;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
                 _botEngine.AoeMinEnemies = _overlay.AoeMinEnemies;

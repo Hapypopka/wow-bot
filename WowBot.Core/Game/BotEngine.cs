@@ -203,6 +203,52 @@ public class BotEngine : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// AoE Avoidance: если получаем периодический урон от AoE → отбежать на 8 ярдов.
+    /// Читает WB_AOE_HIT (spell ID) и WB_AOE_TIME из Lua.
+    /// </summary>
+    private int _aoeTick;
+    private float _lastAoeX, _lastAoeY;
+    private bool TryAoEAvoidance(Entities.WowPlayer player)
+    {
+        _aoeTick++;
+        if (_aoeTick < 5) return false; // каждые ~750мс
+        _aoeTick = 0;
+
+        try
+        {
+            var result = _hook.ExecuteLuaWithResult("WB_R=tostring(WB_AOE_HIT or 0)..','..tostring(WB_AOE_TIME or 0)");
+            if (result == null) return false;
+
+            var parts = result.Split(',');
+            if (parts.Length < 2) return false;
+
+            int spellId = 0;
+            double aoeTime = 0;
+            int.TryParse(parts[0], out spellId);
+            double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out aoeTime);
+
+            if (spellId == 0) return false;
+
+            // Отбегаем на 8 ярдов в случайном направлении от текущей позиции
+            // Но не туда же куда прошлый раз
+            float angle = MathF.Atan2(player.Y - _lastAoeY, player.X - _lastAoeX);
+            if (MathF.Abs(player.X - _lastAoeX) < 1f && MathF.Abs(player.Y - _lastAoeY) < 1f)
+                angle = player.Facing + MathF.PI; // назад от facing если первый раз
+
+            float fleeX = player.X + 8f * MathF.Cos(angle);
+            float fleeY = player.Y + 8f * MathF.Sin(angle);
+
+            _lastAoeX = player.X;
+            _lastAoeY = player.Y;
+
+            _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
+            Logger.Info($"AoE Avoidance: flee from spell {spellId} → ({fleeX:F0},{fleeY:F0})");
+            return true;
+        }
+        catch { return false; }
+    }
+
     public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
     public string SelectedAura { get; set; } = "AuRet";
@@ -294,8 +340,10 @@ public class BotEngine : IDisposable
 
     public bool MoveBehindEnabled { get; set; }
 
-    public bool IsTankSpec => _specName is "Prot Warrior" or "Prot Paladin" or "Blood DK" ||
-        (PlayerClass == "DRUID" && _specName == "Feral Druid");
+    public bool AoeAvoidEnabled { get; set; } = true;
+
+    public bool IsTankSpec => _specName is "Prot Warrior" or "Prot Paladin" or "Blood DK";
+    // Feral Druid: танк только в Bear Form — определяется через IsTankUnit (бафф Bear Form)
 
     public bool IsMeleeSpec => PlayerClass is "WARRIOR" or "ROGUE" or "DEATHKNIGHT" ||
         (PlayerClass == "PALADIN" && _specName != "Holy Paladin") ||
@@ -897,9 +945,26 @@ public class BotEngine : IDisposable
             bool playerInCombat = player.InCombat;
             if (_autoSelectTarget && playerInCombat && (!hasTarget || targetTooFar))
             {
-                _hook.ExecuteLua("TargetNearestEnemy()", 200);
+                // Приоритет: ассист танка → ближайший враг
+                string assistLua = @"
+                    local function DoAssist()
+                        local nr=GetNumRaidMembers()
+                        if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) then
+                            for j=1,40 do local _,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,j) if not id then break end
+                            if id==48263 or id==25780 or id==5487 or id==9634 then AssistUnit(u) return end end
+                        end end
+                        else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) then
+                            for j=1,40 do local _,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,j) if not id then break end
+                            if id==48263 or id==25780 or id==5487 or id==9634 then AssistUnit(u) return end end
+                        end end end
+                        TargetNearestEnemy()
+                    end DoAssist()";
+                _hook.ExecuteLua(assistLua, 200);
                 return;
             }
+
+            // AoE Avoidance: если стоим в луже → отбежать (приоритет над всем)
+            if (AoeAvoidEnabled && playerInCombat && TryAoEAvoidance(player)) return;
 
             // === ТОЛЬКО ROTATION ===
             bool targetInCombat = hasTarget && target!.InCombat;

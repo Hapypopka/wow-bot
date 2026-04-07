@@ -1087,6 +1087,13 @@ public partial class OverlayWindow : Window
             _spellToggles["MultiShot"] = AddSpellIcon(wrap, "multishot.jpg", "Град стрел (по порогу врагов)", _spellToggles.TryGetValue("MultiShot", out var msBtn) ? msBtn.IsChecked == true : GetSavedBool("spell_MultiShot", true));
             SubContent.Children.Add(wrap);
         }
+        else if (specKey == "Feral Druid")
+        {
+            AddLabel("AoE");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            _spellToggles["SwipeCat"] = AddSpellIcon(wrap, "swipe_bear.jpg", "Размах кот (по порогу врагов)", _spellToggles.TryGetValue("SwipeCat", out var scBtn) ? scBtn.IsChecked == true : GetSavedBool("spell_SwipeCat", true));
+            SubContent.Children.Add(wrap);
+        }
     }
 
     private void BuildBuffsSubmenu()
@@ -1452,6 +1459,8 @@ public partial class OverlayWindow : Window
     }
 
     private CheckBox _chkMoveBehind = null!;
+    private CheckBox _chkAoeAvoid = null!;
+    public bool AoeAvoidEnabled => _chkAoeAvoid?.IsChecked == true;
     public bool MoveBehindEnabled => _chkMoveBehind?.IsChecked == true;
 
     private void BuildTargetSubmenu()
@@ -1472,6 +1481,7 @@ public partial class OverlayWindow : Window
             if (_chkAutoFace != null && _chkAutoFace.IsChecked != true)
                 _chkAutoFace.IsChecked = true;
         };
+        _chkAoeAvoid = AddCheckBox("Уклонение от AoE (лужи)", _chkAoeAvoid?.IsChecked ?? GetSavedBool("chk_aoeAvoid", true));
         _sliderMaxRange = AddSlider("Макс. дальность", _sliderMaxRange?.Value ?? GetSavedDouble("slider_maxRange", 30), 10, 45, 5);
     }
 
@@ -1957,6 +1967,10 @@ public partial class OverlayWindow : Window
             if (!_spellToggles.ContainsKey("Trapper"))
                 _spellToggles["Trapper"] = new ToggleButton { IsChecked = GetSavedBool("spell_Trapper", false) };
         }
+        if (specKey == "Feral Druid" && !_spellToggles.ContainsKey("SwipeCat"))
+        {
+            _spellToggles["SwipeCat"] = new ToggleButton { IsChecked = GetSavedBool("spell_SwipeCat", true) };
+        }
 
         // Pre-create buff toggles from ClassBuffs
         if (!ClassBuffs.TryGetValue(playerClass, out var buffs)) return;
@@ -2118,6 +2132,7 @@ public partial class OverlayWindow : Window
             data["chk_autoFace"] = _chkAutoFace != null ? _chkAutoFace.IsChecked == true : GetSavedBool("chk_autoFace", true);
             data["chk_autoTarget"] = _chkAutoTarget != null ? _chkAutoTarget.IsChecked == true : GetSavedBool("chk_autoTarget", true);
             data["chk_moveBehind"] = _chkMoveBehind != null ? _chkMoveBehind.IsChecked == true : GetSavedBool("chk_moveBehind", true);
+            data["chk_aoeAvoid"] = _chkAoeAvoid != null ? _chkAoeAvoid.IsChecked == true : GetSavedBool("chk_aoeAvoid", true);
             if (_chkMultiDot != null) data["chk_multiDot"] = _chkMultiDot.IsChecked == true;
             else if (_saved.ContainsKey("chk_multiDot")) data["chk_multiDot"] = GetSavedBool("chk_multiDot", true);
             if (_chkMindSear != null) data["chk_mindSear"] = _chkMindSear.IsChecked == true;
