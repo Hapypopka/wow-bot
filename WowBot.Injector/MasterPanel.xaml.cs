@@ -328,19 +328,35 @@ public partial class MasterPanel : Window
                 MaxWidth = 70,
             });
 
-            // → За кем
-            string followLabel = string.IsNullOrEmpty(slave.FollowTargetName) ? "М" : slave.FollowTargetName;
-            bool isCustomFollow = !string.IsNullOrEmpty(slave.FollowTargetName);
-            namePanel.Children.Add(new TextBlock
+            // → За кем / 📍 к точке
+            bool isGoto = slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Goto;
+            if (isGoto)
             {
-                Text = $"→{followLabel}",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isCustomFollow ? "#6688cc" : "#4a6741")),
-                FontSize = 8,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(2, 0, 0, 0),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxWidth = 50,
-            });
+                namePanel.Children.Add(new TextBlock
+                {
+                    Text = "📍",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e8c840")),
+                    FontSize = 10,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(2, 0, 0, 0),
+                    ToolTip = "Бежит к точке (Ctrl+ПКМ)",
+                });
+            }
+            else
+            {
+                string followLabel = string.IsNullOrEmpty(slave.FollowTargetName) ? "М" : slave.FollowTargetName;
+                bool isCustomFollow = !string.IsNullOrEmpty(slave.FollowTargetName);
+                namePanel.Children.Add(new TextBlock
+                {
+                    Text = $"→{followLabel}",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isCustomFollow ? "#6688cc" : "#4a6741")),
+                    FontSize = 8,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(2, 0, 0, 0),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxWidth = 50,
+                });
+            }
 
             Grid.SetColumn(namePanel, 1);
             row.Children.Add(namePanel);

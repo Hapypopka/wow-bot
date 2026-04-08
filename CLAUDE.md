@@ -142,13 +142,11 @@ publish\WowBot.Injector.exe
 - `EndSceneHook.cs` — хук D3D9, НЕ трогать без крайней необходимости
 
 ## Известные проблемы
-- CTM холодный старт: PostMessage warmup работает но не идеально (иногда чуть убегает)
 - Break-CC: расовые не срабатывают — UnitRace на WoWCircle возвращает неизвестное значение (TODO)
-- CTM: на последних метрах может слегка дёргаться
 - Instants на бегу без поворота к таргету (по дизайну)
 - У брата другой ПК — EndScene автоскан нашёл ложные кандидаты
 - AutoPve (босс-тактики) — код есть, но не проверен в рейде (нужны логи)
-- Таймеры `System.Threading.Timer` умирают от GC — критичное в антиафк через Tick()
+- AoE: лужи без DynObject (некоторые боссы/треш) не детектятся — нужен fallback
 
 ## NPCBots Reference
 Репа: `/c/Проекты/npcbots/` — TrinityCore 3.3.5a с NPCBots (C++)
@@ -178,7 +176,11 @@ publish\WowBot.Injector.exe
 - [x] **Ground AoE** — Гроза (друид), Семя порчи (варлок) через TerrainClick/спам
 - [x] **Бурсты** — отдельная секция в UI, per-spec, по дефолту OFF
 - [x] **IsMounted()** — не кастует на коне
-- [x] **CTM warmup** — PostMessage правый клик при аттаче (фикс холодного старта)
+- [x] **Нативный CTM** — CGPlayer_C__ClickToMove (0x727400) через EndScene хук, без cold start
+- [x] **Нативный FaceTarget** — clickType=1 с GUID, сервер синхронизирован (убран TurnLeft хак)
+- [x] **AoE Avoidance** — дебаф-детекция + DynObject, SafeAoeDebuffs (Осквернение ДК)
+- [x] **ACK система** — seq numbers, retry 500мс, гарантированная доставка команд
+- [x] **CommandSource/FollowTarget** — разделение: мастер командует, follow target отдельно
 - [x] **Позиционирование** — MoveBehind (мили за спину), RangedPos (ранж сбоку)
 - [x] **Break-CC** — автоснятие контроля (расовые + классовые + тринкет), 50+ CC spell ID
 - [x] **Пет варлока** — радио-выбор, авто-призыв, dismiss+resummon при смене

@@ -13,7 +13,7 @@ public class SlaveController
     private readonly ObjectManager _objectManager;
     private readonly ClickToMove _ctm;
 
-    public enum State { Idle, Following, Attacking, Stopped }
+    public enum State { Idle, Following, Attacking, Stopped, GoingToPoint }
     public State CurrentState { get; private set; } = State.Idle;
 
     /// <summary>Кто командует (мастер) — для AssistUnit, не меняется при смене follow target</summary>
@@ -26,6 +26,12 @@ public class SlaveController
 
     private ulong _followTargetGuid;
     private int _stopTimer;
+
+    // GoingToPoint state
+    private float _gotoX, _gotoY, _gotoZ;
+    private bool _gotoArrived;
+    /// <summary>true когда слейв добежал до точки Goto</summary>
+    public bool GotoArrived => _gotoArrived;
 
     public SlaveController(Navigation nav, EndSceneHook hook, ObjectManager objectManager, ClickToMove ctm)
     {
@@ -98,8 +104,21 @@ public class SlaveController
         // НЕ вызываем ClearAction — иначе отменим свой же CTM-стоп
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 100);
         CurrentState = State.Stopped;
+        _gotoArrived = false;
         _stopTimer = 20; // 3 сек → Idle
         Logger.Info("SlaveCtrl: Stopped");
+    }
+
+    /// <summary>Бежать к точке (Ctrl+ПКМ). Сбрасывает follow.</summary>
+    public void CmdGotoPoint(float x, float y, float z)
+    {
+        _gotoX = x;
+        _gotoY = y;
+        _gotoZ = z;
+        _gotoArrived = false;
+        CurrentState = State.GoingToPoint;
+        _ctm.MoveTo(x, y, z, 1f);
+        Logger.Info($"SlaveCtrl: GoingToPoint ({x:F1}, {y:F1}, {z:F1})");
     }
 
     // === Tick ===
@@ -116,6 +135,10 @@ public class SlaveController
 
             case State.Following:
                 TickFollowing(player);
+                break;
+
+            case State.GoingToPoint:
+                TickGoingToPoint(player);
                 break;
 
             case State.Stopped:
@@ -170,6 +193,19 @@ public class SlaveController
         _lastCtmX = master.X;
         _lastCtmY = master.Y;
         _isFollowMoving = true;
+    }
+
+    private void TickGoingToPoint(WowPlayer player)
+    {
+        if (_gotoArrived) return;
+
+        // CTM сам остановит персонажа — просто ждём когда action станет idle
+        bool ctmIdle = _ctm.GetCurrentAction() == 0;
+        if (ctmIdle)
+        {
+            _gotoArrived = true;
+            Logger.Info($"SlaveCtrl: arrived at point ({_gotoX:F1}, {_gotoY:F1}, {_gotoZ:F1})");
+        }
     }
 
     // === Поиск мастера ===

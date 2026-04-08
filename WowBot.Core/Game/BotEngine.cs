@@ -830,8 +830,9 @@ public class BotEngine : IDisposable
             // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
             {
-                // Follow к мастеру если есть команда follow/auto (и follow не на паузе)
+                // Follow к мастеру / к точке если есть команда follow/auto/goto (и follow не на паузе)
                 bool healerFollow = Hivemind.Mode == Hivemind.SlaveMode.Following ||
+                    Hivemind.Mode == Hivemind.SlaveMode.GoingToPoint ||
                     (Hivemind.Mode == Hivemind.SlaveMode.Auto && !Hivemind.AutoPauseFollow);
                 if (healerFollow)
                 {
@@ -883,6 +884,30 @@ public class BotEngine : IDisposable
                             {
                                 if (TryGroundAoE(player, fTarget!)) { }
                                 else if (_autoFace && !_navigation.FaceInstant(player, fTarget!)) { /* поворачиваемся */ }
+                                else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
+                            }
+                        }
+                        break;
+
+                    case Hivemind.SlaveMode.GoingToPoint:
+                        // К точке — SlaveCtrl рулит движением, логика 1:1 как Follow
+                        SlaveCtrl.Tick();
+                        var gpTarget = _objectManager.GetTarget();
+                        bool gpHasTarget = gpTarget != null && gpTarget.IsAlive && gpTarget.Type != WowObjectType.Player && gpTarget.InCombat;
+                        bool gpStanding = _navigation.IsPlayerStanding(player);
+                        if (!gpStanding)
+                        {
+                            // Бежим к точке — только instants, без поворота
+                            if (gpHasTarget)
+                                _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+                        }
+                        else
+                        {
+                            // Добежали — поворот + полная ротация (1:1 как Following)
+                            if (gpHasTarget)
+                            {
+                                if (TryGroundAoE(player, gpTarget!)) { }
+                                else if (_autoFace && !_navigation.FaceInstant(player, gpTarget!)) { /* поворачиваемся */ }
                                 else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
                             }
                         }

@@ -41,7 +41,7 @@ public class Hivemind
     public void NotifySlavesChanged() => OnSlavesChanged?.Invoke();
 
     /// <summary>Режим слейва — каждая команда = полный переход</summary>
-    public enum SlaveMode { Idle, Following, Attacking, Auto }
+    public enum SlaveMode { Idle, Following, Attacking, Auto, GoingToPoint }
 
     private Role _currentRole = Role.None;
     public Role CurrentRole
@@ -965,15 +965,19 @@ WB_HIVE_REG_TIME = 0
                 break;
 
             case Command.Goto:
-                // Направить слейва в точку — парсим координаты
+                // Направить слейва в точку — сбрасываем всё, бежим к точке
                 var coords = cleanArg.Split(';');
                 if (coords.Length == 3 &&
                     float.TryParse(coords[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gx) &&
                     float.TryParse(coords[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gy) &&
                     float.TryParse(coords[2], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gz))
                 {
-                    Mode = SlaveMode.Following; // чтобы хилер тоже двигался
-                    _ctm.MoveTo(gx, gy, gz, 1f);
+                    Mode = SlaveMode.GoingToPoint;
+                    if (_botEngine != null) _botEngine.HivemindFollowing = false;
+                    _botEngine?.SlaveCtrl.CmdStop(); // сбросить follow
+                    _botEngine?.SlaveCtrl.CmdGotoPoint(gx, gy, gz);
+                    OnAutoToggle?.Invoke("rotation", true);
+                    OnAutoToggle?.Invoke("buffs", true);
                     Logger.Info($"Hivemind: SLAVE goto ({gx:F1}, {gy:F1}, {gz:F1})");
                 }
                 break;
