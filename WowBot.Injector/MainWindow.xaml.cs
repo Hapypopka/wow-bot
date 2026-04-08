@@ -507,6 +507,13 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
             _botEngine.LoadRotation(instantScript, fullScript);
 
+            // Навигация: пробуем подключиться к NavServer
+            Task.Run(() =>
+            {
+                bool navOk = _botEngine.ConnectNavServer();
+                Dispatcher.Invoke(() => WowBot.Core.Logger.Info($"NavServer: {(navOk ? "connected" : "not available (fallback to direct CTM)")}"));
+            });
+
             // Cleanup: убиваем старый Lua AoE handler если остался от прошлой сессии
             try { _endSceneHook.ExecuteLua("if WB_AOE_FRAME then WB_AOE_FRAME:UnregisterAllEvents() WB_AOE_FRAME=nil end WB_AOE_FLEE=nil WB_AOE_HIT=nil WB_AOE_CD=nil StrafeRightStop()", 100); } catch { }
             _botEngine.OnStatusChanged += status =>

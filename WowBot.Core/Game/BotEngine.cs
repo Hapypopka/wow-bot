@@ -367,6 +367,8 @@ public class BotEngine : IDisposable
     private Hivemind.Command? _lastHiveCmd;
     // _slaveListenerInstalled хранится в Hivemind
 
+    public WowBot.Core.Navigation.NavEngine? NavEngine { get; private set; }
+
     public BotEngine(EndSceneHook hook, ObjectManager objectManager, Navigation navigation, ClickToMove ctm)
     {
         _hook = hook;
@@ -378,6 +380,16 @@ public class BotEngine : IDisposable
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
         _combatPositioning = new CombatPositioning(ctm);
+
+        // Навигация через навмеш (опционально)
+        NavEngine = new WowBot.Core.Navigation.NavEngine(ctm, objectManager);
+        SlaveCtrl.NavEngine = NavEngine;
+    }
+
+    /// <summary>Подключиться к NavServer (вызывать из UI)</summary>
+    public bool ConnectNavServer(string ip = "127.0.0.1", int port = 47110)
+    {
+        return NavEngine?.Connect(ip, port) ?? false;
     }
 
     private readonly CombatPositioning _combatPositioning;

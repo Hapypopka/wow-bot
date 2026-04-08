@@ -1,4 +1,5 @@
 using WowBot.Core.Game.Entities;
+using WowBot.Core.Navigation;
 
 namespace WowBot.Core.Game;
 
@@ -12,6 +13,9 @@ public class SlaveController
     private readonly EndSceneHook _hook;
     private readonly ObjectManager _objectManager;
     private readonly ClickToMove _ctm;
+
+    /// <summary>NavEngine — навигация через навмеш (опционально)</summary>
+    public WowBot.Core.Navigation.NavEngine? NavEngine { get; set; }
 
     public enum State { Idle, Following, Attacking, Stopped, GoingToPoint }
     public State CurrentState { get; private set; } = State.Idle;
@@ -117,8 +121,18 @@ public class SlaveController
         _gotoZ = z;
         _gotoArrived = false;
         CurrentState = State.GoingToPoint;
-        _ctm.MoveTo(x, y, z, 1f);
-        Logger.Info($"SlaveCtrl: GoingToPoint ({x:F1}, {y:F1}, {z:F1})");
+
+        // Навмеш: если подключён — строим путь
+        if (NavEngine != null && NavEngine.IsConnected)
+        {
+            NavEngine.NavigateTo(x, y, z);
+            Logger.Info($"SlaveCtrl: GoingToPoint NAV ({x:F1}, {y:F1}, {z:F1})");
+        }
+        else
+        {
+            _ctm.MoveTo(x, y, z, 1f);
+            Logger.Info($"SlaveCtrl: GoingToPoint CTM ({x:F1}, {y:F1}, {z:F1})");
+        }
     }
 
     // === Tick ===
@@ -166,18 +180,15 @@ public class SlaveController
 
         if (dist <= FollowDistance)
         {
-            if (_isFollowMoving) { _ctm.Stop(); _isFollowMoving = false; Logger.Info($"SlaveCtrl: arrived (dist={dist:F1})"); }
+            if (_isFollowMoving)
+            {
+                _ctm.Stop();
+                NavEngine?.Stop();
+                _isFollowMoving = false;
+                Logger.Info($"SlaveCtrl: arrived (dist={dist:F1})");
+            }
             return;
         }
-
-        // Не спамим CTM если мастер стоит и CTM ещё бежит
-        float dx = master.X - _lastCtmX;
-        float dy = master.Y - _lastCtmY;
-        float masterMoved = MathF.Sqrt(dx * dx + dy * dy);
-        bool ctmIdle = _ctm.GetCurrentAction() == 0;
-
-        if (_isFollowMoving && masterMoved < 3f && !ctmIdle)
-            return;
 
         // Точка на земле в FollowDistance от мастера, в сторону игрока
         float dirX = player.X - master.X;
@@ -189,6 +200,43 @@ public class SlaveController
         float goalX = master.X + dirX * FollowDistance;
         float goalY = master.Y + dirY * FollowDistance;
 
+        // Навмеш: если подключён — строим путь в обход стен
+        if (NavEngine != null && NavEngine.IsConnected)
+        {
+            // Не спамим NavEngine если уже идём и мастер не сильно сдвинулся
+            float dx = master.X - _lastCtmX;
+            float dy = master.Y - _lastCtmY;
+            float masterMoved = MathF.Sqrt(dx * dx + dy * dy);
+
+            if (_isFollowMoving && NavEngine.IsNavigating && masterMoved < 5f)
+            {
+                NavEngine.Tick();
+                return;
+            }
+
+            // Построить новый путь
+            bool navOk = NavEngine.NavigateTo(goalX, goalY, master.Z);
+            Logger.Info($"SlaveCtrl: NAV follow dist={dist:F1} navOk={navOk} wp={NavEngine.WaypointsRemaining}");
+            if (navOk)
+            {
+                _lastCtmX = master.X;
+                _lastCtmY = master.Y;
+                _isFollowMoving = true;
+                return;
+            }
+            // Навмеш не нашёл путь — fallback на прямой CTM ниже
+            Logger.Info($"SlaveCtrl: NAV failed, fallback to CTM");
+        }
+
+        // Fallback: прямой CTM (как раньше)
+        float mdx = master.X - _lastCtmX;
+        float mdy = master.Y - _lastCtmY;
+        float masterMoved2 = MathF.Sqrt(mdx * mdx + mdy * mdy);
+        bool ctmIdle = _ctm.GetCurrentAction() == 0;
+
+        if (_isFollowMoving && masterMoved2 < 3f && !ctmIdle)
+            return;
+
         _ctm.MoveTo(goalX, goalY, master.Z, 0.5f);
         _lastCtmX = master.X;
         _lastCtmY = master.Y;
@@ -199,12 +247,24 @@ public class SlaveController
     {
         if (_gotoArrived) return;
 
-        // CTM сам остановит персонажа — просто ждём когда action станет idle
+        // Навмеш: если навигация активна — тикаем её
+        if (NavEngine != null && NavEngine.IsNavigating)
+        {
+            NavEngine.Tick();
+            if (!NavEngine.IsNavigating)
+            {
+                _gotoArrived = true;
+                Logger.Info($"SlaveCtrl: arrived at point NAV ({_gotoX:F1}, {_gotoY:F1}, {_gotoZ:F1})");
+            }
+            return;
+        }
+
+        // Fallback: CTM сам остановит персонажа
         bool ctmIdle = _ctm.GetCurrentAction() == 0;
         if (ctmIdle)
         {
             _gotoArrived = true;
-            Logger.Info($"SlaveCtrl: arrived at point ({_gotoX:F1}, {_gotoY:F1}, {_gotoZ:F1})");
+            Logger.Info($"SlaveCtrl: arrived at point CTM ({_gotoX:F1}, {_gotoY:F1}, {_gotoZ:F1})");
         }
     }
 
