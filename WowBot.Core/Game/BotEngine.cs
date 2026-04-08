@@ -118,7 +118,7 @@ public class BotEngine : IDisposable
         if (nearTarget < AoeMinEnemies) return false;
 
         bool hurricaneEnabled = IsSpellEnabled("Hurricane");
-        Logger.Info($"GroundAoE: class={PlayerClass} spec={_specName} Hurricane={hurricaneEnabled} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 100))}\"");
+        Logger.Log(LogCat.AoE, $"GroundAoE: class={PlayerClass} spec={_specName} Hurricane={hurricaneEnabled} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 100))}\"");
 
         // Определяем AoE спелл по классу
         string? aoeSpell = PlayerClass switch
@@ -128,7 +128,7 @@ public class BotEngine : IDisposable
             _ => null
         };
 
-        if (aoeSpell == null) { Logger.Info($"GroundAoE: skip — no spell for class={PlayerClass} spec={_specName}"); return false; }
+        if (aoeSpell == null) { Logger.Log(LogCat.AoE, $"GroundAoE: skip — no spell for class={PlayerClass} spec={_specName}"); return false; }
 
         // Каст спелла → terrain click на позицию таргета
         if (aoeSpell == "WB_VOLLEY")
@@ -137,7 +137,7 @@ public class BotEngine : IDisposable
             _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
         System.Threading.Thread.Sleep(100);
         bool ok = _hook.CastTerrainClick(target.X, target.Y, target.Z);
-        Logger.Info($"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok={ok}");
+        Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok={ok}");
         return ok;
     }
 
@@ -213,56 +213,73 @@ public class BotEngine : IDisposable
 
             string lua = $"TargetUnit('{mobName}') local n=GetSpellInfo({tauntId}) if n then CastSpellByName(n) end";
             _hook.ExecuteLua(lua, 300);
-            Logger.Info($"SmartTaunt: {mobName} → {tauntId}");
+            Logger.Log(LogCat.Tank, $"SmartTaunt: {mobName} → {tauntId}");
             return true;
         }
         return false;
     }
 
     /// <summary>
-    /// AoE Avoidance: если получаем периодический урон от AoE → отбежать на 8 ярдов.
-    /// Читает WB_AOE_HIT (spell ID) и WB_AOE_TIME из Lua.
+    /// AoE Avoidance через DynObject (вдохновлено AmeisenBotX CombatMovementLeaf).
+    /// Сканирует DynObjects из ObjectManager — находит вражеские AoE зоны.
+    /// Если стоим в AoE → бежим в противоположную сторону от центра AoE.
     /// </summary>
     private int _aoeTick;
-    private float _lastAoeX, _lastAoeY;
     private bool TryAoEAvoidance(Entities.WowPlayer player)
     {
         _aoeTick++;
-        if (_aoeTick < 5) return false; // каждые ~750мс
+        if (_aoeTick < 3) return false; // каждые ~450мс
         _aoeTick = 0;
 
-        try
+        // Собираем GUID союзников
+        var friendlyGuids = new HashSet<ulong>();
+        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
+        foreach (var p in _objectManager.Players)
+            friendlyGuids.Add(p.Guid);
+
+        // Ищем враждебные DynObject рядом с игроком
+        float sumX = 0, sumY = 0;
+        int count = 0;
+
+        foreach (var dyn in _objectManager.DynObjects)
         {
-            var result = _hook.ExecuteLuaWithResult("WB_R=tostring(WB_AOE_HIT or 0)..','..tostring(WB_AOE_TIME or 0)");
-            if (result == null) return false;
+            // Пропускаем дружественные (наши) AoE
+            if (friendlyGuids.Contains(dyn.Caster)) continue;
 
-            var parts = result.Split(',');
-            if (parts.Length < 2) return false;
+            // Проверяем: стоим ли внутри AoE (distance < radius + 2)
+            float dx = player.X - dyn.X;
+            float dy = player.Y - dyn.Y;
+            float dist = MathF.Sqrt(dx * dx + dy * dy);
 
-            int spellId = 0;
-            double aoeTime = 0;
-            int.TryParse(parts[0], out spellId);
-            double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out aoeTime);
-
-            if (spellId == 0) return false;
-
-            // Отбегаем на 8 ярдов в случайном направлении от текущей позиции
-            // Но не туда же куда прошлый раз
-            float angle = MathF.Atan2(player.Y - _lastAoeY, player.X - _lastAoeX);
-            if (MathF.Abs(player.X - _lastAoeX) < 1f && MathF.Abs(player.Y - _lastAoeY) < 1f)
-                angle = player.Facing + MathF.PI; // назад от facing если первый раз
-
-            float fleeX = player.X + 8f * MathF.Cos(angle);
-            float fleeY = player.Y + 8f * MathF.Sin(angle);
-
-            _lastAoeX = player.X;
-            _lastAoeY = player.Y;
-
-            _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
-            Logger.Info($"AoE Avoidance: flee from spell {spellId} → ({fleeX:F0},{fleeY:F0})");
-            return true;
+            if (dist < dyn.Radius + 2f)
+            {
+                sumX += dyn.X;
+                sumY += dyn.Y;
+                count++;
+            }
         }
-        catch { return false; }
+
+        if (count == 0) return false;
+
+        // Бежим ОТ ЦЕНТРА лужи на radius + 5 ярдов
+        float meanX = sumX / count;
+        float meanY = sumY / count;
+        float escapeAngle = MathF.Atan2(player.Y - meanY, player.X - meanX);
+        float maxRadius = 0;
+        foreach (var dyn in _objectManager.DynObjects) { if (dyn.Radius > maxRadius && !friendlyGuids.Contains(dyn.Caster)) maxRadius = dyn.Radius; }
+        float escapeDist = maxRadius + 5f; // от центра лужи до точки побега
+        float fleeX = meanX + escapeDist * MathF.Cos(escapeAngle);
+        float fleeY = meanY + escapeDist * MathF.Sin(escapeAngle);
+
+        _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
+        // Дамп всех DynObj для дебага оффсетов
+        foreach (var dyn in _objectManager.DynObjects)
+        {
+            if (friendlyGuids.Contains(dyn.Caster)) continue;
+            Logger.Log(LogCat.AoE, $"DynObj: spell={dyn.SpellId} radius={dyn.Radius:F2} pos=({dyn.X:F0},{dyn.Y:F0},{dyn.Z:F0}) caster=0x{dyn.Caster:X} RAW={dyn.RawDump}");
+        }
+        Logger.Log(LogCat.AoE, $"AoE Avoidance: {count} DynObj, maxR={maxRadius:F1} flee=({fleeX:F0},{fleeY:F0}) escapeDist={escapeDist:F1}");
+        return true;
     }
 
     public string SelectedSeal { get; set; } = "";
@@ -494,7 +511,7 @@ public class BotEngine : IDisposable
         float goalX = target.X + dirX * stopDistance;
         float goalY = target.Y + dirY * stopDistance;
 
-        Logger.Info($"FollowCTM: dist={dist:F1} stop={stopDistance:F1} player=({player.X:F1},{player.Y:F1}) target=({target.X:F1},{target.Y:F1}) goal=({goalX:F1},{goalY:F1}) ctmIdle={ctmIdle} tgtMoved={targetMoved:F1}");
+        Logger.Log(LogCat.Follow, $"FollowCTM: dist={dist:F1} stop={stopDistance:F1} player=({player.X:F1},{player.Y:F1}) target=({target.X:F1},{target.Y:F1}) goal=({goalX:F1},{goalY:F1}) ctmIdle={ctmIdle} tgtMoved={targetMoved:F1}");
         _ctm.MoveTo(goalX, goalY, target.Z, 0.5f);
         _lastCtmX = target.X;
         _lastCtmY = target.Y;
@@ -652,6 +669,10 @@ public class BotEngine : IDisposable
                 return;
             }
 
+            // AoE Avoidance: ПРИОРИТЕТ НАД ВСЕМ — выбежать из лужи
+            if (_aoeTick == 0 && _objectManager.DynObjects.Count > 0) Logger.Log(LogCat.AoE, $"DynObjects: {_objectManager.DynObjects.Count}");
+            if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
+
             // Глобальный декремент кулдаунов
             if (_blessingCooldown > 0) _blessingCooldown--;
 
@@ -675,7 +696,7 @@ public class BotEngine : IDisposable
                     {
                         System.Threading.Thread.Sleep(300);
                         _hiveMacroAddr = FindHiveMacroAddr();
-                        Logger.Info($"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
+                        Logger.Log(LogCat.Hivemind, $"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
                     }
                 }
 
@@ -688,7 +709,7 @@ public class BotEngine : IDisposable
                     // Команды мастера (для слейвов)
                     string checkLua = Hivemind.GetSlaveReadScript();
                     string? response = _hook.ExecuteLuaWithResult(checkLua);
-                    if (_logTick == 0) Logger.Info($"Hivemind: raw response=[{response ?? "NULL"}]");
+                    if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
                     if (response != null)
                     {
                         var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
@@ -704,12 +725,12 @@ public class BotEngine : IDisposable
                                 !string.IsNullOrEmpty(sender) &&
                                 sender != Hivemind.MasterName)
                             {
-                                if (_logTick == 0) Logger.Info($"Hivemind: IGNORED {cmd} from {sender} (my master={Hivemind.MasterName})");
+                                if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: IGNORED {cmd} from {sender} (my master={Hivemind.MasterName})");
                                 // не выполняем
                             }
                             else
                             {
-                                Logger.Info($"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
+                                Logger.Log(LogCat.Hivemind, $"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
                                 Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
                             }
                         }
@@ -912,7 +933,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} NCE={CountNearbyCombatEnemies(_objectManager.LocalPlayer!)} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} NCE={CountNearbyCombatEnemies(_objectManager.LocalPlayer!)} dyn={_objectManager.DynObjects.Count} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); }
 
             // === БАФФЫ ===
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
@@ -926,7 +947,7 @@ public class BotEngine : IDisposable
                     string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
                     if (!string.IsNullOrEmpty(buffScript))
                     {
-                        if (fullBuffCheck) Logger.Info($"ExecBuffs: len={buffScript.Length} seal={SelectedSeal} aura={SelectedAura} bless={SelectedBlessing} script={buffScript.Substring(0, Math.Min(buffScript.Length, 500))}");
+                        if (fullBuffCheck) Logger.Log(LogCat.Buffs, $"ExecBuffs: len={buffScript.Length} seal={SelectedSeal} aura={SelectedAura} bless={SelectedBlessing} script={buffScript.Substring(0, Math.Min(buffScript.Length, 500))}");
                         _hook.ExecuteLua(buffScript, 500);
                         if (fullBuffCheck) _blessingCooldown = 40;
                         // Хилеры: не прерываем — должны хилить после баффов
@@ -939,7 +960,7 @@ public class BotEngine : IDisposable
 
 
             if (!_followEnabled && !_rotationEnabled && !HivemindFollowing) return;
-            Logger.Info($"Tick: follow={_followEnabled} rot={_rotationEnabled} hiveFollow={HivemindFollowing}");
+            if (_logTick == 0) Logger.Log(LogCat.Follow, $"Tick: follow={_followEnabled} rot={_rotationEnabled} hiveFollow={HivemindFollowing}");
 
             var target = _objectManager.GetTarget();
             bool hasTarget = target != null && target.IsAlive;
@@ -978,9 +999,6 @@ public class BotEngine : IDisposable
                 _hook.ExecuteLua(assistLua, 200);
                 return;
             }
-
-            // AoE Avoidance: если стоим в луже → отбежать (приоритет над всем)
-            if (AoeAvoidEnabled && playerInCombat && TryAoEAvoidance(player)) return;
 
             // === ТОЛЬКО ROTATION ===
             bool targetInCombat = hasTarget && target!.InCombat;
@@ -1041,7 +1059,7 @@ public class BotEngine : IDisposable
                         else
                         {
                             string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
-                            if (_logTick == 0) Logger.Info($"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
+                            if (_logTick == 0) Logger.Log(LogCat.Rotation, $"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
                             _hook.ExecuteLua(script, 500);
                         }
                     }

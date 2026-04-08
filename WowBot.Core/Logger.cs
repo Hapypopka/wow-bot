@@ -1,6 +1,33 @@
-using System.Text;
+using System.Collections.Concurrent;
 
 namespace WowBot.Core;
+
+/// <summary>
+/// Категории логов — можно включать/выключать по отдельности
+/// </summary>
+[Flags]
+public enum LogCat
+{
+    None = 0,
+    General = 1 << 0,     // общие (аттач, хук, скрипты)
+    Rotation = 1 << 1,    // ротация (ExecRotation)
+    Heal = 1 << 2,        // хилер логика
+    Tank = 1 << 3,        // танк логика (taunt, def CD)
+    AoE = 1 << 4,         // AoE avoidance, ground AoE
+    Follow = 1 << 5,      // follow/CTM
+    Hivemind = 1 << 6,    // hivemind команды
+    Buffs = 1 << 7,       // баффы
+    Position = 1 << 8,    // позиционирование (MoveBehind)
+    Combat = 1 << 9,      // бой (SmartTaunt, BreakCC)
+    Lua = 1 << 10,        // Lua консоль
+    Error = 1 << 11,      // ошибки — ВСЕГДА включено
+
+    // Пресеты
+    All = ~0,
+    Default = General | Rotation | Heal | Tank | AoE | Combat | Error,
+    Minimal = General | Error,
+    Debug = All,
+}
 
 public static class Logger
 {
@@ -8,6 +35,14 @@ public static class Logger
         AppDomain.CurrentDomain.BaseDirectory, "wowbot.log");
     private static readonly object Lock = new();
     private static string _charName = "";
+    private static StreamWriter? _writer;
+
+    // Фильтр — какие категории логировать (по дефолту Default)
+    public static LogCat EnabledCategories { get; set; } = LogCat.Default;
+
+    // Ring buffer — последние N логов в памяти (для UI)
+    private static readonly ConcurrentQueue<string> RecentLogs = new();
+    private const int MaxRecentLogs = 200;
 
     public static void SetCharName(string name)
     {
@@ -20,25 +55,66 @@ public static class Logger
     {
         lock (Lock)
         {
-            File.WriteAllText(_logPath, $"=== WowBot Log [{_charName}] — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+            _writer?.Dispose();
+            _writer = new StreamWriter(_logPath, false) { AutoFlush = true };
+            _writer.WriteLine($"=== WowBot Log [{_charName}] — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
         }
     }
 
-    public static void Info(string msg) => Write("INFO", msg);
-    public static void Warn(string msg) => Write("WARN", msg);
-    public static void Error(string msg) => Write("ERR ", msg);
-    public static void Error(string msg, Exception ex) => Write("ERR ", $"{msg}: {ex.Message}");
+    // === Старые методы (совместимость) — категория General ===
+    public static void Info(string msg) => Log(LogCat.General, msg);
+    public static void Warn(string msg) => Log(LogCat.General, msg, "WARN");
+    public static void Error(string msg) => Log(LogCat.Error, msg, "ERR");
+    public static void Error(string msg, Exception ex) => Log(LogCat.Error, $"{msg}: {ex.Message}", "ERR");
 
-    private static void Write(string level, string msg)
+    // === Новые методы с категорией ===
+    public static void Log(LogCat cat, string msg, string level = "INFO")
     {
+        // Error ВСЕГДА логируется
+        if (cat != LogCat.Error && (EnabledCategories & cat) == 0) return;
+
+        var line = $"[{DateTime.Now:HH:mm:ss}] {level} [{cat}] {(string.IsNullOrEmpty(_charName) ? "" : $"[{_charName}] ")}{msg}";
+
         try
         {
-            var prefix = string.IsNullOrEmpty(_charName) ? "" : $"[{_charName}] ";
             lock (Lock)
             {
-                File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss}] {level} {prefix}{msg}\n");
+                if (_writer != null)
+                    _writer.WriteLine(line);
+                else
+                    File.AppendAllText(_logPath, line + "\n");
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Последний шанс — в консоль
+            try { Console.Error.WriteLine($"Logger FAIL: {ex.Message} | {line}"); } catch { }
+        }
+
+        // Ring buffer
+        RecentLogs.Enqueue(line);
+        while (RecentLogs.Count > MaxRecentLogs)
+            RecentLogs.TryDequeue(out _);
+    }
+
+    /// <summary>Получить последние N логов (для UI !log команды)</summary>
+    public static string[] GetRecentLogs(int count = 20)
+    {
+        return RecentLogs.TakeLast(count).ToArray();
+    }
+
+    /// <summary>Получить последние логи по категории</summary>
+    public static string[] GetRecentLogs(LogCat cat, int count = 20)
+    {
+        return RecentLogs.Where(l => l.Contains($"[{cat}]")).TakeLast(count).ToArray();
+    }
+
+    public static void Dispose()
+    {
+        lock (Lock)
+        {
+            _writer?.Dispose();
+            _writer = null;
+        }
     }
 }

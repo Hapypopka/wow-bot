@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using WowBot.Core;
 using WowBot.Core.Game;
 using WowBot.Core.Game.Entities;
 using WowBot.Core.Game.Rotations;
@@ -667,6 +668,40 @@ public partial class MainWindow : Window
                 if (_endSceneHook == null) return null;
                 try
                 {
+                    // !status → полный дамп состояния бота
+                    if (cmd == "!status" && _botEngine != null && _objectManager != null)
+                    {
+                        var lp = _objectManager.LocalPlayer;
+                        if (lp == null) return "No player";
+                        var sb = new System.Text.StringBuilder();
+                        sb.AppendLine($"=== BOT STATUS ===");
+                        sb.AppendLine($"Class={_botEngine.PlayerClass} Spec={_botEngine.SpecName}");
+                        sb.AppendLine($"HP={lp.Health}/{lp.MaxHealth} ({lp.Health*100/lp.MaxHealth}%)");
+                        sb.AppendLine($"Rot={_botEngine.RotationEnabled} Follow={_botEngine.FollowEnabled} Buffs={_botEngine.BuffsEnabled}");
+                        sb.AppendLine($"Healer={_botEngine.IsHealer} Tank={_botEngine.IsTankSpec} Melee={_botEngine.IsMeleeSpec}");
+                        sb.AppendLine($"Units={_objectManager.Units.Count} Players={_objectManager.Players.Count} DynObj={_objectManager.DynObjects.Count}");
+                        sb.AppendLine($"AoeAvoid={_botEngine.AoeAvoidEnabled} MoveBehind={_botEngine.MoveBehindEnabled}");
+                        var t = _objectManager.GetTarget();
+                        sb.AppendLine($"Target={t?.Name ?? "none"} HP={t?.Health ?? 0}/{t?.MaxHealth ?? 0}");
+                        return sb.ToString();
+                    }
+                    // !log [категория] → последние логи из ring buffer
+                    if (cmd.StartsWith("!log"))
+                    {
+                        var parts = cmd.Split(' ', 2);
+                        if (parts.Length > 1 && Enum.TryParse<LogCat>(parts[1], true, out var cat))
+                            return string.Join("\n", WowBot.Core.Logger.GetRecentLogs(cat, 15));
+                        return string.Join("\n", WowBot.Core.Logger.GetRecentLogs(15));
+                    }
+                    // !dyn → дамп DynObjects
+                    if (cmd == "!dyn" && _objectManager != null)
+                    {
+                        var sb = new System.Text.StringBuilder();
+                        sb.AppendLine($"DynObjects: {_objectManager.DynObjects.Count}");
+                        foreach (var d in _objectManager.DynObjects)
+                            sb.AppendLine($"  spell={d.SpellId} r={d.Radius:F1} pos=({d.X:F0},{d.Y:F0},{d.Z:F0}) caster=0x{d.Caster:X}");
+                        return sb.ToString();
+                    }
                     // !terrain → тест ground AoE
                     if (cmd == "!terrain" && _objectManager != null)
                     {

@@ -17,6 +17,7 @@ public class ObjectManager
     public WowPlayer? LocalPlayer { get; private set; }
     public List<WowUnit> Units { get; private set; } = new();
     public List<WowPlayer> Players { get; private set; } = new();
+    public List<WowDynObject> DynObjects { get; private set; } = new();
     public List<WowObject> Objects { get; private set; } = new();
 
     /// <summary>
@@ -35,6 +36,7 @@ public class ObjectManager
     {
         var units = new List<WowUnit>();
         var players = new List<WowPlayer>();
+        var dynObjects = new List<WowDynObject>();
         var objects = new List<WowObject>();
         WowPlayer? localPlayer = null;
 
@@ -72,6 +74,16 @@ public class ObjectManager
                         localPlayer = player;
                     break;
                 }
+                case WowObjectType.DynamicObject:
+                {
+                    try
+                    {
+                        var dynObj = new WowDynObject(_memory, currentObject);
+                        dynObjects.Add(dynObj);
+                    }
+                    catch (Exception ex) { Logger.Log(LogCat.Error, $"DynObject parse failed at 0x{currentObject:X}: {ex.Message}", "ERR"); }
+                    break;
+                }
                 default:
                 {
                     var obj = new WowObject(_memory, currentObject);
@@ -85,6 +97,7 @@ public class ObjectManager
 
         Units = units;
         Players = players;
+        DynObjects = dynObjects;
         Objects = objects;
         LocalPlayer = localPlayer;
     }

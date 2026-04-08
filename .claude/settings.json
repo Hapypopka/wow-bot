@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet *)",
+      "Bash(git *)",
+      "Bash(cd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(wc *)",
+      "Bash(curl *)",
+      "Bash(stat *)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /c/Проекты/wow-bot && dotnet build WowBot.sln 2>&1 | grep -iE '(Ошибок: [1-9]|error CS|Build FAILED)' && echo 'BUILD FAILED — commit blocked' && exit 2 || exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
