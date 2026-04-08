@@ -56,8 +56,9 @@ public static class Logger
         lock (Lock)
         {
             _writer?.Dispose();
-            _writer = new StreamWriter(_logPath, false) { AutoFlush = true };
-            _writer.WriteLine($"=== WowBot Log [{_charName}] — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+            _writer = null;
+            try { File.WriteAllText(_logPath, $"=== WowBot Log [{_charName}] — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); }
+            catch { }
         }
     }
 

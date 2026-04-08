@@ -225,26 +225,38 @@ public class BotEngine : IDisposable
     /// Если стоим в AoE → бежим в противоположную сторону от центра AoE.
     /// </summary>
     private int _aoeTick;
+    private DateTime _aoeFleeUntil = DateTime.MinValue;
+    public bool IsAoeFleeing => _aoeFleeUntil > DateTime.UtcNow;
+
+    // Безопасные AoE дебафы (слоу/баффы без урона) — не бежим
+    private static readonly HashSet<int> SafeAoeDebuffs = new()
+    {
+        68766, // Осквернение (Desecration) ДК — только слоу 50%, без урона
+    };
+
     private bool TryAoEAvoidance(Entities.WowPlayer player)
     {
         _aoeTick++;
         if (_aoeTick < 3) return false; // каждые ~450мс
         _aoeTick = 0;
 
-        // Собираем GUID союзников
-        var friendlyGuids = new HashSet<ulong>();
-        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
-        foreach (var p in _objectManager.Players)
-            friendlyGuids.Add(p.Guid);
+        int dynCount = _objectManager.DynObjects.Count;
+        if (dynCount == 0) return false;
 
-        // Ищем враждебные DynObject рядом с игроком
+        // Дебафы на игроке — если SpellId дебафа совпадает с DynObject SpellId → лужа вражеская
+        var playerDebuffs = new HashSet<int>(player.GetAuraSpellIds());
+
+        // Ищем DynObject рядом, чей SpellId совпадает с дебафом на нас
         float sumX = 0, sumY = 0;
         int count = 0;
+        float maxRadius = 0;
 
         foreach (var dyn in _objectManager.DynObjects)
         {
-            // Пропускаем дружественные (наши) AoE
-            if (friendlyGuids.Contains(dyn.Caster)) continue;
+            // Ключевая проверка: есть ли дебаф от этого спелла на нас?
+            if (!playerDebuffs.Contains(dyn.SpellId)) continue;
+            // Белый список: безопасные AoE (слоу без урона)
+            if (SafeAoeDebuffs.Contains(dyn.SpellId)) continue;
 
             // Проверяем: стоим ли внутри AoE (distance < radius + 2)
             float dx = player.X - dyn.X;
@@ -256,6 +268,8 @@ public class BotEngine : IDisposable
                 sumX += dyn.X;
                 sumY += dyn.Y;
                 count++;
+                if (dyn.Radius > maxRadius) maxRadius = dyn.Radius;
+                Logger.Log(LogCat.AoE, $"AoE HOSTILE: spell={dyn.SpellId} r={dyn.Radius:F1} dist={dist:F1} pos=({dyn.X:F0},{dyn.Y:F0})");
             }
         }
 
@@ -265,19 +279,15 @@ public class BotEngine : IDisposable
         float meanX = sumX / count;
         float meanY = sumY / count;
         float escapeAngle = MathF.Atan2(player.Y - meanY, player.X - meanX);
-        float maxRadius = 0;
-        foreach (var dyn in _objectManager.DynObjects) { if (dyn.Radius > maxRadius && !friendlyGuids.Contains(dyn.Caster)) maxRadius = dyn.Radius; }
-        float escapeDist = maxRadius + 5f; // от центра лужи до точки побега
+        float escapeDist = maxRadius + 5f;
         float fleeX = meanX + escapeDist * MathF.Cos(escapeAngle);
         float fleeY = meanY + escapeDist * MathF.Sin(escapeAngle);
 
+        // Останавливаем approach перед flee
+        try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
         _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
-        // Дамп всех DynObj для дебага оффсетов
-        foreach (var dyn in _objectManager.DynObjects)
-        {
-            if (friendlyGuids.Contains(dyn.Caster)) continue;
-            Logger.Log(LogCat.AoE, $"DynObj: spell={dyn.SpellId} radius={dyn.Radius:F2} pos=({dyn.X:F0},{dyn.Y:F0},{dyn.Z:F0}) caster=0x{dyn.Caster:X} RAW={dyn.RawDump}");
-        }
+        _aoeFleeUntil = DateTime.UtcNow.AddSeconds(2);
+        Logger.Log(LogCat.AoE, $"AoE Avoidance: {count} hostile DynObj, maxR={maxRadius:F1} flee=({fleeX:F0},{fleeY:F0}) escapeDist={escapeDist:F1}");
         Logger.Log(LogCat.AoE, $"AoE Avoidance: {count} DynObj, maxR={maxRadius:F1} flee=({fleeX:F0},{fleeY:F0}) escapeDist={escapeDist:F1}");
         return true;
     }
@@ -519,64 +529,44 @@ public class BotEngine : IDisposable
     }
 
     /// <summary>Слейв: подбег к таргету + ротация. Используется в Attacking и Auto.</summary>
+    private bool _slaveApproaching;
+
     private void SlaveAttackTick(Entities.WowPlayer player, string enemyCountLua)
     {
-        var slaveTarget = _objectManager.GetTarget();
-        if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat) return;
+        // AoE Avoidance (DynObject — стандартные серверы)
+        if (AoeAvoidEnabled && IsAoeFleeing) return;
+        if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
 
-        float distToTarget = player.DistanceTo2D(slaveTarget);
+        var slaveTarget = _objectManager.GetTarget();
+        if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat)
+        {
+            // Нет таргета — остановить подход
+            if (_slaveApproaching) { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); _slaveApproaching = false; }
+            return;
+        }
+
+        // Поворот к таргету (C# запись facing — не конфликтует с Lua MoveBackward)
+        _navigation.FaceInstant(player, slaveTarget);
+
+        if (player.IsCasting) return;
+
         bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
                        PlayerClass == "DEATHKNIGHT" ||
                        (PlayerClass == "PALADIN" && !IsHealer) ||
                        (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
                        (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
-        float castRange = isMelee ? 8f : 30f;
-        float stopDist = isMelee ? 2f : 23f;
 
-        // Мили: ВСЕГДА бежать к мобу (танк может тащить) + бить если в дистанции
-        // Рейндж: бежать если далеко, стоять и кастовать если близко
-        if (isMelee)
-        {
-            // Всегда CTM к мобу
-            if (distToTarget > stopDist)
-            {
-                float dirX = player.X - slaveTarget.X;
-                float dirY = player.Y - slaveTarget.Y;
-                float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
-                if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
-                _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
-            }
-            // Бить если в дистанции
-            if (distToTarget <= castRange && !player.IsCasting)
-            {
-                if (_navigation.FaceInstant(player, slaveTarget))
-                {
-                    string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-                    _hook.ExecuteLua(script, 500);
-                }
-            }
-        }
-        else
-        {
-            // Рейндж: подбег или каст
-            if (distToTarget > castRange)
-            {
-                float dirX = player.X - slaveTarget.X;
-                float dirY = player.Y - slaveTarget.Y;
-                float dirLen = MathF.Sqrt(dirX * dirX + dirY * dirY);
-                if (dirLen > 0.1f) { dirX /= dirLen; dirY /= dirLen; }
-                _ctm.MoveTo(slaveTarget.X + dirX * stopDist, slaveTarget.Y + dirY * stopDist, slaveTarget.Z, 0.5f);
-            }
-            else if (!player.IsCasting)
-            {
-                // Стоим в дистанции — поворот + каст (без CTM!)
-                if (_navigation.FaceInstant(player, slaveTarget))
-                {
-                    string script = enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-                    _hook.ExecuteLua(script, 500);
-                }
-            }
-        }
+        // Approach через Lua (НЕ C# CTM!) — так AoE flee из PreChecksDPS может заблокировать.
+        // CTM перезаписывал MoveBackward каждые 150мс, теперь движение полностью в Lua.
+        // CheckInteractDistance: 3 = ~10yd (melee), 1 = ~28yd (ranged)
+        int distId = isMelee ? 3 : 1;
+        string approachLua =
+            $"if not CheckInteractDistance('target',{distId}) then MoveForwardStart() WB_FWD=1 " +
+            $"elseif WB_FWD then MoveForwardStop() WB_FWD=nil end ";
+
+        _slaveApproaching = true;
+        string script = approachLua + enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
+        _hook.ExecuteLua(script, 500);
     }
 
     /// <summary>Полная остановка follow</summary>
@@ -603,7 +593,11 @@ public class BotEngine : IDisposable
         _rotationEnabled = !_rotationEnabled;
         Logger.Info($"ToggleRotation: {_rotationEnabled}, follow={_followEnabled}, buffs={_buffsEnabled}");
         if (_rotationEnabled) EnsureRunning();
-        else if (!_followEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
+        else
+        {
+            StopAoeMovement(); // остановить strafe/approach при выключении ротации
+            if (!_followEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
+        }
         OnStatusChanged?.Invoke(GetStatusText());
     }
 
@@ -613,7 +607,16 @@ public class BotEngine : IDisposable
         _rotationEnabled = false;
         StopTimer();
         StopFollowMovement();
+        StopAoeMovement();
         OnStatusChanged?.Invoke("Stopped");
+    }
+
+    /// <summary>Остановка AoE flee движения + approach</summary>
+    private void StopAoeMovement()
+    {
+        _aoeFleeUntil = DateTime.MinValue;
+        _slaveApproaching = false;
+        try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
     }
 
     private volatile bool _tickPaused;
@@ -670,7 +673,8 @@ public class BotEngine : IDisposable
             }
 
             // AoE Avoidance: ПРИОРИТЕТ НАД ВСЕМ — выбежать из лужи
-            if (_aoeTick == 0 && _objectManager.DynObjects.Count > 0) Logger.Log(LogCat.AoE, $"DynObjects: {_objectManager.DynObjects.Count}");
+            // Если flee активен — пропускаем ВСЁ (follow, rotation, hivemind) на 2 секунды
+            if (IsAoeFleeing) return;
             if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
 
             // Глобальный декремент кулдаунов
@@ -824,6 +828,13 @@ public class BotEngine : IDisposable
             if (Hivemind.CurrentRole == Hivemind.Role.Slave)
             {
                 SlaveCtrl.FollowDistance = _followDistance;
+
+                // Если вышли из Attacking — остановить Lua approach
+                if (Hivemind.Mode != Hivemind.SlaveMode.Attacking && _slaveApproaching)
+                {
+                    _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50);
+                    _slaveApproaching = false;
+                }
 
                 switch (Hivemind.Mode)
                 {

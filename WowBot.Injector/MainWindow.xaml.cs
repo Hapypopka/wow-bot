@@ -524,45 +524,8 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
             _botEngine.LoadRotation(instantScript, fullScript);
 
-            // AoE Avoidance: регистрируем COMBAT_LOG_EVENT для определения "стоим в луже"
-            try
-            {
-                string aoeDetect = @"
-                    if WB_AOE_FRAME then WB_AOE_FRAME:UnregisterAllEvents() WB_AOE_FRAME=nil end
-                    if not WB_AOE_FRAME then
-                        WB_AOE_HIT=0 WB_AOE_TIME=0
-                        -- Известные ground AoE (лужи) по spell ID
-                        WB_AOE_BAD={
-                            [43265]=1,[49936]=1,[49937]=1,[49938]=1,[52212]=1, -- Death and Decay (все ранги + WoWCircle)
-                            [2121]=1,[8422]=1,[8423]=1,[10215]=1,[10216]=1,[27086]=1,[42925]=1,[42926]=1, -- Flamestrike
-                            [10]=1,[42208]=1,[42209]=1,[42210]=1,[42211]=1,[42212]=1,[42213]=1,[42198]=1, -- Blizzard
-                            [5740]=1,[42218]=1,[42223]=1,[42224]=1,[42225]=1,[42226]=1, -- Rain of Fire
-                            [26573]=1,[48818]=1,[48819]=1, -- Consecration
-                            [16914]=1,[48295]=1, -- Hurricane
-                            [69146]=1,[71441]=1,[71442]=1,[71443]=1, -- ICC: Ooze Flood (Rotface)
-                            [69507]=1,[69504]=1, -- ICC: Slime Spray
-                            [72856]=1,[72857]=1,[72858]=1,[72859]=1, -- ICC: Lich King Defile
-                            [70461]=1,[72133]=1,[72134]=1,[72135]=1, -- ICC: Val'kyr Shadow
-                            [69762]=1,[69774]=1, -- ICC: Unchained Magic (Sindragosa)
-                            [71001]=1,[72091]=1,[72092]=1,[72093]=1, -- ICC: Malleable Goo (Putricide)
-                        }
-                        WB_AOE_FRAME=CreateFrame('Frame')
-                        WB_AOE_FRAME:RegisterEvent('COMBAT_LOG_EVENT_UNFILTERED')
-                        WB_AOE_FRAME:SetScript('OnEvent', function(self, event, ...)
-                            local ts,sub,_,_,_,dGUID,_,_,spId = select(1,...)
-                            if not sub or not dGUID then return end
-                            if dGUID~=UnitGUID('player') then return end
-                            if (sub=='SPELL_DAMAGE' or sub=='SPELL_PERIODIC_DAMAGE' or sub=='SPELL_PERIODIC_MISSED') and spId then
-                                if WB_AOE_BAD[spId] then
-                                    WB_AOE_HIT=spId WB_AOE_TIME=GetTime()
-                                end
-                            end
-                        end)
-                    end";
-                _endSceneHook.ExecuteLua(aoeDetect, 500);
-                WowBot.Core.Logger.Info("AoE Avoidance: COMBAT_LOG_EVENT registered");
-            }
-            catch (Exception ex) { WowBot.Core.Logger.Error("AoE event register failed", ex); }
+            // Cleanup: убиваем старый Lua AoE handler если остался от прошлой сессии
+            try { _endSceneHook.ExecuteLua("if WB_AOE_FRAME then WB_AOE_FRAME:UnregisterAllEvents() WB_AOE_FRAME=nil end WB_AOE_FLEE=nil WB_AOE_HIT=nil WB_AOE_CD=nil StrafeRightStop()", 100); } catch { }
             _botEngine.OnStatusChanged += status =>
                 Dispatcher.Invoke(() => TxtRotationStatus.Text = status);
 
@@ -693,13 +656,31 @@ public partial class MainWindow : Window
                             return string.Join("\n", WowBot.Core.Logger.GetRecentLogs(cat, 15));
                         return string.Join("\n", WowBot.Core.Logger.GetRecentLogs(15));
                     }
-                    // !dyn → дамп DynObjects
+                    // !dyn → дамп DynObjects + GameObjects
                     if (cmd == "!dyn" && _objectManager != null)
                     {
+                        _objectManager.Update();
                         var sb = new System.Text.StringBuilder();
                         sb.AppendLine($"DynObjects: {_objectManager.DynObjects.Count}");
                         foreach (var d in _objectManager.DynObjects)
                             sb.AppendLine($"  spell={d.SpellId} r={d.Radius:F1} pos=({d.X:F0},{d.Y:F0},{d.Z:F0}) caster=0x{d.Caster:X}");
+                        // GameObjects дамп
+                        var gos = _objectManager.Objects.Where(o => o.Type == WowObjectType.GameObject).ToList();
+                        sb.AppendLine($"GameObjects: {gos.Count}");
+                        foreach (var go in gos)
+                        {
+                            uint desc = _memory.ReadUInt32(go.BaseAddress + 0x08);
+                            float gx = _memory!.ReadFloat(go.BaseAddress + 0xE8);
+                            float gy = _memory.ReadFloat(go.BaseAddress + 0xEC);
+                            float gz = _memory.ReadFloat(go.BaseAddress + 0xF0);
+                            uint entry = _memory.ReadUInt32(desc + 0x0C); // OBJECT_FIELD_ENTRY
+                            ulong createdBy = _memory.ReadUInt64(desc + 0x18);
+                            uint bytes1 = _memory.ReadUInt32(desc + 0x44);
+                            byte goState = (byte)(bytes1 & 0xFF);
+                            byte goType = (byte)((bytes1 >> 8) & 0xFF);
+                            sb.AppendLine($"  GO: entry={entry} type={goType} state={goState} pos=({gx:F0},{gy:F0},{gz:F0}) by=0x{createdBy:X}");
+                        }
+                        sb.AppendLine($"AllObjects: {_objectManager.Objects.Count}");
                         return sb.ToString();
                     }
                     // !terrain → тест ground AoE

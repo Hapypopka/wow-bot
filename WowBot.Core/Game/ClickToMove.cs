@@ -55,8 +55,13 @@ public class ClickToMove
     /// <summary>
     /// Двигает персонажа к точке (плавно, WoW сам рулит поворотом)
     /// </summary>
-    public void MoveTo(float x, float y, float z, float precision = 1.0f)
+    public void MoveTo(float x, float y, float z, float precision = 1.0f,
+        [System.Runtime.CompilerServices.CallerMemberName] string caller = "",
+        [System.Runtime.CompilerServices.CallerFilePath] string file = "",
+        [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
     {
+        string src = System.IO.Path.GetFileNameWithoutExtension(file);
+        Logger.Log(LogCat.Follow, $"CTM.MoveTo({x:F0},{y:F0},{z:F0}) prec={precision:F1} from {src}.{caller}:{line}");
         _memory.WriteFloat(CTM_X, x);
         _memory.WriteFloat(CTM_Y, y);
         _memory.WriteFloat(CTM_Z, z);

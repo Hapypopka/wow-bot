@@ -1460,8 +1460,8 @@ public partial class OverlayWindow : Window
 
     private CheckBox _chkMoveBehind = null!;
     private CheckBox _chkAoeAvoid = null!;
-    public bool AoeAvoidEnabled => _chkAoeAvoid?.IsChecked == true;
-    public bool MoveBehindEnabled => _chkMoveBehind?.IsChecked == true;
+    public bool AoeAvoidEnabled => _chkAoeAvoid == null ? GetSavedBool("chk_aoeAvoid", true) : _chkAoeAvoid.IsChecked == true;
+    public bool MoveBehindEnabled => _chkMoveBehind == null ? GetSavedBool("chk_moveBehind", false) : _chkMoveBehind.IsChecked == true;
 
     private void BuildTargetSubmenu()
     {
