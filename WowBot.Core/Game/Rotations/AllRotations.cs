@@ -632,31 +632,7 @@ public static class AllRotations
         if TryRes(2006) then return end
         if false then
         end
-        -- Dispel: scan group for dispellable debuffs
-        if WB_S.Dispel~=false then
-            local function HasDispellableDebuff(u)
-                for i=1,40 do
-                    local n,_,_,_,dt = UnitDebuff(u,i)
-                    if not n then return nil,nil end
-                    if dt=='Magic' or dt=='Disease' then return u,dt end
-                end
-                return nil,nil
-            end
-            local du,ddt = HasDispellableDebuff('player')
-            if not du then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do du,ddt = HasDispellableDebuff('raid'..i) if du then break end end
-                else
-                    for i=1,4 do du,ddt = HasDispellableDebuff('party'..i) if du then break end end
-                end
-            end
-            if du then
-                if ddt=='Magic' and IR(527) then CastOn(du,527) return end
-                if ddt=='Disease' and IR(552) then CastOn(du,552) return
-                elseif ddt=='Disease' and IR(528) then CastOn(du,528) return end
-            end
-        end
+        -- Dispel перенесён ПОСЛЕ хила
         -- Mana potion если мана < 20%
         if MP() < 0.2 then
             local s13,_=GetInventoryItemCooldown('player',13)
@@ -687,6 +663,12 @@ public static class AllRotations
         if urgency>=1 and WB_S.Flash~=false then CastOn(best,2061) return end
         if WB_S.Renew~=false and needHoT then CastOn(best,139) return end
         if WB_S.Flash~=false and bestHP<0.95 then CastOn(best,2061) return end
+        -- Dispel ПОСЛЕ хила (Disc Priest)
+        if WB_S.Dispel~=false then
+            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil,nil end if dt=='Magic' or dt=='Disease' then return u,dt end end return nil,nil end
+            local du,ddt=HasDD('player') if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du,ddt=HasDD('raid'..i) if du then break end end else for i=1,4 do du,ddt=HasDD('party'..i) if du then break end end end end
+            if du then if ddt=='Magic' and IR(527) then CastOn(du,527) return end if ddt=='Disease' and IR(552) then CastOn(du,552) return elseif ddt=='Disease' and IR(528) then CastOn(du,528) return end end
+        end
     else
         -- HOLY (urgency-aware, mass heal)
 " + HealerFindTarget + @"
@@ -694,31 +676,7 @@ public static class AllRotations
         if TryRes(2006) then return end
         if false then
         end
-        -- Dispel: scan group for dispellable debuffs
-        if WB_S.Dispel~=false then
-            local function HasDispellableDebuff(u)
-                for i=1,40 do
-                    local n,_,_,_,dt = UnitDebuff(u,i)
-                    if not n then return nil,nil end
-                    if dt=='Magic' or dt=='Disease' then return u,dt end
-                end
-                return nil,nil
-            end
-            local du,ddt = HasDispellableDebuff('player')
-            if not du then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do du,ddt = HasDispellableDebuff('raid'..i) if du then break end end
-                else
-                    for i=1,4 do du,ddt = HasDispellableDebuff('party'..i) if du then break end end
-                end
-            end
-            if du then
-                if ddt=='Magic' and IR(527) then CastOn(du,527) return end
-                if ddt=='Disease' and IR(552) then CastOn(du,552) return
-                elseif ddt=='Disease' and IR(528) then CastOn(du,528) return end
-            end
-        end
+        -- Dispel перенесён ПОСЛЕ хила
         -- Mana potion если мана < 20%
         if MP() < 0.2 then
             local s13,_=GetInventoryItemCooldown('player',13)
@@ -751,6 +709,12 @@ public static class AllRotations
         end
         if WB_S.Flash~=false and bestHP<0.95 then CastOn(best,2061) return end
         if WB_S.Binding~=false and bestHP<0.95 then CastOn(best,32546) return end
+        -- Dispel ПОСЛЕ хила (Holy Priest)
+        if WB_S.Dispel~=false then
+            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil,nil end if dt=='Magic' or dt=='Disease' then return u,dt end end return nil,nil end
+            local du,ddt=HasDD('player') if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du,ddt=HasDD('raid'..i) if du then break end end else for i=1,4 do du,ddt=HasDD('party'..i) if du then break end end end end
+            if du then if ddt=='Magic' and IR(527) then CastOn(du,527) return end if ddt=='Disease' and IR(552) then CastOn(du,552) return elseif ddt=='Disease' and IR(528) then CastOn(du,528) return end end
+        end
     end
 ");
 
@@ -836,13 +800,7 @@ public static class AllRotations
         if TryRes(2008) then return end
         if false then
         end
-        -- Dispel
-        if WB_S.Dispel~=false then
-            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil end if dt=='Curse' or dt=='Disease' or dt=='Poison' then return u end end return nil end
-            local du=HasDD('player')
-            if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du=HasDD('raid'..i) if du then break end end else for i=1,4 do du=HasDD('party'..i) if du then break end end end end
-            if du then if IR(51886) then CastOn(du,51886) return end if IR(526) then CastOn(du,526) return end end
-        end
+        -- Dispel перенесён ПОСЛЕ хила (хил приоритетнее)
         -- Mana potion
         if MP()<0.2 then local s13,_=GetInventoryItemCooldown('player',13) local s14,_=GetInventoryItemCooldown('player',14) if s13==0 then UseInventoryItem(13) end if s14==0 then UseInventoryItem(14) end end
         -- Mana Tide Totem: мана < 30% (КД 5 мин)
@@ -889,6 +847,13 @@ public static class AllRotations
         if WB_S.HW~=false and bestHP<0.6 then CastOn(best,331) return end
         -- Lesser Healing Wave (филлер)
         if WB_S.LHW~=false and bestHP<0.95 then CastOn(best,8004) return end
+        -- Dispel ПОСЛЕ хила
+        if WB_S.Dispel~=false then
+            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil end if dt=='Curse' or dt=='Disease' or dt=='Poison' then return u end end return nil end
+            local du=HasDD('player')
+            if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du=HasDD('raid'..i) if du then break end end else for i=1,4 do du=HasDD('party'..i) if du then break end end end end
+            if du then if IR(51886) then CastOn(du,51886) return end if IR(526) then CastOn(du,526) return end end
+        end
     else
         if not UnitAffectingCombat('target') then return end
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
@@ -1130,29 +1095,7 @@ public static class AllRotations
         if false then
         end
         -- Dispel: scan group for dispellable debuffs
-        if WB_S.Dispel~=false then
-            local function HasDispellableDebuff(u)
-                for i=1,40 do
-                    local n,_,_,_,dt = UnitDebuff(u,i)
-                    if not n then return nil,nil end
-                    if dt=='Curse' or dt=='Poison' then return u,dt end
-                end
-                return nil,nil
-            end
-            local du,ddt = HasDispellableDebuff('player')
-            if not du then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do du,ddt = HasDispellableDebuff('raid'..i) if du then break end end
-                else
-                    for i=1,4 do du,ddt = HasDispellableDebuff('party'..i) if du then break end end
-                end
-            end
-            if du then
-                if ddt=='Curse' and IR(2782) then CastOn(du,2782) return end
-                if ddt=='Poison' and IR(2893) then CastOn(du,2893) return end
-            end
-        end
+        -- Dispel перенесён ПОСЛЕ хила
         -- Mana potion если мана < 20%
         if MP() < 0.2 then
             local s13,_=GetInventoryItemCooldown('player',13)
@@ -1243,6 +1186,12 @@ public static class AllRotations
         end
         -- Nourish — филлер (сильнее если HoT на цели)
         if WB_S.Nourish~=false and bestHP<0.95 then CastOn(best,50464) return end
+        -- Dispel ПОСЛЕ хила (Resto Druid)
+        if WB_S.Dispel~=false then
+            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil,nil end if dt=='Curse' or dt=='Poison' then return u,dt end end return nil,nil end
+            local du,ddt=HasDD('player') if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du,ddt=HasDD('raid'..i) if du then break end end else for i=1,4 do du,ddt=HasDD('party'..i) if du then break end end end end
+            if du then if ddt=='Curse' and IR(2782) then CastOn(du,2782) return end if ddt=='Poison' and IR(2893) then CastOn(du,2893) return end end
+        end
     end
 ");
 
