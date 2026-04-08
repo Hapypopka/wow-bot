@@ -525,13 +525,13 @@ public class EndSceneHook : IDisposable
     /// Вызывает настоящую CGPlayer_C__ClickToMove через EndScene (flag=6).
     /// Корректно инициализирует CTM-систему, поворачивает модель, работает с холодного старта.
     /// </summary>
-    public bool CallClickToMove(float x, float y, float z, uint playerBase, int clickType = 4, float precision = 0.5f, int timeoutMs = 500)
+    public bool CallClickToMove(float x, float y, float z, uint playerBase, int clickType = 4, float precision = 0.5f, int timeoutMs = 500, ulong targetGuid = 0)
     {
         if (!_isHooked) return false;
         // struct layout: clickType(4) + GUID(8) + X(4) + Y(4) + Z(4) + precision(4) + playerBase(4)
         _memory.WriteInt32(_ctmCallAddr, clickType);
-        _memory.WriteUInt32(_ctmCallAddr + 4, 0);   // GUID low
-        _memory.WriteUInt32(_ctmCallAddr + 8, 0);   // GUID high
+        _memory.WriteUInt32(_ctmCallAddr + 4, (uint)(targetGuid & 0xFFFFFFFF));  // GUID low
+        _memory.WriteUInt32(_ctmCallAddr + 8, (uint)(targetGuid >> 32));          // GUID high
         _memory.WriteFloat(_ctmCallAddr + 12, x);
         _memory.WriteFloat(_ctmCallAddr + 16, y);
         _memory.WriteFloat(_ctmCallAddr + 20, z);

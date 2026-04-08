@@ -92,34 +92,16 @@ public class Navigation
     private bool _turnPending;
 
     /// <summary>
-    /// Поворот к цели. Возвращает true = смотрим (можно кастовать), false = крутимся.
-    /// Запись в память + TurnLeftStart → 80мс → TurnLeftStop в фоне.
+    /// Поворот к цели через CGPlayer_C__ClickToMove.
+    /// Пробуем все face clickTypes: 1=FaceTarget(GUID), 2=Face(point).
     /// </summary>
     public bool FaceInstant(WowUnit player, WowUnit target)
     {
-        if (_turnPending) return false; // предыдущий Turn ещё в процессе
         if (IsFacing(player, target)) return true;
         if (player.IsCasting) return false;
-        if (IsPlayerMoving(player)) return false;
 
-        float needed = GetAngleTo(player, target);
-        float diff = AngleDiff(player.Facing, needed);
-
-        _memory.WriteFloat(player.BaseAddress + Offsets.UnitRotation, needed);
-
-        _turnPending = true;
-        string cmd = diff > 0 ? "TurnLeftStart()" : "TurnRightStart()";
-        Task.Run(async () =>
-        {
-            try
-            {
-                _hook.ExecuteLua(cmd, 30);
-                await Task.Delay(80);
-                _hook.ExecuteLua("TurnLeftStop() TurnRightStop()", 30);
-            }
-            catch { }
-            finally { _turnPending = false; }
-        });
+        _hook.CallClickToMove(target.X, target.Y, target.Z, player.BaseAddress,
+            clickType: 1, precision: 0.1f, timeoutMs: 200, targetGuid: target.Guid);
         return false;
     }
 
