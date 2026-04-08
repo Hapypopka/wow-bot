@@ -316,6 +316,7 @@ public class BotEngine : IDisposable
     private int _registerTick;
     private int _blessingCooldown; // пропустить N баф-чеков после каста благословения
     private double _lastRegisterTime;
+    private double _lastAckTime;
     private uint _hiveMacroAddr;
     private int _hiveAddrRetry;
 
@@ -741,7 +742,7 @@ public class BotEngine : IDisposable
                         }
                     }
 
-                    // Register от слейвов (для мастера) — отдельные Lua переменные
+                    // Register + ACK от слейвов (для мастера)
                     if (Hivemind.CurrentRole == Hivemind.Role.Master)
                     {
                         string regLua = Hivemind.GetRegisterReadScript();
@@ -760,6 +761,29 @@ public class BotEngine : IDisposable
                                 }
                             }
                         }
+
+                        // ACK чтение
+                        string? ackResp = _hook.ExecuteLuaWithResult("WB_R=(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
+                        if (ackResp != null)
+                        {
+                            var ackParts = ackResp.Split('|');
+                            if (ackParts.Length >= 2 && !string.IsNullOrEmpty(ackParts[0]))
+                            {
+                                double.TryParse(ackParts[1], System.Globalization.NumberStyles.Any,
+                                    System.Globalization.CultureInfo.InvariantCulture, out double ackTime);
+                                if (ackTime > _lastAckTime)
+                                {
+                                    _lastAckTime = ackTime;
+                                    // Парсим "5~Забудь"
+                                    var ap = ackParts[0].Split('~', 2);
+                                    if (ap.Length == 2 && int.TryParse(ap[0], out int ackSeq))
+                                        Hivemind.ReceiveAck(ackSeq, ap[1]);
+                                }
+                            }
+                        }
+
+                        // ACK retry тик
+                        Hivemind.TickAck();
                     }
                 }
             }

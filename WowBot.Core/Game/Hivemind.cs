@@ -32,6 +32,7 @@ public class Hivemind
         public string FollowTargetName { get; set; } = ""; // за кем бежит (пусто = мастер)
         public bool AutoFollowPaused { get; set; } = false; // авто: follow на паузе
         public bool AutoAttackPaused { get; set; } = false; // авто: атака на паузе
+        public string AckStatus { get; set; } = ""; // "", "pending", "ok", "timeout"
     }
 
     /// <summary>Список подключённых слейвов (мастер)</summary>
@@ -93,6 +94,64 @@ public class Hivemind
         _ctm = ctm;
     }
 
+    // ==================== ACK система ====================
+
+    private int _cmdSeq;                              // sequence number (мастер)
+    private int _pendingSeq;                          // seq pending команды
+    private string _pendingMsg = "";                  // полное сообщение для retry
+    private HashSet<string> _pendingAcks = new();     // слейвы без ACK
+    private DateTime _lastSendTime = DateTime.MinValue;
+    private int _retryCount;
+    private const int MaxRetries = 3;
+    private const double RetryIntervalMs = 500;
+
+    private int _slaveLastExecSeq;                    // последний выполненный seq (слейв)
+
+    /// <summary>Мастер: проверить pending ACK, retry если нужно. Вызывать из тика.</summary>
+    public void TickAck()
+    {
+        if (CurrentRole != Role.Master) return;
+        if (_pendingAcks.Count == 0) return;
+        if ((DateTime.UtcNow - _lastSendTime).TotalMilliseconds < RetryIntervalMs) return;
+
+        if (_retryCount >= MaxRetries)
+        {
+            Logger.Warn($"ACK: giving up on seq#{_pendingSeq}, no ACK from: {string.Join(",", _pendingAcks)}");
+            foreach (var name in _pendingAcks)
+            {
+                var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
+                if (slave != null) slave.AckStatus = "timeout";
+            }
+            _pendingAcks.Clear();
+            OnSlavesChanged?.Invoke();
+            return;
+        }
+
+        _retryCount++;
+        _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','{_pendingMsg}','PARTY')", 200);
+        _lastSendTime = DateTime.UtcNow;
+        Logger.Info($"ACK: retry #{_retryCount} seq#{_pendingSeq} waiting for: {string.Join(",", _pendingAcks)}");
+    }
+
+    /// <summary>Мастер: получен ACK от слейва</summary>
+    public void ReceiveAck(int seq, string slaveName)
+    {
+        if (seq != _pendingSeq) return; // старый ACK
+        _pendingAcks.Remove(slaveName);
+        var slave = ConnectedSlaves.FirstOrDefault(s => s.Name == slaveName);
+        if (slave != null) slave.AckStatus = "ok";
+        Logger.Info($"ACK: received from '{slaveName}' seq#{seq}, remaining: {_pendingAcks.Count}");
+        OnSlavesChanged?.Invoke();
+    }
+
+    /// <summary>Слейв: отправить ACK мастеру</summary>
+    private void SendAck(int seq)
+    {
+        string myName = _objectManager.GetPlayerName() ?? "";
+        string msg = $"ACK:{seq}~{myName}";
+        _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','{msg}','PARTY')", 100);
+    }
+
     // ==================== МАСТЕР ====================
 
     /// <summary>Получить список выбранных слейвов (пусто = все)</summary>
@@ -134,22 +193,37 @@ public class Hivemind
             affected = nonIgnored.Count > 0 ? nonIgnored : ConnectedSlaves;
         }
 
+        // ACK: seq number для надёжной доставки
+        _cmdSeq++;
         string fullArg = string.IsNullOrEmpty(targets) ? arg : $"{arg}~{targets}";
-        string msg = $"{cmd}:{fullArg}";
+        string msg = $"{cmd}:{fullArg}#{_cmdSeq}";
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
-        // Обновить ActiveCommand для UI (служебные команды не меняют статус)
-        if (cmd != Command.RefreshGuid && cmd != Command.SetBuff && cmd != Command.Wipe &&
+        // ACK tracking: служебные команды (SetBuff, Wipe и т.д.) не требуют ACK
+        bool needsAck = cmd != Command.SetBuff && cmd != Command.Wipe &&
             cmd != Command.Interact && cmd != Command.GossipSelect && cmd != Command.GossipAccept &&
-            cmd != Command.AutoToggleFollow && cmd != Command.AutoToggleAttack)
+            cmd != Command.AutoToggleFollow && cmd != Command.AutoToggleAttack && cmd != Command.Ping;
+        if (needsAck)
+        {
+            _pendingSeq = _cmdSeq;
+            _pendingMsg = msg;
+            _pendingAcks = new HashSet<string>(affected.Select(s => s.Name));
+            _lastSendTime = DateTime.UtcNow;
+            _retryCount = 0;
+            foreach (var slave in affected)
+                slave.AckStatus = "pending";
+        }
+
+        // Обновить ActiveCommand для UI
+        if (needsAck)
         {
             foreach (var slave in affected)
                 slave.ActiveCommand = cmd;
         }
         OnSlavesChanged?.Invoke();
 
-        Logger.Info($"Hivemind: MASTER sent {cmd} {arg}");
+        Logger.Info($"Hivemind: MASTER sent {cmd} {arg} seq#{_cmdSeq}");
         OnStatusChanged?.Invoke($"Sent: {cmd}");
     }
 
@@ -622,7 +696,10 @@ WB_HIVE_FRAME:SetScript('OnEvent', function(self, event, prefix, msg, channel, s
     if prefix ~= '{CHANNEL}' then return end
     if sender == UnitName('player') then return end
     local cmd, arg = strsplit(':', msg, 2)
-    if cmd == 'Register' then
+    if cmd == 'ACK' then
+        WB_HIVE_ACK = arg or ''
+        WB_HIVE_ACK_TIME = GetTime()
+    elseif cmd == 'Register' then
         WB_HIVE_REG = arg or ''
         WB_HIVE_REG_SENDER = sender or ''
         WB_HIVE_REG_TIME = GetTime()
@@ -683,6 +760,36 @@ WB_HIVE_REG_TIME = 0
 
     public void ExecuteSlaveCommand(Command cmd, string arg)
     {
+        // ACK: парсим seq number из arg (формат: "realArg#123" или просто "realArg")
+        int seq = 0;
+        string cleanedArg = arg;
+        int hashIdx = arg.LastIndexOf('#');
+        if (hashIdx >= 0 && int.TryParse(arg.Substring(hashIdx + 1), out int parsedSeq))
+        {
+            seq = parsedSeq;
+            cleanedArg = arg.Substring(0, hashIdx);
+        }
+
+        // ACK: проверяем seq — игнорируем устаревшие команды
+        if (seq > 0)
+        {
+            if (seq < _slaveLastExecSeq)
+            {
+                Logger.Info($"ACK: ignoring stale cmd {cmd} seq#{seq} (last={_slaveLastExecSeq})");
+                return;
+            }
+            if (seq == _slaveLastExecSeq)
+            {
+                // Уже выполнили, но мастер мог не получить ACK — шлём повторно
+                SendAck(seq);
+                Logger.Info($"ACK: re-sending ACK for seq#{seq} (already executed)");
+                return;
+            }
+            _slaveLastExecSeq = seq;
+            SendAck(seq);
+        }
+        arg = cleanedArg;
+
         // Wipe — хилы стоп
         if (cmd == Command.Wipe)
         {
