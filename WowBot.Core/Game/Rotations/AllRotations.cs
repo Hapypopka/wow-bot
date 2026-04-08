@@ -830,64 +830,62 @@ public static class AllRotations
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
     if t3>=t1 and t3>=t2 then
-        -- RESTO (urgency-aware, mass heal, proactive)
+        -- RESTO SHAMAN (NPCBots + гайды WotLK, полная система)
 " + HealerFindTarget + @"
-        -- Resurrect вне боя (Shaman)
+        -- Resurrect вне боя
         if TryRes(2008) then return end
         if false then
         end
-        -- Dispel: scan group for dispellable debuffs
+        -- Dispel
         if WB_S.Dispel~=false then
-            local function HasDispellableDebuff(u)
-                for i=1,40 do
-                    local n,_,_,_,dt = UnitDebuff(u,i)
-                    if not n then return nil end
-                    if dt=='Curse' or dt=='Disease' or dt=='Poison' then return u end
-                end
-                return nil
-            end
-            local du = HasDispellableDebuff('player')
-            if not du then
-                local nr = GetNumRaidMembers()
-                if nr > 0 then
-                    for i=1,nr do du = HasDispellableDebuff('raid'..i) if du then break end end
-                else
-                    for i=1,4 do du = HasDispellableDebuff('party'..i) if du then break end end
-                end
-            end
-            if du then
-                if IR(51886) then CastOn(du,51886) return end
-                if IR(526) then CastOn(du,526) return end
-            end
+            local function HasDD(u) for i=1,40 do local n,_,_,_,dt=UnitDebuff(u,i) if not n then return nil end if dt=='Curse' or dt=='Disease' or dt=='Poison' then return u end end return nil end
+            local du=HasDD('player')
+            if not du then local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do du=HasDD('raid'..i) if du then break end end else for i=1,4 do du=HasDD('party'..i) if du then break end end end end
+            if du then if IR(51886) then CastOn(du,51886) return end if IR(526) then CastOn(du,526) return end end
         end
-        -- Mana potion если мана < 20%
-        if MP() < 0.2 then
-            local s13,_=GetInventoryItemCooldown('player',13)
-            local s14,_=GetInventoryItemCooldown('player',14)
-            if s13==0 then UseInventoryItem(13) end
-            if s14==0 then UseInventoryItem(14) end
+        -- Mana potion
+        if MP()<0.2 then local s13,_=GetInventoryItemCooldown('player',13) local s14,_=GetInventoryItemCooldown('player',14) if s13==0 then UseInventoryItem(13) end if s14==0 then UseInventoryItem(14) end end
+        -- Mana Tide Totem: мана < 30% (КД 5 мин)
+        if MP()<0.3 and IR(16190) then Cast(16190) return end
+        -- Earth Shield на танке (авто-поиск, не только фокус)
+        if WB_S.ES~=false and IR(974) then
+            local esn=SN(974)
+            local function NeedES(u) if not UnitExists(u) or UnitIsDeadOrGhost(u) or not CheckInteractDistance(u,4) then return false end if esn then for i=1,40 do local n=UnitBuff(u,i) if not n then break end if n==esn then return false end end end return true end
+            -- Фокус приоритет, потом танки
+            if UnitExists('focus') and NeedES('focus') then CastOn('focus',974) return end
+            local nr=GetNumRaidMembers()
+            if nr>0 then for i=1,nr do local u='raid'..i if NeedES(u) and IsTankUnit(u) then CastOn(u,974) return end end
+            else for i=1,4 do local u='party'..i if NeedES(u) and IsTankUnit(u) then CastOn(u,974) return end end end
         end
-        -- Earth Shield на танке (фокус) — проактивно
-        if WB_S.ES~=false and UnitExists('focus') and IR(974) then
-            local esn=SN(974) local hasES=false if esn then for i=1,40 do local n=UnitBuff('focus',i) if not n then break end if n==esn then hasES=true break end end end
-            if not hasES then CastOn('focus',974) return end
-        end
-        -- Проактивный Riptide если needHoT
+        -- Проактивный Riptide на танка если needHoT
         if needHoT and WB_S.RT~=false and IR(61295) and best then CastOn(best,61295) return end
         if bestHP>=1.0 then return end
-        -- Критично: NS + Healing Wave (инстант большой хил)
-        if WB_S.NS~=false and urgency>=2 and IR(16188) then Cast(16188) CastOn(best,331) return end
-        -- Riptide (инстант HoT + хил)
+        -- [КРИТИЧНО] Tidal Force + NS + Healing Wave (urgency >= 2)
+        if urgency>=2 then
+            if IR(55198) then Cast(55198) end -- Tidal Force (+60% крит, off-GCD)
+            if WB_S.NS~=false and IR(16188) then Cast(16188) CastOn(best,331) return end
+        end
+        -- Riptide (инстант HoT + прямой хил)
         if WB_S.RT~=false and IR(61295) then CastOn(best,61295) return end
-        -- Mass heal: Chain Heal если 2+ людей < 85%
-        if WB_S.CH~=false and lowCount>=2 and IR(1064) then CastOn(best,1064) return end
+        -- Chain Heal: приоритет на цель с Riptide (+25% хил), 2+ раненых
+        if WB_S.CH~=false and lowCount>=2 and IR(1064) then
+            -- Ищем цель с Riptide HoT для бонуса Chain Heal
+            local rtn=SN(61295)
+            local chTarget=best
+            if rtn then
+                local nr=GetNumRaidMembers()
+                if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitHealth(u)/UnitHealthMax(u)<0.9 then for j=1,40 do local n=UnitBuff(u,j) if not n then break end if n==rtn then chTarget=u break end end if chTarget~=best then break end end end
+                else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and UnitHealth(u)/UnitHealthMax(u)<0.9 then for j=1,40 do local n=UnitBuff(u,j) if not n then break end if n==rtn then chTarget=u break end end if chTarget~=best then break end end end end
+            end
+            CastOn(chTarget,1064) return
+        end
         -- NS при < 30%
         if WB_S.NS~=false and bestHP<0.3 and IR(16188) then Cast(16188) return end
-        -- Urgency → Lesser Healing Wave (быстрый)
+        -- Tidal Force перед большим хилом если HP < 40%
+        if bestHP<0.4 and IR(55198) then Cast(55198) end
+        -- Urgency → Lesser Healing Wave
         if urgency>=1 and WB_S.LHW~=false then CastOn(best,8004) return end
-        -- Chain Heal при нескольких раненых
-        if WB_S.CH~=false and lowCount>=2 and bestHP<0.9 and IR(1064) then CastOn(best,1064) return end
-        -- Healing Wave (большой хил)
+        -- Healing Wave (большой хил) на танков или HP < 60%
         if WB_S.HW~=false and bestHP<0.6 then CastOn(best,331) return end
         -- Lesser Healing Wave (филлер)
         if WB_S.LHW~=false and bestHP<0.95 then CastOn(best,8004) return end
