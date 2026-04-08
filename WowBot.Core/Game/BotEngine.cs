@@ -303,6 +303,7 @@ public class BotEngine : IDisposable
     public bool AoeSealSwap { get; set; } = false;
     public bool AutoPveEnabled { get; set; } = false;
     public BossTactics BossTactics { get; private set; }
+    public BossEngine BossEngine { get; private set; }
     private int _autoPveTick;
     public string SelectedTotemEarth { get; set; } = "";
     public string SelectedTotemFire { get; set; } = "";
@@ -379,6 +380,7 @@ public class BotEngine : IDisposable
         Hivemind.SetBotEngine(this);
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
+        BossEngine = new BossEngine(hook, objectManager, ctm, navigation);
         _combatPositioning = new CombatPositioning(ctm);
 
         // Навигация через навмеш (опционально)
@@ -926,29 +928,29 @@ public class BotEngine : IDisposable
                         break;
 
                     case Hivemind.SlaveMode.Attacking:
-                        // AutoPve тактики (если включено и босс найден)
-                        BossTactics.IsHealer = IsHealer;
-                        BossTactics.IsMelee = PlayerClass is "WARRIOR" or "PALADIN" or "ROGUE" or "DEATHKNIGHT" ||
-                            (PlayerClass == "DRUID" && SpecName?.Contains("Feral") == true) ||
-                            (PlayerClass == "SHAMAN" && SpecName?.Contains("Enhancement") == true);
-                        if (AutoPveEnabled && BossTactics.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
+                        // BossEngine v2 (если включено)
+                        if (AutoPveEnabled)
                         {
-                            // Ротация — босс-тактика управляет подбегом, ротацию кастим
-                            string atkScript = enemyCountLua + SpellFlagsLua + _fullScript;
-                            _hook.ExecuteLua(atkScript, 500);
+                            BossEngine.IsMelee = IsMeleeSpec;
+                            BossEngine.IsHealer = IsHealer;
+                            BossEngine.IsTank = IsTankSpec;
+                            if (!BossEngine.IsActive) BossEngine.InstallListener();
+                            if (BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
+                                break; // тактика управляет
                         }
-                        else
-                        {
-                            SlaveAttackTick(player, enemyCountLua);
-                        }
+                        SlaveAttackTick(player, enemyCountLua);
                         break;
 
                     case Hivemind.SlaveMode.Auto:
-                        // AutoPve тактики (если включено и босс найден)
-                        if (AutoPveEnabled && BossTactics.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
+                        // BossEngine v2 (если включено)
+                        if (AutoPveEnabled)
                         {
-                            string autoScript = enemyCountLua + SpellFlagsLua + _fullScript;
-                            _hook.ExecuteLua(autoScript, 500);
+                            BossEngine.IsMelee = IsMeleeSpec;
+                            BossEngine.IsHealer = IsHealer;
+                            BossEngine.IsTank = IsTankSpec;
+                            if (!BossEngine.IsActive) BossEngine.InstallListener();
+                            if (BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
+                                break; // тактика управляет
                         }
                         else
                         {
