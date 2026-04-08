@@ -16,10 +16,15 @@ public class SlaveController
     public enum State { Idle, Following, Attacking, Stopped }
     public State CurrentState { get; private set; } = State.Idle;
 
-    public string MasterName { get; set; } = "";
+    /// <summary>Кто командует (мастер) — для AssistUnit, не меняется при смене follow target</summary>
+    public string CommandSourceName { get; set; } = "";
+    /// <summary>За кем следовать — может быть мастер или кто-то другой</summary>
+    public string FollowTargetName { get; set; } = "";
+    /// <summary>MasterName для совместимости — возвращает CommandSourceName</summary>
+    public string MasterName { get => CommandSourceName; set => CommandSourceName = value; }
     public float FollowDistance { get; set; } = 8f;
 
-    private ulong _masterGuid;
+    private ulong _followTargetGuid;
     private int _stopTimer;
 
     public SlaveController(Navigation nav, EndSceneHook hook, ObjectManager objectManager, ClickToMove ctm)
@@ -32,22 +37,39 @@ public class SlaveController
 
     // === Команды ===
 
-    public ulong MasterGuid => _masterGuid;
-    public void ResetMasterGuid() => _masterGuid = 0;
+    public ulong FollowTargetGuid => _followTargetGuid;
+    public void ResetFollowTargetGuid() => _followTargetGuid = 0;
+
+    /// <summary>Установить command source (мастер) — кого ассистить</summary>
+    public void SetCommandSource(string name)
+    {
+        CommandSourceName = name;
+        Logger.Info($"SlaveCtrl: CommandSource='{name}'");
+    }
+
+    /// <summary>Установить follow target — за кем бежать (может быть не мастер)</summary>
+    public void SetFollowTarget(string name)
+    {
+        FollowTargetName = name;
+        _followTargetGuid = 0; // сброс кэша, найдёт на следующем тике
+        Logger.Info($"SlaveCtrl: FollowTarget='{name}'");
+    }
 
     /// <summary>Установить GUID напрямую (от мастера)</summary>
     public void SetMasterGuid(ulong guid, string name)
     {
-        _masterGuid = guid;
-        MasterName = name;
+        _followTargetGuid = guid;
+        CommandSourceName = name;
+        FollowTargetName = name;
         Logger.Info($"SlaveCtrl: GUID set directly to 0x{guid:X} '{name}'");
     }
 
-    /// <summary>Один раз при старте слейва — найти GUID мастера через TargetUnit</summary>
+    /// <summary>Один раз при старте слейва — найти GUID мастера</summary>
     public void InitMasterGuid(string masterName)
     {
-        if (_masterGuid != 0) return; // уже найден
-        MasterName = masterName;
+        if (_followTargetGuid != 0) return; // уже найден
+        CommandSourceName = masterName;
+        FollowTargetName = masterName;
         FindMasterGuid(masterName);
     }
 
@@ -55,10 +77,17 @@ public class SlaveController
     {
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() TurnLeftStop() TurnRightStop()", 100);
         _ctm.ClearAction();
-        MasterName = masterName;
+        // Follow всегда за мастером (если не переопределено через SetFollowTarget)
+        if (string.IsNullOrEmpty(FollowTargetName) || FollowTargetName == CommandSourceName)
+            FollowTargetName = masterName;
+        CommandSourceName = masterName;
         CurrentState = State.Following;
-        Logger.Info($"SlaveCtrl: Following {masterName}");
+        Logger.Info($"SlaveCtrl: Following '{FollowTargetName}' (cmd source='{CommandSourceName}')");
     }
+
+    // Legacy
+    public ulong MasterGuid => _followTargetGuid;
+    public void ResetMasterGuid() => _followTargetGuid = 0;
 
     public void CmdStop()
     {
@@ -156,8 +185,8 @@ public class SlaveController
         {
             if (ulong.TryParse(guidStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out ulong pGuid) && pGuid != 0)
             {
-                _masterGuid = pGuid;
-                Logger.Info($"SlaveCtrl: GUID=0x{_masterGuid:X} (Lua party '{name}')");
+                _followTargetGuid = pGuid;
+                Logger.Info($"SlaveCtrl: GUID=0x{_followTargetGuid:X} (Lua party '{name}')");
                 return;
             }
         }
@@ -185,8 +214,8 @@ public class SlaveController
         }
         if (bestUnit != null)
         {
-            _masterGuid = bestUnit.Guid;
-            Logger.Info($"SlaveCtrl: GUID=0x{_masterGuid:X} (nearest Unit '{name}', dist={bestDist:F1}, candidates={candidateCount})");
+            _followTargetGuid = bestUnit.Guid;
+            Logger.Info($"SlaveCtrl: GUID=0x{_followTargetGuid:X} (nearest Unit '{name}', dist={bestDist:F1}, candidates={candidateCount})");
             return;
         }
 
@@ -199,8 +228,8 @@ public class SlaveController
         var target = _objectManager.GetTarget();
         if (target != null && string.Equals(target.Name, name, StringComparison.OrdinalIgnoreCase))
         {
-            _masterGuid = target.Guid;
-            Logger.Info($"SlaveCtrl: GUID=0x{_masterGuid:X} (TargetUnit fallback '{name}')");
+            _followTargetGuid = target.Guid;
+            Logger.Info($"SlaveCtrl: GUID=0x{_followTargetGuid:X} (TargetUnit fallback '{name}')");
         }
         else
         {
@@ -212,14 +241,14 @@ public class SlaveController
 
     private WowUnit? FindMaster()
     {
-        if (_masterGuid != 0)
+        if (_followTargetGuid != 0)
         {
-            var unit = _objectManager.GetUnitByGuid(_masterGuid);
+            var unit = _objectManager.GetUnitByGuid(_followTargetGuid);
             if (unit != null) return unit;
-            _masterGuid = 0;
+            _followTargetGuid = 0;
         }
-        if (!string.IsNullOrEmpty(MasterName))
-            FindMasterGuid(MasterName);
-        return _masterGuid != 0 ? _objectManager.GetUnitByGuid(_masterGuid) : null;
+        if (!string.IsNullOrEmpty(FollowTargetName))
+            FindMasterGuid(FollowTargetName);
+        return _followTargetGuid != 0 ? _objectManager.GetUnitByGuid(_followTargetGuid) : null;
     }
 }

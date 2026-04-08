@@ -577,7 +577,8 @@ public class Hivemind
         _autoAssistTick = 0;
 
         // Сбросить таргет + взять таргет мастера. Если у мастера нет цели — слейв без таргета → follow
-        _hook.ExecuteLua($"ClearTarget() AssistUnit('{MasterName}')", 200);
+        string assistName = _botEngine?.SlaveCtrl.CommandSourceName ?? MasterName;
+        _hook.ExecuteLua($"ClearTarget() AssistUnit('{assistName}')", 200);
     }
 
     private ulong _masterGuid;
@@ -707,15 +708,11 @@ WB_HIVE_REG_TIME = 0
                     return;
                 }
             }
-            _masterGuid = 0; // сбросить кэш Hivemind
-            MasterName = cleanName; // обновить имя
+            // RefreshGuid меняет ТОЛЬКО follow target, НЕ command source
             if (_botEngine?.SlaveCtrl != null)
             {
-                _botEngine.SlaveCtrl.ResetMasterGuid();
-                _botEngine.SlaveCtrl.MasterName = cleanName;
-                // НЕ вызываем FindMasterGuid тут — конфликтует с ротацией за Lua буфер
-                // FindMaster() найдёт на следующем тике follow автоматически
-                Logger.Info($"Hivemind: SLAVE reset GUID, will find '{cleanName}' on next tick");
+                _botEngine.SlaveCtrl.SetFollowTarget(cleanName);
+                Logger.Info($"Hivemind: SLAVE follow target → '{cleanName}' (cmd source='{_botEngine.SlaveCtrl.CommandSourceName}')");
             }
             return;
         }
