@@ -660,6 +660,7 @@ public class BotEngine : IDisposable
             _objectManager.Update();
             var player = _objectManager.LocalPlayer;
             if (player == null) return;
+            _ctm.SetPlayerBase(player.BaseAddress);
 
             // Кэш позиции для быстрого потока CTM watch
             if (Hivemind.CurrentRole == Hivemind.Role.Master)

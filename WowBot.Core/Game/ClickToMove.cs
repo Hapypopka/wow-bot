@@ -9,6 +9,12 @@ namespace WowBot.Core.Game;
 public class ClickToMove
 {
     private readonly MemoryReader _memory;
+    private EndSceneHook? _hook;
+    private uint _playerBase;
+
+    /// <summary>Установить хук для вызова CGPlayer_C__ClickToMove напрямую</summary>
+    public void SetHook(EndSceneHook hook) => _hook = hook;
+    public void SetPlayerBase(uint playerBase) => _playerBase = playerBase;
 
     // Стандартные адреса для 3.3.5a build 12340
     private const uint CTM_Base = 0x00CA11D8;
@@ -62,6 +68,16 @@ public class ClickToMove
     {
         string src = System.IO.Path.GetFileNameWithoutExtension(file);
         Logger.Log(LogCat.Follow, $"CTM.MoveTo({x:F0},{y:F0},{z:F0}) prec={precision:F1} from {src}.{caller}:{line}");
+
+        // Вызываем настоящую функцию CGPlayer_C__ClickToMove через EndScene хук
+        // Это корректно инициализирует movement state machine (без cold start бага)
+        if (_hook != null && _hook.IsHooked && _playerBase != 0)
+        {
+            _hook.CallClickToMove(x, y, z, _playerBase, clickType: 4, precision: precision, timeoutMs: 200);
+            return;
+        }
+
+        // Fallback: прямая запись (если хук недоступен)
         _memory.WriteFloat(CTM_X, x);
         _memory.WriteFloat(CTM_Y, y);
         _memory.WriteFloat(CTM_Z, z);

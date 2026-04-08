@@ -492,24 +492,7 @@ public partial class MainWindow : Window
             // Инициализируем BotEngine
             WowBot.Core.Logger.Info("Creating BotEngine...");
             var ctm = new ClickToMove(_memory);
-            // Прогрев CTM — PostMessage правый клик под ноги (инициализирует movement system)
-            try
-            {
-                var hwnd = wow.MainWindowHandle;
-                // Кликаем прямо под ноги персонажа (центр-низ экрана)
-                int centerX = 400, centerY = 500;
-                int lParam = centerY << 16 | centerX;
-                WowBot.Core.Memory.WinApi.PostMessage(hwnd, 0x0204, 0, lParam); // WM_RBUTTONDOWN
-                System.Threading.Thread.Sleep(30);
-                WowBot.Core.Memory.WinApi.PostMessage(hwnd, 0x0205, 0, lParam); // WM_RBUTTONUP
-                // Стопаем CTM несколько раз чтобы точно остановить
-                System.Threading.Thread.Sleep(100);
-                ctm.Stop();
-                System.Threading.Thread.Sleep(100);
-                ctm.Stop();
-                WowBot.Core.Logger.Info("CTM warmup: PostMessage RightClick + Stop");
-            }
-            catch (Exception ex) { WowBot.Core.Logger.Error("CTM warmup PostMessage failed", ex); }
+            ctm.SetHook(_endSceneHook);
             var navigation = new Navigation(_memory, _endSceneHook);
             _botEngine = new BotEngine(_endSceneHook, _objectManager, navigation, ctm);
             _botEngine.IsHealer = isHealer;
