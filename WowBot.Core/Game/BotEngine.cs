@@ -86,11 +86,20 @@ public class BotEngine : IDisposable
     private int CountNearbyCombatEnemies(WowPlayer player, float range = 10f)
     {
         int count = 0;
+        // GUID'ы союзников чтобы определить враждебность
+        var friendlyGuids = new HashSet<ulong>();
+        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
+        foreach (var p in _objectManager.Players)
+            friendlyGuids.Add(p.Guid);
+
         foreach (var unit in _objectManager.Units)
         {
             if (!unit.IsAlive) continue;
             if (!unit.InCombat) continue;
             if (player.DistanceTo(unit) > range) continue;
+            // Враждебный = его таргет кто-то из нашей группы (бьёт нас/союзника)
+            if (unit.TargetGuid == 0) continue;
+            if (!friendlyGuids.Contains(unit.TargetGuid)) continue;
             count++;
         }
         return count;
@@ -138,9 +147,16 @@ public class BotEngine : IDisposable
     private int CountEnemiesNearTarget(Entities.WowUnit target, float range = 10f)
     {
         int count = 0;
+        var friendlyGuids = new HashSet<ulong>();
+        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
+        foreach (var p in _objectManager.Players)
+            friendlyGuids.Add(p.Guid);
         foreach (var unit in _objectManager.Units)
         {
             if (!unit.IsAlive) continue;
+            if (friendlyGuids.Contains(unit.Guid)) continue;
+            // Враждебный: таргетит кого-то из нашей группы
+            if (unit.TargetGuid != 0 && !friendlyGuids.Contains(unit.TargetGuid)) continue;
             float dx = unit.X - target.X;
             float dy = unit.Y - target.Y;
             float dz = unit.Z - target.Z;
@@ -896,7 +912,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} NCE={CountNearbyCombatEnemies(_objectManager.LocalPlayer!)} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); }
 
             // === БАФФЫ ===
             if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))

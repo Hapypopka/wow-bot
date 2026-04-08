@@ -170,7 +170,7 @@ public static class AllRotations
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
-    RunMacroText('/startattack')
+    if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() RunMacroText('/startattack') end
 ";
 
     private const string PreChecksHealer = @"
@@ -553,12 +553,17 @@ public static class AllRotations
         -- Multi-Shot: только если стоим (не на бегу)
         if WB_S.MultiShot~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
         -- CDs: Rapid Fire + Kill Command + pet abilities (off-GCD)
-        if WB_S.Rapid~=false and IR(3045) then Cast(3045) end
+        -- Быстрая стрельба: только на жирных и не на бегу
+        if WB_S.Rapid~=false and IR(3045) and THP()>0.5 and (GetUnitSpeed('player') or 0)==0 then Cast(3045) end
         if WB_S.Kill2~=false and IR(34026) then Cast(34026) end
         if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end
+        -- Tranq Shot: снимаем enrage бафф с таргета
+        if IR(19801) then for i=1,40 do local n,_,_,_,dt=UnitBuff('target',i) if not n then break end if dt=='Enrage' then Cast(19801) return end end end
         -- Priority: Serpent Sting > Chimera > Silencing > Aimed > Steady
-        if WB_S.Serpent~=false and not HD('target',1978) then Cast(1978) return end
-        if WB_S.Chimera~=false and IR(53209) then Cast(53209) return end
+        -- Укус змеи: не ставить на дохлых (< 10% HP), на боссе 10% = норм
+        if WB_S.Serpent~=false and not HD('target',1978) and THP()>0.1 then Cast(1978) return end
+        -- Выстрел химеры: ТОЛЬКО если Укус змеи висит (иначе впустую)
+        if WB_S.Chimera~=false and HD('target',1978) and IR(53209) then Cast(53209) return end
         if WB_S.Silence~=false and IR(34490) then Cast(34490) return end
         if WB_S.Aimed~=false and IR(19434) then Cast(19434) return end
         -- Trapper: Explosive Trap между основными кастами
