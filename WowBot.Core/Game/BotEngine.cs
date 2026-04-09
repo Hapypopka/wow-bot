@@ -190,6 +190,71 @@ public class BotEngine : IDisposable
         // Навигация через навмеш (опционально)
         NavEngine = new WowBot.Core.Navigation.NavEngine(ctm, objectManager);
         SlaveCtrl.NavEngine = NavEngine;
+        _commandSources.Add(UserCommands);
+        _commandSources.Add(HivemindCommands);
+    }
+
+    /// <summary>
+    /// Обработать все ожидающие команды из всех источников.
+    /// Вызывается в начале Tick() — единый обработчик для UI и Hivemind.
+    /// </summary>
+    private void ProcessPendingCommands()
+    {
+        foreach (var source in _commandSources)
+        {
+            while (source.HasPendingCommand)
+            {
+                var cmd = source.DequeueCommand();
+                if (cmd != null)
+                    ProcessCommand(cmd);
+            }
+        }
+    }
+
+    /// <summary>Единый обработчик команд — и UI, и Hivemind проходят здесь</summary>
+    public void ProcessCommand(Abstractions.BotCommand cmd)
+    {
+        Logger.Info($"ProcessCommand: {cmd.Type} from {cmd.Source} target={cmd.TargetName}");
+
+        switch (cmd.Type)
+        {
+            case Abstractions.BotCommandType.StartRotation:
+                _rotationEnabled = true;
+                EnsureRunning();
+                OnStatusChanged?.Invoke(GetStatusText());
+                break;
+
+            case Abstractions.BotCommandType.StopRotation:
+                _rotationEnabled = false;
+                StopAoeMovement();
+                if (!_followEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
+                OnStatusChanged?.Invoke(GetStatusText());
+                break;
+
+            case Abstractions.BotCommandType.Follow:
+                if (!string.IsNullOrEmpty(cmd.TargetName))
+                {
+                    _followEnabled = true;
+                    EnsureRunning();
+                }
+                OnStatusChanged?.Invoke(GetStatusText());
+                break;
+
+            case Abstractions.BotCommandType.Stop:
+                ForceStop();
+                break;
+
+            case Abstractions.BotCommandType.StartBuffs:
+                BuffsEnabled = true;
+                break;
+
+            case Abstractions.BotCommandType.StopBuffs:
+                BuffsEnabled = false;
+                break;
+
+            // Attack, Auto, Scatter и др. — пока обрабатываются в Hivemind.ExecuteSlaveCommand
+            // По мере миграции — переносить сюда
+        }
     }
 
     /// <summary>Подключиться к NavServer (вызывать из UI)</summary>
@@ -203,6 +268,11 @@ public class BotEngine : IDisposable
     private readonly CombatHelper _combatHelper;
     private readonly CombatExecutor _combatExecutor;
     private readonly MultiDotHelper _multiDotHelper;
+
+    // Command Sources — единый поток команд от UI и Hivemind
+    public UserCommandSource UserCommands { get; } = new();
+    public HivemindCommandSource HivemindCommands { get; } = new();
+    private readonly List<Abstractions.ICommandSource> _commandSources = new();
 
     public bool MoveBehindEnabled { get; set; }
 
@@ -675,6 +745,9 @@ public class BotEngine : IDisposable
     {
         if (_tickPaused) return;
         AntiAfkTick(); // всегда, даже если бот неактивен
+
+        // Обработать команды из очереди (UI, Hivemind)
+        ProcessPendingCommands();
 
         if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) return;
         if (!_hook.IsHooked) return;
