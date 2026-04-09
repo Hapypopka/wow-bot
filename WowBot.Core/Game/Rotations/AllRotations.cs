@@ -34,12 +34,34 @@ public static class AllRotations
     local function HD(u,id) local sn=SN(id) if not sn then return false end return HasDebuff(u,sn) end
     local function BS(id) for i=1,40 do local n,_,_,c,_,_,_,_,_,_,sId=UnitBuff('player',i) if not n then return 0 end if sId==id then return c or 0 end end return 0 end
     local function IU(id) local n=SN(id) if not n then return false end return IsUsable(n) end
-    -- Танк: автотаунт на моба который бьёт НЕ танка
+    -- Определяем МТ рейда (кэш 5с)
+    if not WB_MT or not WB_MT_T or GetTime()-WB_MT_T>5 then
+        WB_MT=nil WB_MT_T=GetTime()
+        local nr=GetNumRaidMembers()
+        if nr>0 then for i=1,nr do local n,_,_,_,_,_,_,_,_,role=GetRaidRosterInfo(i) if role=='MAINTANK' then WB_MT=n break end end end
+    end
+    local myName=UnitName('player')
+    local isMT=(WB_MT and WB_MT==myName)
+    local isOT=(not isMT and (WB_S and WB_S.AutoTaunt~=false))
+    -- Танк: автотаунт
+    -- МТ: тянет всё на себя
+    -- ОТ: тянет только мобов которые бьют НЕ мейнтанка (адды)
     local function TryTaunt(tauntId)
         if not WB_S or WB_S.AutoTaunt==false then return false end
         if not IR(tauntId) then return false end
-        local tv=UnitName('targettarget') local pn=UnitName('player')
-        if tv and tv~=pn and UnitAffectingCombat('target') then Cast(tauntId) return true end
+        if not UnitAffectingCombat('target') then return false end
+        local tv=UnitName('targettarget')
+        if not tv then return false end
+        if isMT then
+            -- МТ: тянуть всё что бьёт не меня
+            if tv~=myName then Cast(tauntId) return true end
+        elseif isOT and WB_MT then
+            -- ОТ: тянуть только если моб бьёт НЕ мейнтанка и НЕ меня (адд на хилере/дд)
+            if tv~=myName and tv~=WB_MT then Cast(tauntId) return true end
+        else
+            -- Нет МТ в рейде / не рейд — старая логика
+            if tv~=myName then Cast(tauntId) return true end
+        end
         return false
     end
     -- Танк: деф КД по HP порогу (один за раз)
