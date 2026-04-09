@@ -71,224 +71,24 @@ public class BotEngine : IDisposable
     public List<string> EnabledBuffs { get => _enabledBuffs; set => _enabledBuffs = value; }
     public string SpellFlagsLua { get; set; } = "";
 
-    /// Считает живых мобов рядом с игроком (для AoE ротаций, напр. Залп охотника)
-    private int CountNearbyEnemies(WowPlayer player, float range = 30f)
-    {
-        int count = 0;
-        foreach (var unit in _objectManager.Units)
-        {
-            if (!unit.IsAlive) continue;
-            if (player.DistanceTo(unit) > range) continue;
-            count++;
-        }
-        return count;
-    }
-    private int CountNearbyCombatEnemies(WowPlayer player, float range = 10f)
-    {
-        int count = 0;
-        // GUID'ы союзников чтобы определить враждебность
-        var friendlyGuids = new HashSet<ulong>();
-        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
-        foreach (var p in _objectManager.Players)
-            friendlyGuids.Add(p.Guid);
+    // CountNearbyEnemies, CountNearbyCombatEnemies → делегирование в CombatHelper
+    private int CountNearbyEnemies(WowPlayer player, float range = 30f) => _combatHelper.CountNearbyEnemies(player, range);
+    private int CountNearbyCombatEnemies(WowPlayer player, float range = 10f) => _combatHelper.CountNearbyCombatEnemies(player, range);
 
-        foreach (var unit in _objectManager.Units)
-        {
-            if (!unit.IsAlive) continue;
-            if (!unit.InCombat) continue;
-            if (player.DistanceTo(unit) > range) continue;
-            // Враждебный = его таргет кто-то из нашей группы (бьёт нас/союзника)
-            if (unit.TargetGuid == 0) continue;
-            if (!friendlyGuids.Contains(unit.TargetGuid)) continue;
-            count++;
-        }
-        return count;
-    }
-
-    /// <summary>Пробуем кастовать ground AoE на таргет (Гроза, Метель и т.д.)</summary>
-    /// <returns>true если начали AoE каст</returns>
-    private bool TryGroundAoE(Entities.WowPlayer player, Entities.WowUnit target)
-    {
-        if (!_aoeEnabled) return false;
-        if (player.IsCasting) return false;
-        // Проверяем channeling — если уже ченнелим (Гроза), не прерываем
-        if (player.ChannelingSpellId != 0) return false;
-
-        int nearTarget = CountEnemiesNearTarget(target, 10f);
-        if (nearTarget < AoeMinEnemies) return false;
-
-        bool hurricaneEnabled = IsSpellEnabled("Hurricane");
-
-        // Определяем AoE спелл по классу
-        string? aoeSpell = PlayerClass switch
-        {
-            "DRUID" when _specName?.Contains("Balance") == true => hurricaneEnabled ? "Гроза" : null,
-            "HUNTER" => IsSpellEnabled("Volley") ? "WB_VOLLEY" : null,
-            _ => null
-        };
-
-        if (aoeSpell == null) return false;
-
-        // Каст спелла → terrain click на позицию таргета
-        if (aoeSpell == "WB_VOLLEY")
-            _hook.ExecuteLua("local n=GetSpellInfo(1510) if n then CastSpellByName(n) end", 200);
-        else
-            _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
-        System.Threading.Thread.Sleep(100);
-        bool ok = _hook.CastTerrainClick(target.X, target.Y, target.Z);
-        Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok={ok}");
-        return ok;
-    }
+    // TryGroundAoE, CountEnemiesNearTarget → делегирование в CombatHelper
+    private bool TryGroundAoE(Entities.WowPlayer player, Entities.WowUnit target) =>
+        _combatHelper.TryGroundAoE(player, target, _aoeEnabled, AoeMinEnemies, PlayerClass, _specName, SpellFlagsLua);
 
     private bool IsSpellEnabled(string key) => SpellFlagsLua?.Contains($"{key}=true") == true;
 
-    /// <summary>Считаем живых врагов в бою рядом с таргетом (для AoE решений)</summary>
-    private int CountEnemiesNearTarget(Entities.WowUnit target, float range = 10f)
-    {
-        int count = 0;
-        var friendlyGuids = new HashSet<ulong>();
-        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
-        foreach (var p in _objectManager.Players)
-            friendlyGuids.Add(p.Guid);
-        foreach (var unit in _objectManager.Units)
-        {
-            if (!unit.IsAlive) continue;
-            if (friendlyGuids.Contains(unit.Guid)) continue;
-            // Враждебный: таргетит кого-то из нашей группы
-            if (unit.TargetGuid != 0 && !friendlyGuids.Contains(unit.TargetGuid)) continue;
-            float dx = unit.X - target.X;
-            float dy = unit.Y - target.Y;
-            float dz = unit.Z - target.Z;
-            if (dx * dx + dy * dy + dz * dz <= range * range)
-                count++;
-        }
-        return count;
-    }
+    // TrySmartTaunt → делегирование в CombatHelper
+    private bool TrySmartTaunt(Entities.WowPlayer player) =>
+        _combatHelper.TrySmartTaunt(player, PlayerClass, SpellFlagsLua);
 
-    /// <summary>
-    /// Умный таунт: ищет моба в ObjectManager который бьёт союзника (не нас).
-    /// Переключает таргет на моба и кастует таунт через Lua.
-    /// </summary>
-    private int _smartTauntTick;
-    private bool TrySmartTaunt(Entities.WowPlayer player)
-    {
-        if (!IsSpellEnabled("AutoTaunt")) return false;
-        _smartTauntTick++;
-        if (_smartTauntTick < 5) return false; // каждые ~750мс
-        _smartTauntTick = 0;
+    // AoE Avoidance → делегирование в CombatHelper
+    public bool IsAoeFleeing => _combatHelper.IsAoeFleeing;
 
-        ulong myGuid = _objectManager.LocalPlayerGuid;
-
-        // Ищем моба который бьёт НЕ нас и в радиусе 30м
-        foreach (var unit in _objectManager.Units)
-        {
-            if (!unit.IsAlive || !unit.InCombat) continue;
-            if (unit.TargetGuid == 0 || unit.TargetGuid == myGuid) continue; // бьёт нас или никого
-            if (player.DistanceTo(unit) > 30f) continue;
-
-            // Проверяем: бьёт ли моб кого-то из нашей группы?
-            bool hitsAlly = false;
-            foreach (var p in _objectManager.Players)
-            {
-                if (p.Guid == myGuid) continue;
-                if (p.Guid == unit.TargetGuid) { hitsAlly = true; break; }
-            }
-            if (!hitsAlly) continue;
-
-            // Нашли моба бьющего союзника — таргетим + таунт
-            string mobName = unit.Name.Replace("'", "\\'");
-            if (string.IsNullOrEmpty(mobName)) continue;
-
-            // Определяем таунт по классу
-            int tauntId = PlayerClass switch
-            {
-                "WARRIOR" => 355,      // Taunt
-                "PALADIN" => 62124,    // Hand of Reckoning
-                "DEATHKNIGHT" => 56222, // Dark Command
-                "DRUID" => 6795,       // Growl
-                _ => 0
-            };
-            if (tauntId == 0) return false;
-
-            string lua = $"TargetUnit('{mobName}') local n=GetSpellInfo({tauntId}) if n then CastSpellByName(n) end";
-            _hook.ExecuteLua(lua, 300);
-            Logger.Log(LogCat.Tank, $"SmartTaunt: {mobName} → {tauntId}");
-            return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// AoE Avoidance через DynObject (вдохновлено AmeisenBotX CombatMovementLeaf).
-    /// Сканирует DynObjects из ObjectManager — находит вражеские AoE зоны.
-    /// Если стоим в AoE → бежим в противоположную сторону от центра AoE.
-    /// </summary>
-    private int _aoeTick;
-    private DateTime _aoeFleeUntil = DateTime.MinValue;
-    public bool IsAoeFleeing => _aoeFleeUntil > DateTime.UtcNow;
-
-    // Безопасные AoE дебафы (слоу/баффы без урона) — не бежим
-    private static readonly HashSet<int> SafeAoeDebuffs = new()
-    {
-        68766, // Осквернение (Desecration) ДК — только слоу 50%, без урона
-    };
-
-    private bool TryAoEAvoidance(Entities.WowPlayer player)
-    {
-        _aoeTick++;
-        if (_aoeTick < 3) return false; // каждые ~450мс
-        _aoeTick = 0;
-
-        int dynCount = _objectManager.DynObjects.Count;
-        if (dynCount == 0) return false;
-
-        // Дебафы на игроке — если SpellId дебафа совпадает с DynObject SpellId → лужа вражеская
-        var playerDebuffs = new HashSet<int>(player.GetAuraSpellIds());
-
-        // Ищем DynObject рядом, чей SpellId совпадает с дебафом на нас
-        float sumX = 0, sumY = 0;
-        int count = 0;
-        float maxRadius = 0;
-
-        foreach (var dyn in _objectManager.DynObjects)
-        {
-            // Ключевая проверка: есть ли дебаф от этого спелла на нас?
-            if (!playerDebuffs.Contains(dyn.SpellId)) continue;
-            // Белый список: безопасные AoE (слоу без урона)
-            if (SafeAoeDebuffs.Contains(dyn.SpellId)) continue;
-
-            // Проверяем: стоим ли внутри AoE (distance < radius + 2)
-            float dx = player.X - dyn.X;
-            float dy = player.Y - dyn.Y;
-            float dist = MathF.Sqrt(dx * dx + dy * dy);
-
-            if (dist < dyn.Radius + 2f)
-            {
-                sumX += dyn.X;
-                sumY += dyn.Y;
-                count++;
-                if (dyn.Radius > maxRadius) maxRadius = dyn.Radius;
-                // логируем только при срабатывании flee (ниже)
-            }
-        }
-
-        if (count == 0) return false;
-
-        // Бежим ОТ ЦЕНТРА лужи на radius + 5 ярдов
-        float meanX = sumX / count;
-        float meanY = sumY / count;
-        float escapeAngle = MathF.Atan2(player.Y - meanY, player.X - meanX);
-        float escapeDist = maxRadius + 5f;
-        float fleeX = meanX + escapeDist * MathF.Cos(escapeAngle);
-        float fleeY = meanY + escapeDist * MathF.Sin(escapeAngle);
-
-        // Останавливаем approach перед flee
-        try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
-        _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
-        _aoeFleeUntil = DateTime.UtcNow.AddSeconds(2);
-        Logger.Log(LogCat.AoE, $"AoE Flee: {count} DynObj, flee=({fleeX:F0},{fleeY:F0})");
-        return true;
-    }
+    private bool TryAoEAvoidance(Entities.WowPlayer player) => _combatHelper.TryAoEAvoidance(player);
 
     public string SelectedSeal { get; set; } = "";
     public string SelectedBlessing { get; set; } = "BoM";
@@ -383,6 +183,7 @@ public class BotEngine : IDisposable
         BossEngine = new BossEngine(hook, objectManager, ctm, navigation);
         _combatPositioning = new CombatPositioning(ctm);
         _buffManager = new BuffManager();
+        _combatHelper = new CombatHelper(objectManager, hook, ctm);
 
         // Навигация через навмеш (опционально)
         NavEngine = new WowBot.Core.Navigation.NavEngine(ctm, objectManager);
@@ -397,6 +198,7 @@ public class BotEngine : IDisposable
 
     private readonly CombatPositioning _combatPositioning;
     private readonly BuffManager _buffManager;
+    private readonly CombatHelper _combatHelper;
 
     public bool MoveBehindEnabled { get; set; }
 
@@ -653,7 +455,7 @@ public class BotEngine : IDisposable
     /// <summary>Остановка AoE flee движения + approach</summary>
     private void StopAoeMovement()
     {
-        _aoeFleeUntil = DateTime.MinValue;
+        _combatHelper.ResetAoeFlee();
         _slaveApproaching = false;
         try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
     }
