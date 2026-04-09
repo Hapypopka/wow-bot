@@ -218,6 +218,7 @@ public class BotEngine : IDisposable
 
         switch (cmd.Type)
         {
+            // === Тоглы (UI) ===
             case Abstractions.BotCommandType.StartRotation:
                 _rotationEnabled = true;
                 EnsureRunning();
@@ -231,19 +232,6 @@ public class BotEngine : IDisposable
                 OnStatusChanged?.Invoke(GetStatusText());
                 break;
 
-            case Abstractions.BotCommandType.Follow:
-                if (!string.IsNullOrEmpty(cmd.TargetName))
-                {
-                    _followEnabled = true;
-                    EnsureRunning();
-                }
-                OnStatusChanged?.Invoke(GetStatusText());
-                break;
-
-            case Abstractions.BotCommandType.Stop:
-                ForceStop();
-                break;
-
             case Abstractions.BotCommandType.StartBuffs:
                 BuffsEnabled = true;
                 break;
@@ -252,8 +240,112 @@ public class BotEngine : IDisposable
                 BuffsEnabled = false;
                 break;
 
-            // Attack, Auto, Scatter и др. — пока обрабатываются в Hivemind.ExecuteSlaveCommand
-            // По мере миграции — переносить сюда
+            // === Движение ===
+            case Abstractions.BotCommandType.Follow:
+                Hivemind.MasterName = cmd.TargetName;
+                Hivemind.Mode = Hivemind.SlaveMode.Following;
+                SlaveCtrl.CmdFollow(cmd.TargetName);
+                HivemindFollowing = true;
+                _rotationEnabled = true;
+                BuffsEnabled = true;
+                EnsureRunning();
+                OnStatusChanged?.Invoke(GetStatusText());
+                break;
+
+            case Abstractions.BotCommandType.Stop:
+                Hivemind.Mode = Hivemind.SlaveMode.Idle;
+                Hivemind.ForceIdle = true;
+                HivemindFollowing = false;
+                SlaveCtrl.CmdStop();
+                _hook.ExecuteLua("ClearTarget()", 100);
+                ForceStop();
+                break;
+
+            case Abstractions.BotCommandType.MoveTo:
+                Hivemind.Mode = Hivemind.SlaveMode.GoingToPoint;
+                HivemindFollowing = false;
+                SlaveCtrl.CmdStop();
+                SlaveCtrl.CmdGotoPoint(cmd.X, cmd.Y, cmd.Z);
+                _rotationEnabled = true;
+                BuffsEnabled = true;
+                EnsureRunning();
+                break;
+
+            // === Бой ===
+            case Abstractions.BotCommandType.Attack:
+                Hivemind.MasterName = cmd.TargetName;
+                Hivemind.Mode = Hivemind.SlaveMode.Attacking;
+                HivemindFollowing = false;
+                SlaveCtrl.CmdStop();
+                _hook.ExecuteLua($"AssistUnit('{cmd.TargetName.Replace("'", "\\'")}') StartAttack()", 200);
+                _rotationEnabled = true;
+                BuffsEnabled = true;
+                EnsureRunning();
+                break;
+
+            case Abstractions.BotCommandType.Auto:
+                Hivemind.MasterName = cmd.TargetName;
+                Hivemind.Mode = Hivemind.SlaveMode.Auto;
+                Hivemind.AutoPauseFollow = false;
+                Hivemind.AutoPauseAttack = false;
+                SlaveCtrl.CmdFollow(cmd.TargetName);
+                HivemindFollowing = true;
+                _rotationEnabled = true;
+                BuffsEnabled = true;
+                EnsureRunning();
+                break;
+
+            case Abstractions.BotCommandType.AutoToggleFollow:
+                if (Hivemind.Mode != Hivemind.SlaveMode.Auto) break;
+                Hivemind.AutoPauseFollow = !Hivemind.AutoPauseFollow;
+                if (Hivemind.AutoPauseFollow)
+                {
+                    SlaveCtrl.CmdStop();
+                    HivemindFollowing = false;
+                }
+                else
+                {
+                    SlaveCtrl.CmdFollow(Hivemind.MasterName);
+                    HivemindFollowing = true;
+                }
+                break;
+
+            case Abstractions.BotCommandType.AutoToggleAttack:
+                if (Hivemind.Mode != Hivemind.SlaveMode.Auto) break;
+                Hivemind.AutoPauseAttack = !Hivemind.AutoPauseAttack;
+                if (Hivemind.AutoPauseAttack)
+                    _hook.ExecuteLua("ClearTarget()", 100);
+                break;
+
+            case Abstractions.BotCommandType.Scatter:
+                // Scatter не меняет Mode — только бежит в сторону
+                var scPlayer = _objectManager?.LocalPlayer;
+                if (scPlayer != null)
+                {
+                    float scatterDist = 12f;
+                    if (cmd.X > 0) scatterDist = cmd.X; // дистанция через X
+                    string scName = _objectManager!.GetPlayerName() ?? "slave";
+                    int hash = 0;
+                    foreach (char c in scName) hash = hash * 31 + c;
+                    float angle = (hash & 0xFFFF) / 65535f * 2f * MathF.PI + scPlayer.Facing * 0.3f;
+                    _ctm.MoveTo(
+                        scPlayer.X + scatterDist * MathF.Cos(angle),
+                        scPlayer.Y + scatterDist * MathF.Sin(angle),
+                        scPlayer.Z, 1.5f);
+                }
+                break;
+
+            case Abstractions.BotCommandType.Wipe:
+                Hivemind.WipeMode = !Hivemind.WipeMode;
+                break;
+
+            case Abstractions.BotCommandType.Interact:
+                if (!string.IsNullOrEmpty(cmd.TargetName))
+                {
+                    string masterN = cmd.TargetName.Replace("'", "\\'");
+                    _hook.ExecuteLua($"AssistUnit('{masterN}') InteractUnit('target')", 300);
+                }
+                break;
         }
     }
 

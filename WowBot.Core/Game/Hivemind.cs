@@ -63,7 +63,7 @@ public class Hivemind
     public bool IsActive => CurrentRole != Role.None;
     /// <summary>Флаг: идёт чтение gossip, пропустить hivemind polling</summary>
     public bool GossipReading { get; set; }
-    public string MasterName { get; private set; } = "";
+    public string MasterName { get; internal set; } = "";
 
     /// <summary>Текущий режим слейва</summary>
     public SlaveMode Mode { get; set; } = SlaveMode.Idle;
@@ -907,36 +907,31 @@ WB_HIVE_REG_TIME = 0
         if (!string.IsNullOrEmpty(cleanArg) && cmd != Command.Stop && cmd != Command.Scatter)
             _botEngine?.SlaveCtrl.InitMasterGuid(cleanArg);
 
-        // Каждая команда = полный переход в новый режим
+        // v2: все команды через BotEngine.ProcessCommand (единый обработчик)
+        var botCmd = cmd switch
+        {
+            Command.Attack => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.Attack, TargetName = cleanArg, Source = "Hivemind" },
+            Command.Follow or Command.Stack => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.Follow, TargetName = cleanArg, Source = "Hivemind" },
+            Command.Auto => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.Auto, TargetName = cleanArg, Source = "Hivemind" },
+            Command.Stop => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.Stop, Source = "Hivemind" },
+            Command.AutoToggleFollow => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.AutoToggleFollow, Source = "Hivemind" },
+            Command.AutoToggleAttack => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.AutoToggleAttack, Source = "Hivemind" },
+            Command.Scatter => new Abstractions.BotCommand { Type = Abstractions.BotCommandType.Scatter, X = float.TryParse(cleanArg, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float sd) ? sd : 12f, Source = "Hivemind" },
+            _ => (Abstractions.BotCommand?)null
+        };
 
+        // Команды через ProcessCommand (единый путь)
+        if (botCmd != null && _botEngine != null)
+        {
+            _botEngine.ProcessCommand(botCmd);
+            Logger.Info($"SLAVE: {cmd} → ProcessCommand({botCmd.Type})");
+        }
+
+        // Команды со специфичной логикой (пока остаются здесь)
         switch (cmd)
         {
-            case Command.Attack:
-                // Бейте таргет: ассист мастера + атака, без follow
-                MasterName = cleanArg;
-                Mode = SlaveMode.Attacking;
-                if (_botEngine != null) _botEngine.HivemindFollowing = false;
-                _botEngine?.SlaveCtrl.CmdStop(); // стоп follow если был
-                _hook.ExecuteLua($"AssistUnit('{cleanArg}') StartAttack()", 200);
-                OnAutoToggle?.Invoke("rotation", true);
-                OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info("SLAVE: attack (assist + hit, no follow)");
-                break;
-
-            case Command.Follow:
-            case Command.Stack:
-                // Ко мне: follow за мастером, НЕ трогает таргет, ротация бьёт свою цель
-                MasterName = cleanArg;
-                Mode = SlaveMode.Following;
-                _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
-                if (_botEngine != null) _botEngine.HivemindFollowing = true;
-                OnAutoToggle?.Invoke("rotation", true);
-                OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info("SLAVE: follow (keep current target)");
-                break;
-
             case Command.StackMA:
-                // К наводчику: слейв сам находит MAINASSIST через Lua и бежит к нему
+                // К наводчику: Lua FollowUnit (нет аналога в BotCommand)
                 try
                 {
                     _hook.ExecuteLua(
@@ -951,109 +946,19 @@ WB_HIVE_REG_TIME = 0
                 catch (Exception ex) { Logger.Error($"StackMA error: {ex.Message}"); }
                 break;
 
-            case Command.Auto:
-                // Авто: follow + авто-ассист каждые ~1с
-                MasterName = cleanArg;
-                Mode = SlaveMode.Auto;
-                AutoPauseFollow = false;
-                AutoPauseAttack = false;
-                _botEngine?.SlaveCtrl.CmdFollow(cleanArg);
-                if (_botEngine != null) _botEngine.HivemindFollowing = true;
-                OnAutoToggle?.Invoke("rotation", true);
-                OnAutoToggle?.Invoke("buffs", true);
-                Logger.Info("SLAVE: auto (follow + auto-assist)");
-                break;
-
-            case Command.AutoToggleFollow:
-                // Пауза/возобновление follow в авто-режиме
-                if (Mode != SlaveMode.Auto) break;
-                AutoPauseFollow = !AutoPauseFollow;
-                if (AutoPauseFollow)
-                {
-                    _botEngine?.SlaveCtrl.CmdStop();
-                    if (_botEngine != null) _botEngine.HivemindFollowing = false;
-                }
-                else
-                {
-                    _botEngine?.SlaveCtrl.CmdFollow(MasterName);
-                    if (_botEngine != null) _botEngine.HivemindFollowing = true;
-                }
-                Logger.Info($"SLAVE: auto follow paused={AutoPauseFollow}");
-                break;
-
-            case Command.AutoToggleAttack:
-                // Пауза/возобновление атаки в авто-режиме
-                if (Mode != SlaveMode.Auto) break;
-                AutoPauseAttack = !AutoPauseAttack;
-                if (AutoPauseAttack)
-                    _hook.ExecuteLua("ClearTarget()", 100);
-                Logger.Info($"SLAVE: auto attack paused={AutoPauseAttack}");
-                break;
-
-            case Command.Stop:
-                // Полный стоп: всё сбросить + ClearTarget
-                Mode = SlaveMode.Idle;
-                ForceIdle = true;
-                if (_botEngine != null)
-                {
-                    _botEngine.HivemindFollowing = false;
-                    _botEngine.ForceStop();
-                }
-                _botEngine?.SlaveCtrl.CmdStop();
-                _hook.ExecuteLua("ClearTarget()", 100);
-                OnAutoToggle?.Invoke("rotation", false);
-                OnAutoToggle?.Invoke("buffs", false);
-                Logger.Info("SLAVE: full stop + clear target");
-                break;
-
-            case Command.Scatter:
-                // Умный разбег: каждый слейв бежит в свою сторону через CTM
-                // Угол определяется по позиции слейва в рейде (уникальный для каждого)
-                try
-                {
-                    float scatterDist = 12f;
-                    if (float.TryParse(cleanArg, System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out float d) && d > 0) scatterDist = d;
-
-                    var player = _objectManager?.LocalPlayer;
-                    if (player != null)
-                    {
-                        // Уникальный угол: хэш от имени → равномерное распределение
-                        string scName = _objectManager.GetPlayerName() ?? "slave";
-                        int hash = 0;
-                        foreach (char c in scName) hash = hash * 31 + c;
-                        float baseAngle = (hash & 0xFFFF) / 65535f * 2f * MathF.PI;
-                        // Добавляем текущий facing для разнообразия
-                        float angle = baseAngle + player.Facing * 0.3f;
-
-                        float targetX = player.X + scatterDist * MathF.Cos(angle);
-                        float targetY = player.Y + scatterDist * MathF.Sin(angle);
-
-                        // Не меняем Mode — продолжаем текущий режим (атака/авто)
-                        // Просто бежим в точку, ротация продолжает бить таргет
-                        _ctm.MoveTo(targetX, targetY, player.Z, 1.5f);
-
-                        Logger.Info($"Scatter: {scName} angle={angle:F1}rad dist={scatterDist} → ({targetX:F0},{targetY:F0})");
-                    }
-                }
-                catch (Exception ex) { Logger.Error($"Scatter error: {ex.Message}"); }
-                break;
-
             case Command.Goto:
-                // Направить слейва в точку — сбрасываем всё, бежим к точке
+                // Координаты парсятся из строки — нужен парсинг перед BotCommand
                 var coords = cleanArg.Split(';');
                 if (coords.Length == 3 &&
                     float.TryParse(coords[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gx) &&
                     float.TryParse(coords[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gy) &&
                     float.TryParse(coords[2], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float gz))
                 {
-                    Mode = SlaveMode.GoingToPoint;
-                    if (_botEngine != null) _botEngine.HivemindFollowing = false;
-                    _botEngine?.SlaveCtrl.CmdStop(); // сбросить follow
-                    _botEngine?.SlaveCtrl.CmdGotoPoint(gx, gy, gz);
-                    OnAutoToggle?.Invoke("rotation", true);
-                    OnAutoToggle?.Invoke("buffs", true);
-                    Logger.Info($"Hivemind: SLAVE goto ({gx:F1}, {gy:F1}, {gz:F1})");
+                    _botEngine?.ProcessCommand(new Abstractions.BotCommand
+                    {
+                        Type = Abstractions.BotCommandType.MoveTo, X = gx, Y = gy, Z = gz, Source = "Hivemind"
+                    });
+                    Logger.Info($"SLAVE: goto ({gx:F1}, {gy:F1}, {gz:F1})");
                 }
                 break;
 
