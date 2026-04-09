@@ -114,8 +114,8 @@ local function MP() local m,mm=UnitMana('player'),UnitManaMax('player') if mm==0
             // 7. Crusader Strike
             AddToggle(sb, "CS", $"if IR({CrusaderStrike}) then Cast({CrusaderStrike}) return end ");
 
-            // 8. Consecration (2+ врагов, враг стоит)
-            AddToggle(sb, "Cons", $"if (WB_NCE or 0)>=2 and (GetUnitSpeed('target') or 0)==0 and IR({Consecration}) then Cast({Consecration}) return end ");
+            // 8. Consecration (враг стоит на месте — не тратим на убегающего)
+            AddToggle(sb, "Cons", $"if (GetUnitSpeed('target') or 0)==0 and IR({Consecration}) then Cast({Consecration}) return end ");
 
             // 9. Exorcism (только с AoW проком)
             AddToggle(sb, "Exo", $"if HB({ArtOfWar}) and IR({Exorcism}) then Cast({Exorcism}) return end ");
