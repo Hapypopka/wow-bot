@@ -118,7 +118,6 @@ public class BotEngine : IDisposable
         if (nearTarget < AoeMinEnemies) return false;
 
         bool hurricaneEnabled = IsSpellEnabled("Hurricane");
-        Logger.Log(LogCat.AoE, $"GroundAoE: class={PlayerClass} spec={_specName} Hurricane={hurricaneEnabled} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 100))}\"");
 
         // Определяем AoE спелл по классу
         string? aoeSpell = PlayerClass switch
@@ -128,7 +127,7 @@ public class BotEngine : IDisposable
             _ => null
         };
 
-        if (aoeSpell == null) { Logger.Log(LogCat.AoE, $"GroundAoE: skip — no spell for class={PlayerClass} spec={_specName}"); return false; }
+        if (aoeSpell == null) return false;
 
         // Каст спелла → terrain click на позицию таргета
         if (aoeSpell == "WB_VOLLEY")
@@ -269,7 +268,7 @@ public class BotEngine : IDisposable
                 sumY += dyn.Y;
                 count++;
                 if (dyn.Radius > maxRadius) maxRadius = dyn.Radius;
-                Logger.Log(LogCat.AoE, $"AoE HOSTILE: spell={dyn.SpellId} r={dyn.Radius:F1} dist={dist:F1} pos=({dyn.X:F0},{dyn.Y:F0})");
+                // логируем только при срабатывании flee (ниже)
             }
         }
 
@@ -287,8 +286,7 @@ public class BotEngine : IDisposable
         try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
         _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
         _aoeFleeUntil = DateTime.UtcNow.AddSeconds(2);
-        Logger.Log(LogCat.AoE, $"AoE Avoidance: {count} hostile DynObj, maxR={maxRadius:F1} flee=({fleeX:F0},{fleeY:F0}) escapeDist={escapeDist:F1}");
-        Logger.Log(LogCat.AoE, $"AoE Avoidance: {count} DynObj, maxR={maxRadius:F1} flee=({fleeX:F0},{fleeY:F0}) escapeDist={escapeDist:F1}");
+        Logger.Log(LogCat.AoE, $"AoE Flee: {count} DynObj, flee=({fleeX:F0},{fleeY:F0})");
         return true;
     }
 

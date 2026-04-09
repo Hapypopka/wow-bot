@@ -104,13 +104,7 @@ public class ObjectManager
         Objects = objects;
         LocalPlayer = localPlayer;
 
-        // Раз в 33 вызова (~5с) логируем итог
         _updateCount++;
-        if (_updateCount >= 33)
-        {
-            _updateCount = 0;
-            Logger.Log(LogCat.AoE, $"ObjectManager: units={units.Count} players={players.Count} dyn={dynObjects.Count} obj={objects.Count} total={safetyCounter}");
-        }
     }
     private int _updateCount;
 

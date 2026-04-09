@@ -25,9 +25,6 @@ public class WowDynObject : WowObject
         // WoWCircle: Radius в дескрипторе = 1.0 (неверно). Используем фикс по SpellId
         Radius = rawRadius > 1.5f ? rawRadius : GetDefaultRadius(SpellId);
 
-        Logger.Log(LogCat.AoE, $"NEW DynObj: spell={SpellId} r={Radius:F1} rawR={rawRadius:F1} pos=({X:F0},{Y:F0},{Z:F0}) caster=0x{Caster:X}");
-
-        // Raw дамп для дебага оффсетов
         try
         {
             byte[] raw = memory.ReadBytes(desc, 32);
