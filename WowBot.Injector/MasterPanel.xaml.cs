@@ -98,15 +98,32 @@ public partial class MasterPanel : Window
         OnCommand?.Invoke(_autoPveOn ? "autopve:on" : "autopve:off");
     }
 
+    private string _activeGlobalCmd = "";
+
     private void SendCommand(string cmd)
     {
         OnCommand?.Invoke(cmd);
-        // Flash button
-        var btn = cmd switch { "attack" => BtnAttack, "follow" => BtnFollow, "auto" => BtnAuto, _ => BtnStop };
-        btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a6741"));
-        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-        timer.Tick += (s, e) => { btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")); timer.Stop(); };
-        timer.Start();
+        SetActiveGlobalCommand(cmd);
+    }
+
+    public void SetActiveGlobalCommand(string cmd)
+    {
+        _activeGlobalCmd = cmd;
+        // Сбросить все большие кнопки
+        var allBtns = new[] { (BtnAttack, "attack"), (BtnFollow, "follow"), (BtnAuto, "auto"), (BtnStop, "stop") };
+        foreach (var (btn, key) in allBtns)
+        {
+            bool active = key == cmd;
+            btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#4a6741" : "#1a1a28"));
+        }
+        // Сбросить подсветку StackMA/Scatter если другая команда
+        if (cmd != "stackma" && cmd != "scatter")
+        {
+            BtnStackMA.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a2a1a"));
+            BtnStackMA.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8ac88a"));
+            BtnScatter.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a1a1a"));
+            BtnScatter.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c88a8a"));
+        }
     }
 
     // --- Settings toggle ---
@@ -328,9 +345,35 @@ public partial class MasterPanel : Window
                 MaxWidth = 70,
             });
 
-            // → За кем / 📍 к точке
+            // → За кем / 📍 к точке / 📌 к наводчику / 💥 разбег
             bool isGoto = slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Goto;
-            if (isGoto)
+            bool isStackMA = slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.StackMA;
+            bool isScatter = slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Scatter;
+            if (isStackMA)
+            {
+                namePanel.Children.Add(new TextBlock
+                {
+                    Text = "📌",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8ac88a")),
+                    FontSize = 10,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(2, 0, 0, 0),
+                    ToolTip = "Бежит к наводчику",
+                });
+            }
+            else if (isScatter)
+            {
+                namePanel.Children.Add(new TextBlock
+                {
+                    Text = "💥",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c88a8a")),
+                    FontSize = 10,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(2, 0, 0, 0),
+                    ToolTip = "Разбежался",
+                });
+            }
+            else if (isGoto)
             {
                 namePanel.Children.Add(new TextBlock
                 {
@@ -371,7 +414,10 @@ public partial class MasterPanel : Window
             foreach (var (cmd, icon, tip) in commands)
             {
                 var ac = slave.ActiveCommand;
-                bool isActive = ac?.ToString().ToLower() == cmd;
+                string acStr = ac?.ToString() ?? "";
+                bool isActive = acStr.ToLower() == cmd ||
+                    (cmd == "follow" && acStr == "Stack") ||
+                    (cmd == "follow" && acStr == "StackMA");
                 var cmdBtn = new Button
                 {
                     Content = icon, FontSize = 11, Width = 24, Height = 28,
@@ -682,13 +728,17 @@ public partial class MasterPanel : Window
     private void BtnStackMA_Click(object sender, RoutedEventArgs e)
     {
         OnStackMA?.Invoke();
-        FlashButton(BtnStackMA, "#1a3a1a", "#aaeeaa", "#1a2a1a", "#8ac88a");
+        SetActiveGlobalCommand("stackma");
+        BtnStackMA.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a5a2a"));
+        BtnStackMA.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ccffcc"));
     }
 
     private void BtnScatter_Click(object sender, RoutedEventArgs e)
     {
         OnScatter?.Invoke();
-        FlashButton(BtnScatter, "#3a1a1a", "#eeaaaa", "#2a1a1a", "#c88a8a");
+        SetActiveGlobalCommand("scatter");
+        BtnScatter.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5a2a2a"));
+        BtnScatter.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ffcccc"));
     }
 
     private void FlashButton(System.Windows.Controls.Button btn, string bgOn, string fgOn, string bgOff, string fgOff)
