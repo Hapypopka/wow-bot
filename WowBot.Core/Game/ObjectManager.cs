@@ -57,9 +57,6 @@ public class ObjectManager
 
             var objectType = (WowObjectType)_memory.ReadInt32(currentObject + Offsets.ObjectType);
 
-            // Debug: логируем ВСЕ нестандартные типы
-            if (objectType == WowObjectType.DynamicObject || objectType == WowObjectType.GameObject)
-                Logger.Log(LogCat.AoE, $"ObjType={objectType} ({(int)objectType}) at 0x{currentObject:X8}");
             if ((int)objectType > 7 || (int)objectType < 0)
                 Logger.Log(LogCat.Error, $"UNKNOWN ObjType={((int)objectType)} at 0x{currentObject:X8}", "ERR");
 

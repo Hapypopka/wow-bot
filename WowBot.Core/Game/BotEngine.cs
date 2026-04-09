@@ -1731,6 +1731,23 @@ WB_AoE()
             sb.Append("end ");
         }
 
+        // ДК: авто-призыв гуля + Костяной щит + Зимний горн
+        if (PlayerClass == "DEATHKNIGHT")
+        {
+            if (selfBuffs.Remove("WB_DK_PET"))
+            {
+                sb.Append("if not UnitExists('pet') or UnitIsDead('pet') then ");
+                sb.Append("local n=GetSpellInfo(46584) if n and IsUsableSpell(n) and GetSpellCooldown(n)==0 then CastSpellByName(n) return end ");
+                sb.Append("end ");
+            }
+            if (selfBuffs.Remove("WB_BONE_SHIELD"))
+            {
+                sb.Append("local n=GetSpellInfo(49222) if n and IsUsableSpell(n) then ");
+                sb.Append("local has=false for i=1,40 do local bn=UnitBuff('player',i) if not bn then break end if bn==n then has=true break end end ");
+                sb.Append("if not has and GetSpellCooldown(n)==0 then CastSpellByName(n) return end end ");
+            }
+        }
+
         // Оружие шамана: MH + OH (двуручники для энха)
         // GetWeaponEnchantInfo() → hasMH, mhExp, mhCharges, hasOH, ohExp, ohCharges
         var weaponNames = new Dictionary<string, string>

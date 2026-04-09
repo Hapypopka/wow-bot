@@ -720,6 +720,22 @@ public static class AllRotations
 ");
 
     private static string DeathKnight() => WrapDPS(@"
+    -- Управление гулем: defensive в бою, passive вне боя, Claw автокаст
+    if UnitExists('pet') and not UnitIsDead('pet') then
+        local inCombat = UnitAffectingCombat('player')
+        if inCombat then
+            -- В бою: defensive + атакуй цель
+            if not WB_DK_DEF then PetDefensiveMode() WB_DK_DEF=true end
+            if UnitExists('target') and UnitCanAttack('player','target') and not UnitIsDeadOrGhost('target') then PetAttack() end
+            -- Claw на автокаст (spell #1 пета, один раз)
+            if not WB_DK_AC then
+                local n,_,_,_,_,ac=GetPetActionInfo(4) if n and not ac then TogglePetAutocast(4) end
+                WB_DK_AC=true
+            end
+        else
+            if WB_DK_DEF then PetPassiveMode() PetFollow() WB_DK_DEF=nil end
+        end
+    end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
@@ -760,14 +776,27 @@ public static class AllRotations
         if WB_S.HoW~=false and IR(57330) then Cast(57330) end
     else
         -- UNHOLY
+        -- Костяной щит — через баффы (WB_BONE_SHIELD)
+        -- 1. Болезни
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
-        if WB_S.Pest~=false and hasFF and hasBP and IR(50842) then Cast(50842) return end
+        -- 3. Мор только в AoE (нет символа мора)
+        if WB_S.Pest~=false and hasFF and hasBP and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
+        -- 4. Лик смерти — сброс RP при >80 (не копить в потолок)
+        if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end
+        -- 5. Бурсты
         if WB_S.Gargoyle~=false and IR(49206) then Cast(49206) return end
         if WB_S.UB~=false and IR(49194) then Cast(49194) return end
-        if WB_S.DnD~=false and IR(43265) then Cast(43265) return end
+        -- 6. Удар Плети — ОСНОВНОЙ урон (Unholy+Frost руны)
         if WB_S.SS~=false and IR(55090) then Cast(55090) return end
-        if WB_S.BS~=false then Cast(45902) return end
+        -- 7. Кровоотвод → Кровавый удар — конверсия Blood → Death руна
+        if WB_S.BT~=false and IR(45529) then Cast(45529) return end
+        if WB_S.BS~=false and IR(45902) then Cast(45902) return end
+        -- 8. DnD (AoE)
+        if WB_S.DnD~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        -- 9. Усиление рунического оружия — если руны на КД
+        if WB_S.ERW~=false and IR(47568) then Cast(47568) return end
+        -- 10. Лик смерти — дамп остатков RP
         if WB_S.DC~=false and IR(47541) then Cast(47541) end
     end
 ");
