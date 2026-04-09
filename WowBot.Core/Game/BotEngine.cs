@@ -943,5 +943,3 @@ public class BotEngine : IDisposable
         StopAll();
     }
 }
-// Остальной код BuildClassBuffScript и BuildBuffScript перенесён в BuffManager.cs
-// EOF
