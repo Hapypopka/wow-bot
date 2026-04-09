@@ -369,8 +369,8 @@ public static class AllRotations
         if WB_S.DS~=false and IR(53385) then Cast(53385) return end
         -- Crusader Strike
         if WB_S.CS~=false and IR(35395) then Cast(35395) return end
-        -- Consecration: только 2+ врагов и враг не двигается (NPCBots)
-        if WB_S.Cons~=false and (WB_NCE or 0)>=2 and (GetUnitSpeed('target') or 0)==0 and IR(26573) then Cast(26573) return end
+        -- Consecration: враг стоит на месте
+        if WB_S.Cons~=false and (GetUnitSpeed('target') or 0)==0 and IR(26573) then Cast(26573) return end
         -- Exorcism: только с Art of War проком (инстант)
         if WB_S.Exo~=false and HB(59578) and IR(879) then Cast(879) return end
         -- Sacred Shield
