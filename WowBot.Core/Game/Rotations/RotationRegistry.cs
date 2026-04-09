@@ -12,7 +12,10 @@ public static class RotationRegistry
 
     static RotationRegistry()
     {
-        // Регистрация всех ротаций
+        // Спек-специфичные ротации (C#) — приоритет выше общих
+        _rotations.Add(new RetPaladinRotation());
+
+        // Общие ротации (Lua из AllRotations)
         _rotations.Add(new WarriorRotation());
         _rotations.Add(new PaladinRotation());
         _rotations.Add(new HunterRotation());
