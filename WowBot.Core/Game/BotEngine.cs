@@ -560,15 +560,31 @@ public class BotEngine : IDisposable
             return;
         }
 
-        // TRACE: логируем каждое действие которое может двигать персонажа
-        bool mb = _combatPositioning.IsMovingBehind;
-        Logger.Info($"TRACE SlaveAttack: mb={mb} casting={player.IsCasting} pos=({player.X:F0},{player.Y:F0})");
-
-        // Поворот к таргету (C# запись facing — не конфликтует с Lua MoveBackward)
-        Logger.Info($"TRACE: FaceInstant CALLED mb={mb}");
-        _navigation.FaceInstant(player, slaveTarget);
-
         if (player.IsCasting) return;
+
+        // MoveBehind / RangedPos (позиционирование в бою)
+        _combatPositioning.IsMelee = IsMeleeSpec;
+        _combatPositioning.IsTank = IsTankSpec;
+        _combatPositioning.IsHealer = IsHealer;
+        _combatPositioning.PlayerClass = PlayerClass;
+        _combatPositioning.SpecName = _specName;
+        bool movingBehind = false;
+        if (MoveBehindEnabled)
+        {
+            if (_combatPositioning.TryMoveBehind(player, slaveTarget)) { movingBehind = true; }
+            else if (_combatPositioning.TryRangedPosition(player, slaveTarget)) { _navigation.FaceInstant(player, slaveTarget); }
+        }
+
+        // Поворот к таргету
+        if (!movingBehind)
+            _navigation.FaceInstant(player, slaveTarget);
+
+        // MoveBehind активно — не запускаем approach (MoveForwardStart перебивает CTM)
+        if (_combatPositioning.IsMovingBehind)
+        {
+            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck, 500);
+            return;
+        }
 
         bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
                        PlayerClass == "DEATHKNIGHT" ||
@@ -576,23 +592,15 @@ public class BotEngine : IDisposable
                        (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
                        (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
 
-        // MoveBehind: если активно перемещение за спину — не запускаем Lua approach (иначе MoveForwardStart перебивает CTM)
-        if (_combatPositioning.IsMovingBehind)
-        {
-            Logger.Info("TRACE: approach BLOCKED (IsMovingBehind)");
-            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck, 500);
-            return;
-        }
+        // Ground AoE
+        if (TryGroundAoE(player, slaveTarget)) return;
 
-        // Approach через Lua (НЕ C# CTM!) — так AoE flee из PreChecksDPS может заблокировать.
-        // CTM перезаписывал MoveBackward каждые 150мс, теперь движение полностью в Lua.
-        // CheckInteractDistance: 3 = ~10yd (melee), 1 = ~28yd (ranged)
+        // Approach через Lua
         int distId = isMelee ? 3 : 1;
         string approachLua =
             $"if not CheckInteractDistance('target',{distId}) then MoveForwardStart() WB_FWD=1 " +
             $"elseif WB_FWD then MoveForwardStop() WB_FWD=nil end ";
 
-        Logger.Info($"TRACE: approach+rotation EXEC");
         _slaveApproaching = true;
         string script = approachLua + enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
         _hook.ExecuteLua(script, 500);
@@ -883,8 +891,8 @@ public class BotEngine : IDisposable
             {
                 SlaveCtrl.FollowDistance = _followDistance;
 
-                // Если вышли из Attacking — остановить Lua approach
-                if (Hivemind.Mode != Hivemind.SlaveMode.Attacking && _slaveApproaching)
+                // Если вышли из боевого режима — остановить Lua approach
+                if (Hivemind.Mode != Hivemind.SlaveMode.Attacking && Hivemind.Mode != Hivemind.SlaveMode.Auto && _slaveApproaching)
                 {
                     _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50);
                     _slaveApproaching = false;
@@ -968,13 +976,9 @@ public class BotEngine : IDisposable
                         }
                         else
                         {
-                            // Авто-ассист (если атака не на паузе)
+                            // Авто-ассист: каждые ~1с берём таргет мастера
                             if (!Hivemind.AutoPauseAttack)
                                 Hivemind.SlaveAutoTick();
-
-                            // Приоритет: сначала follow, потом атака
-                            if (!Hivemind.AutoPauseFollow)
-                                SlaveCtrl.Tick(); // follow мастера
 
                             var autoTarget = _objectManager.GetTarget();
                             bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
@@ -983,19 +987,29 @@ public class BotEngine : IDisposable
 
                             if (hasAutoTarget)
                             {
-                                bool autoStanding = _navigation.IsPlayerStanding(player);
-                                if (!autoStanding)
+                                // В БОЮ: отключаем follow, переключаемся на Attack-логику
+                                // (подбег к мобу + MoveBehind + ротация)
+                                if (HivemindFollowing)
                                 {
-                                    // Бежим за мастером — только инстанты
-                                    _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+                                    HivemindFollowing = false;
+                                    SlaveCtrl.CmdStop(); // стоп follow за мастером
+                                    Logger.Info("Auto: IN COMBAT — stop follow, switch to attack mode");
                                 }
-                                else
+                                SlaveAttackTick(player, enemyCountLua);
+                            }
+                            else
+                            {
+                                // ВНЕ БОЯ: follow за мастером
+                                if (!HivemindFollowing && !Hivemind.AutoPauseFollow)
                                 {
-                                    // Стоим рядом с мастером — полная ротация + поворот к мобу
-                                    if (TryGroundAoE(player, autoTarget!)) { }
-                                    else if (_autoFace && !_navigation.FaceInstant(player, autoTarget!)) { }
-                                    else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
+                                    HivemindFollowing = true;
+                                    string masterName = Hivemind.MasterName;
+                                    if (!string.IsNullOrEmpty(masterName))
+                                        SlaveCtrl.CmdFollow(masterName);
+                                    Logger.Info("Auto: OUT OF COMBAT — resume follow");
                                 }
+                                if (!Hivemind.AutoPauseFollow)
+                                    SlaveCtrl.Tick();
                             }
                         }
                         break;

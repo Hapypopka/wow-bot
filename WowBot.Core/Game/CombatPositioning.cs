@@ -37,9 +37,13 @@ public class CombatPositioning
         return !IsInFrontArc(target, player.X, player.Y);
     }
 
-    /// <summary>Вычисляет точку за спиной таргета</summary>
-    private static (float x, float y, float z) GetBehindPosition(WowUnit target, float distance = 2.0f)
+    /// <summary>Вычисляет точку за спиной таргета. distFromCenter учитывает хитбокс (как NPCBots GetNearPoint)</summary>
+    private static (float x, float y, float z) GetBehindPosition(WowUnit target, float distFromCenter)
     {
+        // NPCBots: offset = target.BoundingRadius + bot.CombatReach
+        // У нас нет BoundingRadius, но distFromCenter = текущая дистанция игрока до центра таргета
+        // Это уже включает радиус хитбокса + melee reach → точка за спиной на той же дистанции
+        float distance = MathF.Max(distFromCenter, 2.0f);
         float behindAngle = target.Facing + MathF.PI;
         float x = target.X + distance * MathF.Cos(behindAngle);
         float y = target.Y + distance * MathF.Sin(behindAngle);
@@ -101,10 +105,11 @@ public class CombatPositioning
         }
 
         // Слишком далеко — сначала подбежать (approach обработает)
-        if (dist > 8f) { IsMovingBehind = false; return false; }
+        if (dist > 12f) { IsMovingBehind = false; return false; }
 
-        // Вычисляем точку за спиной
-        var (x, y, z) = GetBehindPosition(target);
+        // Вычисляем точку за спиной, используя текущую дистанцию до центра как размер хитбокса
+        // Для манекена dist~2, для босса dist~5-6 → автоматически адаптируется
+        var (x, y, z) = GetBehindPosition(target, dist);
         _ctm.MoveTo(x, y, z, 0.5f);
         IsMovingBehind = true;
         Logger.Info($"MoveBehind: GO ({x:F1},{y:F1}) behind target facing={target.Facing:F2} dist={dist:F1} inFront={inFront}");
