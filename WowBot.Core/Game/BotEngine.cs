@@ -242,23 +242,42 @@ public class BotEngine : IDisposable
 
             // === Движение ===
             case Abstractions.BotCommandType.Follow:
-                Hivemind.MasterName = cmd.TargetName;
-                Hivemind.Mode = Hivemind.SlaveMode.Following;
-                SlaveCtrl.CmdFollow(cmd.TargetName);
-                HivemindFollowing = true;
-                _rotationEnabled = true;
-                BuffsEnabled = true;
+                if (cmd.Source == "Hivemind" && !string.IsNullOrEmpty(cmd.TargetName))
+                {
+                    // Slave follow: через Hivemind + SlaveCtrl
+                    Hivemind.MasterName = cmd.TargetName;
+                    Hivemind.Mode = Hivemind.SlaveMode.Following;
+                    SlaveCtrl.CmdFollow(cmd.TargetName);
+                    HivemindFollowing = true;
+                    _rotationEnabled = true;
+                    BuffsEnabled = true;
+                }
+                else
+                {
+                    // Solo follow: простой toggle
+                    _followEnabled = true;
+                }
                 EnsureRunning();
                 OnStatusChanged?.Invoke(GetStatusText());
                 break;
 
             case Abstractions.BotCommandType.Stop:
-                Hivemind.Mode = Hivemind.SlaveMode.Idle;
-                Hivemind.ForceIdle = true;
-                HivemindFollowing = false;
-                SlaveCtrl.CmdStop();
-                _hook.ExecuteLua("ClearTarget()", 100);
-                ForceStop();
+                if (cmd.Source == "Hivemind")
+                {
+                    Hivemind.Mode = Hivemind.SlaveMode.Idle;
+                    Hivemind.ForceIdle = true;
+                    HivemindFollowing = false;
+                    SlaveCtrl.CmdStop();
+                    _hook.ExecuteLua("ClearTarget()", 100);
+                }
+                else
+                {
+                    // Solo: просто выключить follow
+                    _followEnabled = false;
+                    StopFollowMovement();
+                }
+                if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
+                OnStatusChanged?.Invoke(GetStatusText());
                 break;
 
             case Abstractions.BotCommandType.MoveTo:
@@ -776,25 +795,20 @@ public class BotEngine : IDisposable
 
     public void ToggleFollow()
     {
-        _followEnabled = !_followEnabled;
-        if (_followEnabled) EnsureRunning();
-        else if (!_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
-        if (!_followEnabled)
-            StopFollowMovement();
-        OnStatusChanged?.Invoke(GetStatusText());
+        ProcessCommand(new Abstractions.BotCommand
+        {
+            Type = _followEnabled ? Abstractions.BotCommandType.Stop : Abstractions.BotCommandType.Follow,
+            Source = "UI"
+        });
     }
 
     public void ToggleRotation()
     {
-        _rotationEnabled = !_rotationEnabled;
-        Logger.Info($"ToggleRotation: {_rotationEnabled}, follow={_followEnabled}, buffs={_buffsEnabled}");
-        if (_rotationEnabled) EnsureRunning();
-        else
+        ProcessCommand(new Abstractions.BotCommand
         {
-            StopAoeMovement(); // остановить strafe/approach при выключении ротации
-            if (!_followEnabled && !_buffsEnabled && !Hivemind.IsActive) StopTimer();
-        }
-        OnStatusChanged?.Invoke(GetStatusText());
+            Type = _rotationEnabled ? Abstractions.BotCommandType.StopRotation : Abstractions.BotCommandType.StartRotation,
+            Source = "UI"
+        });
     }
 
     public void StopAll()
