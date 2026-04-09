@@ -106,7 +106,7 @@ local function MP() local m,mm=UnitMana('player'),UnitManaMax('player') if mm==0
             AddToggle(sb, "HoW", $"if THP()<0.2 and IR({HammerOfWrath}) then Cast({HammerOfWrath}) return end ");
 
             // 5. Judgement (JoW по дефолту, JoL по тоглу)
-            AddToggle(sb, "Judge", $"do local j=WB_S.JoL==true and SN({JudgementOfLight}) or SN({JudgementOfWisdom}) if j and IsReady(j) then CastSpellByName(j) return end end ");
+            AddToggle(sb, "Judge", $"if WB_S.JoL==true then if IR({JudgementOfLight}) then Cast({JudgementOfLight}) return end else if IR({JudgementOfWisdom}) then Cast({JudgementOfWisdom}) return end end ");
 
             // 6. Divine Storm
             AddToggle(sb, "DS", $"if IR({DivineStorm}) then Cast({DivineStorm}) return end ");
