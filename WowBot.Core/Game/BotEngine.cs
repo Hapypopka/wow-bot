@@ -835,31 +835,10 @@ public class BotEngine : IDisposable
             bool targetInCombat = hasTarget && target!.InCombat;
             if (!_followEnabled && (_rotationEnabled || HivemindFollowing))
             {
-                // Hivemind Follow: SlaveController рулит движением
+                // Hivemind Follow: тот же код что и slave Following
                 if (HivemindFollowing)
                 {
-                    bool moving = _navigation.IsPlayerMoving(player);
-                    var slaveState = SlaveCtrl?.CurrentState;
-                    Logger.Info($"HiveFollow: moving={moving} slaveState={slaveState} hasTarget={hasTarget} combat={targetInCombat} cast={player.IsCasting}");
-                    if (moving)
-                    {
-                        // Бежим — только instants на ходу, без поворота
-                        if (hasTarget && targetInCombat)
-                        {
-                            if (_logTick == 0) Logger.Info("HiveFollow: MOVING — instants only");
-                            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
-                        }
-                    }
-                    else
-                    {
-                        // Стоим (добежали) — поворот + полная ротация
-                        if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
-                        {
-                            if (_logTick == 0) Logger.Info("HiveFollow: STOPPED — full rotation + face");
-                            if (hasTarget && targetInCombat && _autoFace && !IsHealer && !_navigation.FaceInstant(player, target!)) { }
-                            else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + GetRotationScript(player), 500);
-                        }
-                    }
+                    SlaveFollowCombatTick(player, enemyCountLua);
                     return;
                 }
 
