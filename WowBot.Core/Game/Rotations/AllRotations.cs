@@ -4,6 +4,12 @@ namespace WowBot.Core.Game.Rotations;
 
 public static class AllRotations
 {
+    // Публичные алиасы для LuaRotationBase и отдельных ротаций
+    public static string SharedHelpers => Helpers;
+    public static string SharedPreChecksDPS => PreChecksDPS;
+    public static string SharedPreChecksHealer => PreChecksHealer;
+    public static string SharedHealerFindTarget => HealerFindTarget;
+
     private const string Helpers = @"
     local function IsReady(name)
         local s,d = GetSpellCooldown(name)
@@ -1319,6 +1325,9 @@ public static class AllRotations
         }
         Logger.Info($"Exported {classes.Length} scripts to {ScriptsDir}");
     }
+
+    /// <summary>Алиас для RotationRegistry — instant скрипт по классу</summary>
+    public static string GetInstantScriptForClass(string playerClass) => GetInstantScript(playerClass);
 
     public static string GetInstantScript(string playerClass = "") => @"
 local function WB_Inst()

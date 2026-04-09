@@ -1,8 +1,9 @@
+using WowBot.Abstractions.Entities;
 using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game.Entities;
 
-public class WowUnit : WowObject
+public class WowUnit : WowObject, IWowUnit
 {
     public WowUnit(MemoryReader memory, uint baseAddress) : base(memory, baseAddress) { }
 
@@ -31,6 +32,10 @@ public class WowUnit : WowObject
     public int NpcId => ReadDescriptorInt(0x06);
     public int UnitFlags => ReadDescriptorInt(Offsets.UnitFieldFlags);
     public bool InCombat => (UnitFlags & 0x80000) != 0; // UNIT_FLAG_IN_COMBAT = 0x80000
+
+    // --- Хитбокс ---
+    public float BoundingRadius => ReadDescriptorFloat(Offsets.UnitFieldBoundingRadius);
+    public float CombatReach => ReadDescriptorFloat(Offsets.UnitFieldCombatReach);
 
     // --- Каст ---
     public int CastingSpellId => Memory.ReadInt32(BaseAddress + Offsets.CurrentCastId);
@@ -68,8 +73,23 @@ public class WowUnit : WowObject
         return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    public float DistanceTo(IWowUnit other)
+    {
+        float dx = X - other.X;
+        float dy = Y - other.Y;
+        float dz = Z - other.Z;
+        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
     /// <summary>2D дистанция (без учёта высоты) — WoW использует для проверки дальности спеллов</summary>
     public float DistanceTo2D(WowUnit other)
+    {
+        float dx = X - other.X;
+        float dy = Y - other.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    public float DistanceTo2D(IWowUnit other)
     {
         float dx = X - other.X;
         float dy = Y - other.Y;

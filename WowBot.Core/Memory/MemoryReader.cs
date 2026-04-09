@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using System.Text;
+using WowBot.Abstractions;
 
 namespace WowBot.Core.Memory;
 
-public class MemoryReader : IDisposable
+public class MemoryReader : IDisposable, IMemoryReader
 {
     private IntPtr _processHandle;
     private Process? _process;

@@ -1,4 +1,5 @@
 using System.Linq;
+using WowBot.Abstractions.Entities;
 using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game.Entities;
@@ -8,7 +9,7 @@ namespace WowBot.Core.Game.Entities;
 /// Используется для AoE Avoidance — бежать из лужи.
 /// Оффсеты из AmeisenBotX WowDynobject335a.
 /// </summary>
-public class WowDynObject : WowObject
+public class WowDynObject : WowObject, IWowDynObject
 {
     public WowDynObject(MemoryReader memory, uint baseAddress) : base(memory, baseAddress)
     {

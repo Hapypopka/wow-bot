@@ -1,9 +1,11 @@
+using WowBot.Abstractions;
+using WowBot.Abstractions.Entities;
 using WowBot.Core.Game.Entities;
 using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game;
 
-public class ObjectManager
+public class ObjectManager : IObjectManager
 {
     private readonly MemoryReader _memory;
     public MemoryReader Memory => _memory;
@@ -19,6 +21,12 @@ public class ObjectManager
     public List<WowPlayer> Players { get; private set; } = new();
     public List<WowDynObject> DynObjects { get; private set; } = new();
     public List<WowObject> Objects { get; private set; } = new();
+
+    // IObjectManager — через интерфейс возвращаем readonly списки
+    IWowPlayer? IObjectManager.LocalPlayer => LocalPlayer;
+    IReadOnlyList<IWowUnit> IObjectManager.Units => Units;
+    IReadOnlyList<IWowPlayer> IObjectManager.Players => Players;
+    IReadOnlyList<IWowDynObject> IObjectManager.DynObjects => DynObjects;
 
     /// <summary>
     /// Проверяет валидность базовых указателей ObjectManager

@@ -1,8 +1,9 @@
+using WowBot.Abstractions.Entities;
 using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game.Entities;
 
-public class WowObject
+public class WowObject : IWowObject
 {
     protected readonly MemoryReader Memory;
 

@@ -1,9 +1,10 @@
 using System.Text;
+using WowBot.Abstractions;
 using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game;
 
-public class EndSceneHook : IDisposable
+public class EndSceneHook : IDisposable, IGameHook
 {
     private readonly MemoryReader _memory;
 
