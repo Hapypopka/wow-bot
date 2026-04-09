@@ -444,13 +444,13 @@ public partial class OverlayWindow : Window
         // ==================== PRIEST ====================
         ["Shadow Priest"] = new[]
         {
-            ("VT", "vt.jpg", "Прикосновение вампира", true),
-            ("DP", "dp.jpg", "Всепожирающая чума", true),
-            ("SWP", "swp.jpg", "Слово Тьмы: Боль", true),
-            ("MB", "mb.jpg", "Взрыв разума", true),
-            ("MF", "mf.jpg", "Пытка разума", true),
-            ("SF", "sf.jpg", "Исчадие Тьмы", true),
-            ("Disp", "disp.jpg", "Слияние с Тьмой", true),
+            ("VT", "spell_holy_stoicism.jpg", "Прикосновение вампира", true),
+            ("DP", "spell_shadow_devouringplague.jpg", "Всепожирающая чума", true),
+            ("SWP", "spell_shadow_shadowwordpain.jpg", "Слово Тьмы: Боль", true),
+            ("MB", "spell_shadow_unholyfrenzy.jpg", "Взрыв разума", true),
+            ("MF", "spell_shadow_siphonmana.jpg", "Пытка разума", true),
+            ("SF", "spell_shadow_shadowfiend.jpg", "Исчадие Тьмы", true),
+            ("Disp", "spell_shadow_dispersion.jpg", "Слияние с Тьмой", true),
         },
         ["Disc Priest"] = new[]
         {
@@ -478,60 +478,59 @@ public partial class OverlayWindow : Window
         // ==================== DEATH KNIGHT ====================
         ["Blood DK"] = new[]
         {
-            ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
-            ("PS", "plague_strike.jpg", "Удар чумы", true),
+            ("IT", "spell_deathknight_icetouch.jpg", "Ледяное прикосновение", true),
+            ("PS", "spell_deathknight_empowerruneblade.jpg", "Удар чумы", true),
             ("Pest", "pestilence.jpg", "Мор", true),
-            ("DS", "death_strike.jpg", "Удар смерти", true),
+            ("DS", "spell_deathknight_butcher2.jpg", "Удар смерти", true),
             ("HS", "heart_strike.jpg", "Удар в сердце", true),
             ("BS", "blood_strike.jpg", "Кровавый удар", true),
             ("RS", "rune_strike.jpg", "Рунический удар", true),
         },
         ["Frost DK"] = new[]
         {
-            ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
-            ("PS", "plague_strike.jpg", "Удар чумы", true),
+            ("IT", "spell_deathknight_icetouch.jpg", "Ледяное прикосновение", true),
+            ("PS", "spell_deathknight_empowerruneblade.jpg", "Удар чумы", true),
             ("Pest", "pestilence.jpg", "Мор (обновление)", true),
-            ("HB", "howling_blast.jpg", "Воющий ветер (Rime прок)", true),
-            ("Oblit", "obliterate.jpg", "Уничтожение", true),
+            ("HB", "spell_frost_arcticwinds.jpg", "Воющий ветер (Rime прок)", true),
+            ("Oblit", "spell_deathknight_classicon.jpg", "Уничтожение", true),
             ("BS", "blood_strike.jpg", "Кровавый удар", true),
-            ("FS", "frost_strike.jpg", "Ледяной удар", true),
+            ("FS", "spell_deathknight_empowerruneblade2.jpg", "Ледяной удар", true),
             ("BT", "blood_tap.jpg", "Кровоотвод", true),
             ("ERW", "empower_rune.jpg", "Усиление рунического оружия", true),
             ("HoW", "horn_winter.jpg", "Зимний горн", true),
         },
         ["Unholy DK"] = new[]
         {
-            ("IT", "icy_touch.jpg", "Ледяное прикосновение", true),
-            ("PS", "plague_strike.jpg", "Удар чумы", true),
+            ("IT", "spell_deathknight_icetouch.jpg", "Ледяное прикосновение", true),
+            ("PS", "spell_deathknight_empowerruneblade.jpg", "Удар чумы", true),
             ("Pest", "pestilence.jpg", "Мор", true),
             ("UB", "unholy_blight.jpg", "Нечестивая порча", true),
-            ("DnD", "death_decay.jpg", "Смерть и разложение", true),
-            ("SS", "scourge_strike.jpg", "Удар Плети", true),
+            ("DnD", "spell_shadow_deathanddecay.jpg", "Смерть и разложение", true),
+            ("SS", "spell_deathknight_scourgestrike.jpg", "Удар Плети", true),
             ("BS", "blood_strike.jpg", "Кровавый удар", true),
-            ("DC", "death_coil.jpg", "Лик смерти", true),
+            ("DC", "spell_shadow_deathcoil.jpg", "Лик смерти", true),
         },
         // ==================== SHAMAN ====================
         ["Elemental Shaman"] = new[]
         {
-            ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
-            ("FS", "flame_shock.jpg", "Огненный шок", true),
-            ("LvB", "lava_burst.jpg", "Вскипание лавы", true),
+            ("CallSpirits", "spell_fire_totemofwrath.jpg", "Зов Духов (тотемы в бою)", true),
+            ("FS", "spell_fire_flameshock.jpg", "Огненный шок", true),
+            ("LvB", "spell_shaman_lavaburst.jpg", "Выброс лавы", true),
             ("TnL", "thunderstorm.jpg", "Гром и молния", true),
-            ("CL", "chain_lightning.jpg", "Цепная молния", true),
-            ("LB", "lightning_bolt.jpg", "Молния", true),
+            ("CL", "spell_nature_chainlightning.jpg", "Цепная молния", true),
+            ("LB", "spell_nature_lightning.jpg", "Молния", true),
         },
         ["Enhancement Shaman"] = new[]
         {
-            ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
-            ("Searing", "flametongue_totem.jpg", "Тотем огня (авто)", true),
-            ("LS", "lightning_shield.jpg", "Щит молний", true),
-            ("SS", "stormstrike.jpg", "Удар бури", true),
-            ("FS", "flame_shock.jpg", "Огненный шок", true),
-            ("ES", "earth_shock.jpg", "Земной шок", true),
-            ("LB_MW", "lightning_bolt.jpg", "Молния (Водоворот 5)", true),
-            ("CL", "chain_lightning.jpg", "Цепная молния (AoE)", true),
-            ("FN", "fire_nova.jpg", "Кольцо огня", true),
-            ("LL", "lava_lash.jpg", "Вскипание лавы", true),
+            ("CallSpirits", "spell_fire_totemofwrath.jpg", "Зов Духов (тотемы в бою)", true),
+            ("Searing", "spell_fire_selfdestruct.jpg", "Тотем магмы (авто)", true),
+            ("LS", "spell_nature_lightningshield.jpg", "Щит молний", true),
+            ("SS", "ability_shaman_stormstrike.jpg", "Удар бури", true),
+            ("FS", "spell_fire_flameshock.jpg", "Огненный шок", true),
+            ("ES", "spell_nature_earthshock.jpg", "Земной шок", true),
+            ("LB_MW", "spell_nature_lightning.jpg", "Молния (Водоворот 5)", true),
+            ("FN", "spell_fire_sealoffire.jpg", "Кольцо огня", true),
+            ("LL", "ability_shaman_lavalash.jpg", "Вскипание лавы", true),
         },
         ["Resto Shaman"] = new[]
         {
@@ -664,9 +663,9 @@ public partial class OverlayWindow : Window
         ["BM Hunter"] = new[] { ("BW", "beast_within.jpg", "Повелитель зверей", false), ("Bestial", "bestial_wrath.jpg", "Звериный гнев", false) },
         ["MM Hunter"] = new[] { ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", false), ("CotW", "call_wild.jpg", "Зов дикой природы", false) },
         ["Arcane Mage"] = new[] { ("AP", "arcane_power.jpg", "Мощь тайной магии", false) },
-        ["Enhancement Shaman"] = new[] { ("Hero", "heroism.jpg", "Героизм (только босс)", false), ("FET", "fire_elemental.jpg", "Тотем элементаля огня", false), ("SR", "shamanistic_rage.jpg", "Ярость шамана", true), ("Wolves", "feral_spirit.jpg", "Дух дикого волка", false) },
-        ["Elemental Shaman"] = new[] { ("Hero", "heroism.jpg", "Героизм (только босс)", false), ("FET", "fire_elemental.jpg", "Тотем элементаля огня", false) },
-        ["Resto Shaman"] = new[] { ("Hero", "heroism.jpg", "Героизм (только босс)", false) },
+        ["Enhancement Shaman"] = new[] { ("Hero", "ability_shaman_heroism.jpg", "Героизм (только босс)", false), ("FET", "spell_fire_elemental_totem.jpg", "Тотем элементаля огня", false), ("SR", "spell_nature_shamanrage.jpg", "Ярость шамана", true), ("Wolves", "spell_shaman_feralspirit.jpg", "Дух дикого волка", false) },
+        ["Elemental Shaman"] = new[] { ("Hero", "ability_shaman_heroism.jpg", "Героизм (только босс)", false), ("FET", "spell_fire_elemental_totem.jpg", "Тотем элементаля огня", false) },
+        ["Resto Shaman"] = new[] { ("Hero", "ability_shaman_heroism.jpg", "Героизм (только босс)", false) },
         ["Assassination Rogue"] = new[] { ("HFB", "hunger_blood.jpg", "Жажда убийства", false) },
         ["Combat Rogue"] = new[] { ("KS", "killing_spree.jpg", "Череда убийств", false) },
         ["Blood DK"] = new[] { ("VB", "vampiric_blood.jpg", "Кровь вампира", false) },
@@ -1109,6 +1108,13 @@ public partial class OverlayWindow : Window
             AddLabel("AoE");
             var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
             _spellToggles["SwipeCat"] = AddSpellIcon(wrap, "swipe_bear.jpg", "Размах кот (по порогу врагов)", _spellToggles.TryGetValue("SwipeCat", out var scBtn) ? scBtn.IsChecked == true : GetSavedBool("spell_SwipeCat", true));
+            SubContent.Children.Add(wrap);
+        }
+        else if (specKey == "Enhancement Shaman")
+        {
+            AddLabel("AoE");
+            var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+            _spellToggles["CL"] = AddSpellIcon(wrap, "spell_nature_chainlightning.jpg", "Цепная молния (Водоворот 5, AoE)", _spellToggles.TryGetValue("CL", out var clBtn) ? clBtn.IsChecked == true : GetSavedBool("spell_CL", true));
             SubContent.Children.Add(wrap);
         }
     }
