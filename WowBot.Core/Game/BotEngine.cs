@@ -389,6 +389,74 @@ public class BotEngine : IDisposable
             MakeCombatOptions(enemyCountLua, needApproach: true, noCombatCheck: true));
     }
 
+    /// <summary>Follow/GoToPoint: SlaveCtrl двигает, бьём на ходу instants, стоя — полная ротация</summary>
+    private void SlaveFollowCombatTick(WowPlayer player, string enemyCountLua)
+    {
+        var fTarget = _objectManager.GetTarget();
+        bool fHasTarget = fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player && fTarget.InCombat;
+        if (!fHasTarget) return;
+
+        bool standing = _navigation.IsPlayerStanding(player);
+        if (!standing)
+        {
+            // Бежим — только instants на ходу
+            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
+        }
+        else
+        {
+            // Стоим — полный бой через CombatExecutor (face + AoE + rotation)
+            _combatExecutor.ExecuteCombatTick(player, fTarget,
+                MakeCombatOptions(enemyCountLua, noCombatCheck: true));
+        }
+    }
+
+    /// <summary>BossEngine тик (общий для Attacking и Auto)</summary>
+    private bool TryBossEngineTick(WowPlayer player, string enemyCountLua)
+    {
+        if (!AutoPveEnabled) return false;
+        BossEngine.IsMelee = IsMeleeSpec;
+        BossEngine.IsHealer = IsHealer;
+        BossEngine.IsTank = IsTankSpec;
+        if (!BossEngine.IsActive) BossEngine.InstallListener();
+        return BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript);
+    }
+
+    /// <summary>Auto mode: в бою → attack, вне боя → follow</summary>
+    private void SlaveAutoModeTick(WowPlayer player, string enemyCountLua)
+    {
+        if (!Hivemind.AutoPauseAttack)
+            Hivemind.SlaveAutoTick();
+
+        var autoTarget = _objectManager.GetTarget();
+        bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
+            autoTarget != null && autoTarget.IsAlive &&
+            autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
+
+        if (hasAutoTarget)
+        {
+            if (HivemindFollowing)
+            {
+                HivemindFollowing = false;
+                SlaveCtrl.CmdStop();
+                Logger.Info("Auto: IN COMBAT — stop follow, switch to attack mode");
+            }
+            SlaveAttackTick(player, enemyCountLua);
+        }
+        else
+        {
+            if (!HivemindFollowing && !Hivemind.AutoPauseFollow)
+            {
+                HivemindFollowing = true;
+                string masterName = Hivemind.MasterName;
+                if (!string.IsNullOrEmpty(masterName))
+                    SlaveCtrl.CmdFollow(masterName);
+                Logger.Info("Auto: OUT OF COMBAT — resume follow");
+            }
+            if (!Hivemind.AutoPauseFollow)
+                SlaveCtrl.Tick();
+        }
+    }
+
     /// <summary>Полная остановка follow</summary>
     private void StopFollowMovement()
     {
@@ -682,133 +750,30 @@ public class BotEngine : IDisposable
                 switch (Hivemind.Mode)
                 {
                     case Hivemind.SlaveMode.Following:
-                        // Ко мне — SlaveCtrl рулит движением
-                        SlaveCtrl.Tick();
-                        var fTarget = _objectManager.GetTarget();
-                        bool fHasTarget = fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player && fTarget.InCombat;
-                        bool standing = _navigation.IsPlayerStanding(player);
-                        if (!standing)
-                        {
-                            // Бежим — только instants, без поворота
-                            if (fHasTarget)
-                                _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
-                        }
-                        else
-                        {
-                            // Добежали — поворот + полная ротация
-                            Logger.Info($"HiveFollow ARRIVED: fHasTarget={fHasTarget} target={fTarget?.Name} alive={fTarget?.IsAlive} combat={fTarget?.InCombat}");
-                            if (fHasTarget)
-                            {
-                                if (TryGroundAoE(player, fTarget!)) { }
-                                else if (_autoFace && !_navigation.FaceInstant(player, fTarget!)) { /* поворачиваемся */ }
-                                else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
-                            }
-                        }
-                        break;
-
                     case Hivemind.SlaveMode.GoingToPoint:
-                        // К точке — SlaveCtrl рулит движением, логика 1:1 как Follow
+                        // Follow / GoToPoint — SlaveCtrl рулит движением, бой на ходу
                         SlaveCtrl.Tick();
-                        var gpTarget = _objectManager.GetTarget();
-                        bool gpHasTarget = gpTarget != null && gpTarget.IsAlive && gpTarget.Type != WowObjectType.Player && gpTarget.InCombat;
-                        bool gpStanding = _navigation.IsPlayerStanding(player);
-                        if (!gpStanding)
-                        {
-                            // Бежим к точке — только instants, без поворота
-                            if (gpHasTarget)
-                                _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _instantScript, 300);
-                        }
-                        else
-                        {
-                            // Добежали — поворот + полная ротация (1:1 как Following)
-                            if (gpHasTarget)
-                            {
-                                if (TryGroundAoE(player, gpTarget!)) { }
-                                else if (_autoFace && !_navigation.FaceInstant(player, gpTarget!)) { /* поворачиваемся */ }
-                                else _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScript, 500);
-                            }
-                        }
+                        SlaveFollowCombatTick(player, enemyCountLua);
                         break;
 
                     case Hivemind.SlaveMode.Attacking:
-                        // BossEngine v2 (если включено)
-                        if (AutoPveEnabled)
-                        {
-                            BossEngine.IsMelee = IsMeleeSpec;
-                            BossEngine.IsHealer = IsHealer;
-                            BossEngine.IsTank = IsTankSpec;
-                            if (!BossEngine.IsActive) BossEngine.InstallListener();
-                            if (BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
-                                break; // тактика управляет
-                        }
+                        // Атака — BossEngine (если есть) → CombatExecutor
+                        if (TryBossEngineTick(player, enemyCountLua)) break;
                         SlaveAttackTick(player, enemyCountLua);
                         break;
 
                     case Hivemind.SlaveMode.Auto:
-                        // BossEngine v2 (если включено)
-                        if (AutoPveEnabled)
-                        {
-                            BossEngine.IsMelee = IsMeleeSpec;
-                            BossEngine.IsHealer = IsHealer;
-                            BossEngine.IsTank = IsTankSpec;
-                            if (!BossEngine.IsActive) BossEngine.InstallListener();
-                            if (BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript))
-                                break; // тактика управляет
-                        }
-                        else
-                        {
-                            // Авто-ассист: каждые ~1с берём таргет мастера
-                            if (!Hivemind.AutoPauseAttack)
-                                Hivemind.SlaveAutoTick();
-
-                            var autoTarget = _objectManager.GetTarget();
-                            bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
-                                autoTarget != null && autoTarget.IsAlive &&
-                                autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
-
-                            if (hasAutoTarget)
-                            {
-                                // В БОЮ: отключаем follow, переключаемся на Attack-логику
-                                // (подбег к мобу + MoveBehind + ротация)
-                                if (HivemindFollowing)
-                                {
-                                    HivemindFollowing = false;
-                                    SlaveCtrl.CmdStop(); // стоп follow за мастером
-                                    Logger.Info("Auto: IN COMBAT — stop follow, switch to attack mode");
-                                }
-                                SlaveAttackTick(player, enemyCountLua);
-                            }
-                            else
-                            {
-                                // ВНЕ БОЯ: follow за мастером
-                                if (!HivemindFollowing && !Hivemind.AutoPauseFollow)
-                                {
-                                    HivemindFollowing = true;
-                                    string masterName = Hivemind.MasterName;
-                                    if (!string.IsNullOrEmpty(masterName))
-                                        SlaveCtrl.CmdFollow(masterName);
-                                    Logger.Info("Auto: OUT OF COMBAT — resume follow");
-                                }
-                                if (!Hivemind.AutoPauseFollow)
-                                    SlaveCtrl.Tick();
-                            }
-                        }
+                        // Авто: в бою → атака, вне боя → follow
+                        if (TryBossEngineTick(player, enemyCountLua)) break;
+                        SlaveAutoModeTick(player, enemyCountLua);
                         break;
 
                     case Hivemind.SlaveMode.Idle:
-                        // ForceIdle (полный стоп) или ротация выключена — ничего не делать
+                        // Idle — бьём таргет если есть (через CombatExecutor)
                         if (Hivemind.ForceIdle || !_rotationEnabled) break;
-                        // Обычный Idle — бьём таргет если есть
                         var idleTarget = _objectManager.GetTarget();
-                        if (idleTarget != null && idleTarget.IsAlive && idleTarget.Type != WowObjectType.Player && idleTarget.InCombat)
-                        {
-                            if (TryGroundAoE(player, idleTarget)) { }
-                            else if (_navigation.FaceInstant(player, idleTarget))
-                            {
-                                string idleScript = enemyCountLua + SpellFlagsLua + _fullScript;
-                                _hook.ExecuteLua(idleScript, 500);
-                            }
-                        }
+                        _combatExecutor.ExecuteCombatTick(player, idleTarget,
+                            MakeCombatOptions(enemyCountLua, noCombatCheck: true));
                         break;
                 }
                 return;
