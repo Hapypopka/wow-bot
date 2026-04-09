@@ -62,6 +62,10 @@ public class CombatPositioning
     /// Мили ДПС: двигается за спину таргета.
     /// Возвращает true если двигается (пропустить ротацию на этот тик).
     /// </summary>
+    public bool IsMovingBehind { get; private set; }
+
+    private int _logTick;
+
     public bool TryMoveBehind(WowPlayer player, WowUnit target)
     {
         // Только мили ДПС, не танк, не хилер
@@ -69,22 +73,41 @@ public class CombatPositioning
         if (!target.IsAlive || !target.InCombat) return false;
         if (player.IsCasting) return false;
 
-        // Интервал: рога/кот — каждые 4 тика (600мс), остальные — 10 тиков (1.5с)
+        float dist = player.DistanceTo(target);
+        bool behind = IsBehind(target, player);
+        bool inFront = IsInFrontArc(target, player.X, player.Y);
+
+        // Логируем каждые ~3с
+        _logTick++;
+        if (_logTick >= 20) { _logTick = 0; Logger.Info($"MoveBehind check: behind={behind} inFront={inFront} dist={dist:F1} moving={IsMovingBehind} player=({player.X:F0},{player.Y:F0}) target=({target.X:F0},{target.Y:F0}) tFacing={target.Facing:F2}"); }
+
+        // Интервал: рога/кот — 4 тика (600мс), остальные — 10 тиков (1.5с)
         int interval = (PlayerClass == "ROGUE" || (PlayerClass == "DRUID" && SpecName?.Contains("Feral") == true)) ? 4 : 10;
         _repositionTick++;
-        if (_repositionTick < interval) return false;
+        if (_repositionTick < interval) { return IsMovingBehind; }
         _repositionTick = 0;
 
-        // Уже за спиной — не двигаемся
-        if (IsBehind(target, player)) return false;
+        // Уже за спиной — остановиться и дать паузу (не бежать обратно вперёд)
+        if (behind)
+        {
+            if (IsMovingBehind)
+            {
+                // Только что добежали — останавливаем MoveForward чтобы approach не потащил обратно
+                IsMovingBehind = false;
+                _repositionTick = -(interval * 3); // пауза ~4.5с перед следующей проверкой
+                Logger.Info("MoveBehind: arrived behind, pausing");
+            }
+            return false;
+        }
 
-        // Слишком далеко — сначала подбежать (CTM approach обработает)
-        if (player.DistanceTo(target) > 8f) return false;
+        // Слишком далеко — сначала подбежать (approach обработает)
+        if (dist > 8f) { IsMovingBehind = false; return false; }
 
         // Вычисляем точку за спиной
         var (x, y, z) = GetBehindPosition(target);
         _ctm.MoveTo(x, y, z, 0.5f);
-        Logger.Info($"MoveBehind: ({x:F1},{y:F1}) behind target facing={target.Facing:F2}");
+        IsMovingBehind = true;
+        Logger.Info($"MoveBehind: GO ({x:F1},{y:F1}) behind target facing={target.Facing:F2} dist={dist:F1} inFront={inFront}");
         return true;
     }
 

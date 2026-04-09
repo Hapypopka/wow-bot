@@ -245,6 +245,12 @@ public partial class MainWindow : Window
             };
             hive.SendCommandToSlave(slaveName, command);
         };
+        // Heroism
+        _masterPanel.OnHeroism += () =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdHeroism();
+        };
         // Interact / Gossip
         _masterPanel.OnInteract += () =>
         {
@@ -1228,6 +1234,8 @@ public partial class MainWindow : Window
                 _botEngine.SelectedTotemFire = _overlay.SelectedTotemFire;
                 _botEngine.SelectedTotemWater = _overlay.SelectedTotemWater;
                 _botEngine.SelectedTotemAir = _overlay.SelectedTotemAir;
+                _botEngine.SelectedWeaponMH = _overlay.SelectedWeaponMH;
+                _botEngine.SelectedWeaponOH = _overlay.SelectedWeaponOH;
             }
 
             bool followActive = _botEngine?.FollowEnabled == true;

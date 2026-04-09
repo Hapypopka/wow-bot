@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -56,6 +56,8 @@ public class Hivemind
             LastCommand = null;
             LastCommandArg = "";
             if (value == Role.Master) StartCtmWatch();
+            // WB_SLAVE — блокирует авто-героизм у слейвов (только по команде мастера)
+            try { _hook.ExecuteLua(value == Role.Slave ? "WB_SLAVE=1" : "WB_SLAVE=nil", 100); } catch { }
         }
     }
     public bool IsActive => CurrentRole != Role.None;
@@ -437,6 +439,20 @@ public class Hivemind
         Logger.Info($"Hivemind: MASTER SetBuff {buffType}={buffKey}");
     }
 
+    /// <summary>Мастер: послать Героизм первому шаману-слейву</summary>
+    public void CmdHeroism()
+    {
+        if (CurrentRole != Role.Master) return;
+        // Ищем первого шамана в слейвах
+        var shaman = ConnectedSlaves.FirstOrDefault(s => s.ClassName == "SHAMAN");
+        if (shaman == null) { Logger.Info("Hivemind: no shaman slave for Heroism"); return; }
+
+        string msg = $"CastHeroism:1~{shaman.Name}";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        _hook.ExecuteLua(lua, 200);
+        Logger.Info($"Hivemind: MASTER Heroism → {shaman.Name}");
+    }
+
     /// <summary>Мастер: отправить слейвов в точку (Ctrl+ПКМ)</summary>
     public void CmdGoto(float x, float y, float z)
     {
@@ -749,6 +765,7 @@ WB_HIVE_REG_TIME = 0
             "Interact" => Command.Interact,
             "GossipSelect" => Command.GossipSelect,
             "GossipAccept" => Command.GossipAccept,
+            "CastHeroism" => Command.CastHeroism,
             _ => null
         };
 
@@ -1028,6 +1045,12 @@ WB_HIVE_REG_TIME = 0
                     }
                     Logger.Info("Gossip: SLAVE popup accept attempts done");
                 });
+                break;
+
+            case Command.CastHeroism:
+                // Каст Героизма по команде мастера (spell 32182)
+                _hook.ExecuteLua("local n=GetSpellInfo(32182) if n then CastSpellByName(n) end", 300);
+                Logger.Info("Hivemind: SLAVE casting Heroism!");
                 break;
 
             case Command.Ping:

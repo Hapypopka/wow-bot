@@ -664,6 +664,17 @@ public partial class MasterPanel : Window
         return System.IO.File.Exists(path) ? path : "";
     }
 
+    // --- Heroism ---
+    public event Action? OnHeroism;
+    private void BtnHeroism_Click(object sender, RoutedEventArgs e)
+    {
+        OnHeroism?.Invoke();
+        BtnHeroism.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4a3a1a"));
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (s, ev) => { ((System.Windows.Threading.DispatcherTimer)s!).Stop(); BtnHeroism.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a28")); };
+        timer.Start();
+    }
+
     // --- Interact / Gossip ---
     public event Action? OnInteract;
     public event Action<int>? OnGossipSelect;

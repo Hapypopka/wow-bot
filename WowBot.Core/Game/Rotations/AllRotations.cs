@@ -32,6 +32,7 @@ public static class AllRotations
     local function IR(id) local n=SN(id) if not n then return false end return IsReady(n) end
     local function HB(id) local sn=SN(id) if not sn then return false end return HasBuff(sn) end
     local function HD(u,id) local sn=SN(id) if not sn then return false end return HasDebuff(u,sn) end
+    local function BS(id) for i=1,40 do local n,_,_,c,_,_,_,_,_,_,sId=UnitBuff('player',i) if not n then return 0 end if sId==id then return c or 0 end end return 0 end
     local function IU(id) local n=SN(id) if not n then return false end return IsUsable(n) end
     -- Танк: автотаунт на моба который бьёт НЕ танка
     local function TryTaunt(tauntId)
@@ -795,6 +796,8 @@ public static class AllRotations
     local _,_,t3 = GetTalentTabInfo(3)
     if t3>=t1 and t3>=t2 then
         -- RESTO SHAMAN (NPCBots + гайды WotLK, полная система)
+        -- Героизм (только босс)
+        if WB_S.Hero~=false and IR(32182) and UnitExists('target') and UnitClassification('target')=='worldboss' then Cast(32182) return end
 " + HealerFindTarget + @"
         -- Resurrect вне боя
         if TryRes(2008) then return end
@@ -859,23 +862,39 @@ public static class AllRotations
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if t1>=t2 and t1>=t3 then
             -- ELEMENTAL
+            if WB_S.Hero~=false and not WB_SLAVE and IR(32182) and UnitClassification('target')=='worldboss' then Cast(32182) return end
             if WB_S.FS~=false and not HD('target',8050) then Cast(8050) return end
             if WB_S.LvB~=false and IR(51505) then Cast(51505) return end
             if WB_S.TnL~=false and IR(51490) then Cast(51490) return end
             if WB_S.CL~=false and IR(421) then Cast(421) return end
             if WB_S.LB~=false then Cast(403) end
         else
-            -- ENHANCEMENT
+            -- ENHANCEMENT (SimCraft WotLK 3.3.5a приоритет)
+            -- 1. Lightning Shield (если не горит)
             if WB_S.LS~=false and not HB(324) then Cast(324) return end
-            if WB_S.Wolves~=false and IR(51533) then Cast(51533) return end
+            -- 2. Maelstrom 5 стаков: Chain Lightning (AoE) или Lightning Bolt (сингл)
+            if WB_S.LB_MW~=false and BS(53817)>=5 then
+                if WB_S.CL~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(421) then Cast(421) return end
+                Cast(403) return
+            end
+            -- 3. Бурсты: Heroism (только босс!) + Fire Elemental + SR (T10 4PC) + Wolves
+            if WB_S.Hero~=false and not WB_SLAVE and IR(32182) and UnitClassification('target')=='worldboss' then Cast(32182) return end
+            if WB_S.FET~=false and IR(2894) then WB_FET_T=GetTime() Cast(2894) return end
             if WB_S.SR~=false and IR(30823) then Cast(30823) return end
-            -- Searing Totem: обновлять если нет огненного тотема (60с жизни)
-            if WB_S.Searing~=false then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then CastSpellByName('Тотем опаляющего пламени') return end end
+            if WB_S.Wolves~=false and IR(51533) then Cast(51533) return end
+            -- 4. Stormstrike
             if WB_S.SS~=false and IR(17364) then Cast(17364) return end
+            -- 5. Flame Shock (если не тикает на таргете)
             if WB_S.FS~=false and not HD('target',8050) then Cast(8050) return end
+            -- 6. Earth Shock
             if WB_S.ES~=false and IR(8042) then Cast(8042) return end
-            if WB_S.LvB~=false and HasBuff('Водоворот готов!') and IR(51505) then Cast(51505) return end
-            if WB_S.LB_MW~=false and HasBuff('Водоворот готов!') then Cast(403) end
+            -- 7. Fire Totem — если нет огненного и Fire Elemental не активен (120с)
+            local fetUp = WB_FET_T and (GetTime()-WB_FET_T)<120
+            if WB_S.Searing~=false and not fetUp then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then Cast(58734) return end end
+            -- 8. Fire Nova (если Flame Shock на таргете)
+            if WB_S.FN~=false and HD('target',8050) and IR(61657) then Cast(61657) return end
+            -- 9. Lava Lash
+            if WB_S.LL~=false and IR(60103) then Cast(60103) return end
         end
     end
 ");

@@ -150,6 +150,18 @@ public partial class OverlayWindow : Window
     private (string key, string icon, string tooltip)[] SealOptions =>
         _playerSpec == "Holy Paladin" ? SealOptionsHoly : SealOptionsRet;
 
+    // Shaman weapon imbue selection (MH + OH, radio-style)
+    private string _selectedWeaponMH = "";
+    private string _selectedWeaponOH = "";
+    private readonly Dictionary<string, ToggleButton> _weaponMHToggles = new();
+    private readonly Dictionary<string, ToggleButton> _weaponOHToggles = new();
+    private static readonly (string key, string icon, string tooltip)[] WeaponOptions =
+    {
+        ("WF", "shaman_weapon_wf.jpg", "Неистовство ветра"),
+        ("FT", "shaman_weapon_ft.jpg", "Язык пламени"),
+        ("EL", "shaman_weapon_el.jpg", "Жизнь земли"),
+    };
+
     // Judgement selection for all Paladins (radio-style)
     private string _selectedJudgement = ""; // Для всех паладинов
     private readonly Dictionary<string, ToggleButton> _judgementToggles = new();
@@ -278,6 +290,8 @@ public partial class OverlayWindow : Window
     public bool UseSF => IsSpellEnabled("SF");
     public bool UseDisp => IsSpellEnabled("Disp");
     public bool AoeSealSwap => _aoeSocToggle?.IsChecked == true;
+    public string SelectedWeaponMH => _selectedWeaponMH;
+    public string SelectedWeaponOH => _selectedWeaponOH;
     public string SelectedSeal => _selectedSeal;
     public string SelectedBlessing => _selectedBlessing;
     public void SetSelectedBlessing(string key) { _selectedBlessing = key; SaveSettings(); }
@@ -509,14 +523,15 @@ public partial class OverlayWindow : Window
         ["Enhancement Shaman"] = new[]
         {
             ("CallSpirits", "chain_lightning.jpg", "Зов Духов (тотемы в бою)", true),
-            ("Searing", "flametongue_totem.jpg", "Тотем опаляющего пламени (авто)", true),
+            ("Searing", "flametongue_totem.jpg", "Тотем огня (авто)", true),
             ("LS", "lightning_shield.jpg", "Щит молний", true),
-            ("SR", "shamanistic_rage.jpg", "Ярость шамана", true),
             ("SS", "stormstrike.jpg", "Удар бури", true),
             ("FS", "flame_shock.jpg", "Огненный шок", true),
             ("ES", "earth_shock.jpg", "Земной шок", true),
-            ("LvB", "lava_burst.jpg", "Вскипание лавы", true),
-            ("LB_MW", "lightning_bolt.jpg", "Молния (Водоворот)", true),
+            ("LB_MW", "lightning_bolt.jpg", "Молния (Водоворот 5)", true),
+            ("CL", "chain_lightning.jpg", "Цепная молния (AoE)", true),
+            ("FN", "fire_nova.jpg", "Кольцо огня", true),
+            ("LL", "lava_lash.jpg", "Вскипание лавы", true),
         },
         ["Resto Shaman"] = new[]
         {
@@ -649,7 +664,9 @@ public partial class OverlayWindow : Window
         ["BM Hunter"] = new[] { ("BW", "beast_within.jpg", "Повелитель зверей", false), ("Bestial", "bestial_wrath.jpg", "Звериный гнев", false) },
         ["MM Hunter"] = new[] { ("Rapid", "rapid_fire.jpg", "Быстрая стрельба", false), ("CotW", "call_wild.jpg", "Зов дикой природы", false) },
         ["Arcane Mage"] = new[] { ("AP", "arcane_power.jpg", "Мощь тайной магии", false) },
-        ["Enhancement Shaman"] = new[] { ("Wolves", "feral_spirit.jpg", "Дух дикого волка", false) },
+        ["Enhancement Shaman"] = new[] { ("Hero", "heroism.jpg", "Героизм (только босс)", false), ("FET", "fire_elemental.jpg", "Тотем элементаля огня", false), ("SR", "shamanistic_rage.jpg", "Ярость шамана", true), ("Wolves", "feral_spirit.jpg", "Дух дикого волка", false) },
+        ["Elemental Shaman"] = new[] { ("Hero", "heroism.jpg", "Героизм (только босс)", false), ("FET", "fire_elemental.jpg", "Тотем элементаля огня", false) },
+        ["Resto Shaman"] = new[] { ("Hero", "heroism.jpg", "Героизм (только босс)", false) },
         ["Assassination Rogue"] = new[] { ("HFB", "hunger_blood.jpg", "Жажда убийства", false) },
         ["Combat Rogue"] = new[] { ("KS", "killing_spree.jpg", "Череда убийств", false) },
         ["Blood DK"] = new[] { ("VB", "vampiric_blood.jpg", "Кровь вампира", false) },
@@ -1104,13 +1121,15 @@ public partial class OverlayWindow : Window
             return;
         }
 
-        // Шаман: щиты и оружие — радио (взаимоисключающие)
+        // Шаман: щиты — радио (взаимоисключающие), оружие отдельно
         var shamanShields = new[] { "Щит молний", "Водный щит" };
-        var shamanWeapons = new[] { "WB_WEAPON_FT", "WB_WEAPON_EL", "WB_WEAPON_WF" };
+        var shamanWeaponsOld = new[] { "WB_WEAPON_FT", "WB_WEAPON_EL", "WB_WEAPON_WF" };
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
         foreach (var (spell, oldToggle) in _buffToggles.ToList())
         {
-            // Preserve state, rebuild icon
+            // Пропускаем старые оружия — теперь через MH/OH
+            if (shamanWeaponsOld.Contains(spell)) continue;
+
             bool wasChecked = oldToggle.IsChecked == true;
             string? tooltip = oldToggle.ToolTip?.ToString();
             string iconFile = oldToggle.Tag?.ToString() ?? "";
@@ -1129,19 +1148,51 @@ public partial class OverlayWindow : Window
                             _buffToggles[sh].IsChecked = false;
                 };
             }
-            // Радио-логика для оружия шамана
-            if (_playerClass == "SHAMAN" && shamanWeapons.Contains(spell))
-            {
-                var thisSpell = spell;
-                newToggle.Checked += (s, e) =>
-                {
-                    foreach (var w in shamanWeapons)
-                        if (w != thisSpell && _buffToggles.ContainsKey(w))
-                            _buffToggles[w].IsChecked = false;
-                };
-            }
         }
         SubContent.Children.Add(wrap);
+
+        // Шаман: оружие MH + OH (два радио-ряда)
+        if (_playerClass == "SHAMAN")
+        {
+            AddLabel("МН оружие");
+            var mhWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
+            _weaponMHToggles.Clear();
+            foreach (var (key, icon, tooltip) in WeaponOptions)
+            {
+                bool defOn = (_playerSpec == "Enhancement Shaman" && key == "WF") ||
+                             (_playerSpec != "Enhancement Shaman" && key == "FT");
+                var toggle = AddSpellIcon(mhWrap, icon, "МН: " + tooltip, _selectedWeaponMH == key || (_selectedWeaponMH == "" && defOn));
+                _weaponMHToggles[key] = toggle;
+                var k = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedWeaponMH = k;
+                    foreach (var (k2, _) in _weaponMHToggles) if (k2 != k) _weaponMHToggles[k2].IsChecked = false;
+                };
+                toggle.Unchecked += (s, e) => { if (_selectedWeaponMH == k) _selectedWeaponMH = ""; };
+                if (toggle.IsChecked == true) _selectedWeaponMH = k;
+            }
+            SubContent.Children.Add(mhWrap);
+
+            AddLabel("ОН оружие");
+            var ohWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
+            _weaponOHToggles.Clear();
+            foreach (var (key, icon, tooltip) in WeaponOptions)
+            {
+                bool defOn = (_playerSpec == "Enhancement Shaman" && key == "FT");
+                var toggle = AddSpellIcon(ohWrap, icon, "ОН: " + tooltip, _selectedWeaponOH == key || (_selectedWeaponOH == "" && defOn));
+                _weaponOHToggles[key] = toggle;
+                var k = key;
+                toggle.Checked += (s, e) =>
+                {
+                    _selectedWeaponOH = k;
+                    foreach (var (k2, _) in _weaponOHToggles) if (k2 != k) _weaponOHToggles[k2].IsChecked = false;
+                };
+                toggle.Unchecked += (s, e) => { if (_selectedWeaponOH == k) _selectedWeaponOH = ""; };
+                if (toggle.IsChecked == true) _selectedWeaponOH = k;
+            }
+            SubContent.Children.Add(ohWrap);
+        }
 
         // Выбор пета для варлока (радио)
         if (_playerClass == "WARLOCK")

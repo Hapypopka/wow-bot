@@ -309,6 +309,8 @@ public class BotEngine : IDisposable
     public string SelectedTotemFire { get; set; } = "";
     public string SelectedTotemWater { get; set; } = "";
     public string SelectedTotemAir { get; set; } = "";
+    public string SelectedWeaponMH { get; set; } = ""; // Shaman MH: "WF", "FT", "EL"
+    public string SelectedWeaponOH { get; set; } = ""; // Shaman OH: "WF", "FT", "EL"
     public bool IsHealer { get; set; }
     public System.Diagnostics.Process? WowProcess { get; set; }
     public string PlayerClass { get; set; } = "";
@@ -570,6 +572,14 @@ public class BotEngine : IDisposable
                        (PlayerClass == "PALADIN" && !IsHealer) ||
                        (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
                        (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
+
+        // MoveBehind: если активно перемещение за спину — не запускаем Lua approach (иначе MoveForwardStart перебивает CTM)
+        if (_combatPositioning.IsMovingBehind)
+        {
+            // Только ротация, без approach
+            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck, 500);
+            return;
+        }
 
         // Approach через Lua (НЕ C# CTM!) — так AoE flee из PreChecksDPS может заблокировать.
         // CTM перезаписывал MoveBackward каждые 150мс, теперь движение полностью в Lua.
@@ -1121,7 +1131,7 @@ public class BotEngine : IDisposable
                     _combatPositioning.SpecName = _specName;
                     if (MoveBehindEnabled && hasTarget && targetInCombat && target != null)
                     {
-                        if (_combatPositioning.TryMoveBehind(player, target)) { _navigation.FaceInstant(player, target); }
+                        if (_combatPositioning.TryMoveBehind(player, target)) { /* движемся за спину — НЕ вызываем FaceInstant, он перебивает CTM */ }
                         else if (_combatPositioning.TryRangedPosition(player, target)) { _navigation.FaceInstant(player, target); }
                     }
 
@@ -1714,17 +1724,36 @@ WB_AoE()
             sb.Append("end ");
         }
 
-        // Оружие шамана (проверка через GetWeaponEnchantInfo + смена выбора)
-        string? shamanWeapon = null;
-        string? shamanWeaponKey = null;
-        if (selfBuffs.Remove("WB_WEAPON_FT")) { shamanWeapon = "Оружие языка пламени"; shamanWeaponKey = "FT"; }
-        if (selfBuffs.Remove("WB_WEAPON_EL")) { shamanWeapon = "Оружие жизни земли"; shamanWeaponKey = "EL"; }
-        if (selfBuffs.Remove("WB_WEAPON_WF")) { shamanWeapon = "Оружие неистовства ветра"; shamanWeaponKey = "WF"; }
-        if (shamanWeapon != null)
+        // Оружие шамана: MH + OH (двуручники для энха)
+        // GetWeaponEnchantInfo() → hasMH, mhExp, mhCharges, hasOH, ohExp, ohCharges
+        var weaponNames = new Dictionary<string, string>
         {
-            sb.Append($"local hasEnch=GetWeaponEnchantInfo() ");
-            sb.Append($"if not hasEnch or (WB_WEAPON_LAST and WB_WEAPON_LAST~='{shamanWeaponKey}') then WB_WEAPON_LAST='{shamanWeaponKey}' CastSpellByName('{shamanWeapon}') return end ");
-            sb.Append($"if not WB_WEAPON_LAST then WB_WEAPON_LAST='{shamanWeaponKey}' end ");
+            ["FT"] = "Оружие языка пламени", ["EL"] = "Оружие жизни земли", ["WF"] = "Оружие неистовства ветра"
+        };
+        // Убираем старые ключи из selfBuffs
+        selfBuffs.Remove("WB_WEAPON_FT"); selfBuffs.Remove("WB_WEAPON_EL"); selfBuffs.Remove("WB_WEAPON_WF");
+        selfBuffs.Remove("WB_WEAPON_MH_FT"); selfBuffs.Remove("WB_WEAPON_MH_EL"); selfBuffs.Remove("WB_WEAPON_MH_WF");
+        selfBuffs.Remove("WB_WEAPON_OH_FT"); selfBuffs.Remove("WB_WEAPON_OH_EL"); selfBuffs.Remove("WB_WEAPON_OH_WF");
+
+        string? mhKey = null, ohKey = null;
+        if (!string.IsNullOrEmpty(SelectedWeaponMH) && weaponNames.ContainsKey(SelectedWeaponMH)) mhKey = SelectedWeaponMH;
+        if (!string.IsNullOrEmpty(SelectedWeaponOH) && weaponNames.ContainsKey(SelectedWeaponOH)) ohKey = SelectedWeaponOH;
+
+        if (mhKey != null || ohKey != null)
+        {
+            sb.Append("local mhE,_,_,ohE=GetWeaponEnchantInfo() ");
+            // MH: проверяем + кастуем (без модификатора — по умолчанию на MH)
+            if (mhKey != null)
+            {
+                sb.Append($"if not mhE or (WB_WMH and WB_WMH~='{mhKey}') then WB_WMH='{mhKey}' CastSpellByName('{weaponNames[mhKey]}') return end ");
+                sb.Append($"if not WB_WMH then WB_WMH='{mhKey}' end ");
+            }
+            // OH: проверяем + кастуем через PickupInventoryItem(17) + клик
+            if (ohKey != null)
+            {
+                sb.Append($"if not ohE or (WB_WOH and WB_WOH~='{ohKey}') then WB_WOH='{ohKey}' CastSpellByName('{weaponNames[ohKey]}') PickupInventoryItem(17) return end ");
+                sb.Append($"if not WB_WOH then WB_WOH='{ohKey}' end ");
+            }
         }
 
         // Self-баффы
