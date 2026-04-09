@@ -251,6 +251,17 @@ public partial class MainWindow : Window
             if (_botEngine == null) return;
             _botEngine.Hivemind.CmdHeroism();
         };
+        // Stack to MA / Scatter
+        _masterPanel.OnStackMA += () =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdStackToMA();
+        };
+        _masterPanel.OnScatter += () =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdSmartScatter();
+        };
         // Interact / Gossip
         _masterPanel.OnInteract += () =>
         {

@@ -90,6 +90,22 @@
                     Height="24" Margin="1,2,1,2" Cursor="Hand" Visibility="Collapsed"
                     ToolTip="Слейвы нажимают Принять в popup"/>
 
+            <!-- Stack / Scatter -->
+            <Grid Margin="1,4,1,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BtnStackMA" Content="📌 К наводчику" FontSize="9" Grid.Column="0"
+                        Click="BtnStackMA_Click" Style="{x:Null}"
+                        Background="#1a2a1a" Foreground="#8ac88a" BorderThickness="0"
+                        Height="22" Cursor="Hand" ToolTip="Все бегут к наводчику (MAINASSIST)" Padding="4,0"/>
+                <Button x:Name="BtnScatter" Content="💥 Разбежаться" FontSize="9" Grid.Column="1"
+                        Click="BtnScatter_Click" Style="{x:Null}"
+                        Background="#2a1a1a" Foreground="#c88a8a" BorderThickness="0"
+                        Height="22" Margin="2,0,0,0" Cursor="Hand" ToolTip="Разбежаться на 12м друг от друга" Padding="4,0"/>
+            </Grid>
+
             <!-- Навигация — дропдаун -->
             <Button x:Name="BtnNavToggle" FontSize="10" FontWeight="Bold"
                     Click="BtnNavToggle_Click" Style="{x:Null}"

@@ -675,6 +675,36 @@ public partial class MasterPanel : Window
         timer.Start();
     }
 
+    // --- Stack to MA / Scatter ---
+    public event Action? OnStackMA;
+    public event Action? OnScatter;
+
+    private void BtnStackMA_Click(object sender, RoutedEventArgs e)
+    {
+        OnStackMA?.Invoke();
+        FlashButton(BtnStackMA, "#1a3a1a", "#aaeeaa", "#1a2a1a", "#8ac88a");
+    }
+
+    private void BtnScatter_Click(object sender, RoutedEventArgs e)
+    {
+        OnScatter?.Invoke();
+        FlashButton(BtnScatter, "#3a1a1a", "#eeaaaa", "#2a1a1a", "#c88a8a");
+    }
+
+    private void FlashButton(System.Windows.Controls.Button btn, string bgOn, string fgOn, string bgOff, string fgOff)
+    {
+        btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgOn));
+        btn.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fgOn));
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (s, ev) =>
+        {
+            btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgOff));
+            btn.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fgOff));
+            timer.Stop();
+        };
+        timer.Start();
+    }
+
     // --- Interact / Gossip ---
     public event Action? OnInteract;
     public event Action<int>? OnGossipSelect;

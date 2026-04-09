@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -366,6 +366,20 @@ public class Hivemind
     {
         string name = _objectManager.GetPlayerName() ?? "master";
         SendCommand(Command.Stack, name);
+    }
+
+    /// <summary>Мастер: все к наводчику (MAINASSIST). Слейв сам найдёт через Lua.</summary>
+    public void CmdStackToMA()
+    {
+        SendCommand(Command.StackMA);
+        Logger.Info("StackToMA: отправлена команда StackMA");
+    }
+
+    /// <summary>Мастер: умный разбег — каждый слейв в свою сторону, 12м друг от друга</summary>
+    public void CmdSmartScatter()
+    {
+        // Отправляем Scatter с расстоянием 12 — слейв сам выберет направление
+        SendCommand(Command.Scatter, "12");
     }
 
     /// <summary>Мастер: пинг (проверка связи)</summary>
@@ -753,6 +767,7 @@ WB_HIVE_REG_TIME = 0
             "Auto" => Command.Auto,
             "Scatter" => Command.Scatter,
             "Stack" => Command.Stack,
+            "StackMA" => Command.StackMA,
             "Ping" => Command.Ping,
             "Goto" => Command.Goto,
             "SetBuff" => Command.SetBuff,
@@ -920,6 +935,22 @@ WB_HIVE_REG_TIME = 0
                 Logger.Info("SLAVE: follow (keep current target)");
                 break;
 
+            case Command.StackMA:
+                // К наводчику: слейв сам находит MAINASSIST через Lua и бежит к нему
+                try
+                {
+                    _hook.ExecuteLua(
+                        "WB_MA='' for i=1,40 do local n,_,_,_,_,_,_,_,_,role=GetRaidRosterInfo(i) if role=='MAINASSIST' then WB_MA=n break end end " +
+                        "if WB_MA~='' then FollowUnit(WB_MA) end", 300);
+                    Mode = SlaveMode.Following;
+                    if (_botEngine != null) _botEngine.HivemindFollowing = true;
+                    OnAutoToggle?.Invoke("rotation", true);
+                    OnAutoToggle?.Invoke("buffs", true);
+                    Logger.Info("SLAVE: stack to MAINASSIST (Lua FollowUnit)");
+                }
+                catch (Exception ex) { Logger.Error($"StackMA error: {ex.Message}"); }
+                break;
+
             case Command.Auto:
                 // Авто: follow + авто-ассист каждые ~1с
                 MasterName = cleanArg;
@@ -976,9 +1007,36 @@ WB_HIVE_REG_TIME = 0
                 break;
 
             case Command.Scatter:
-                _hook.ExecuteLua("MoveForwardStart() MoveForwardStop() MoveBackwardStart()", 200);
-                Task.Run(async () => { await Task.Delay(1500); _hook.ExecuteLua("MoveBackwardStop()", 100); });
-                Logger.Info($"Hivemind: SLAVE scatter {cleanArg}m");
+                // Умный разбег: каждый слейв бежит в свою сторону через CTM
+                // Угол определяется по позиции слейва в рейде (уникальный для каждого)
+                try
+                {
+                    float scatterDist = 12f;
+                    if (float.TryParse(cleanArg, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out float d) && d > 0) scatterDist = d;
+
+                    var player = _objectManager?.LocalPlayer;
+                    if (player != null)
+                    {
+                        // Уникальный угол: хэш от имени → равномерное распределение
+                        string scName = _objectManager.GetPlayerName() ?? "slave";
+                        int hash = 0;
+                        foreach (char c in scName) hash = hash * 31 + c;
+                        float baseAngle = (hash & 0xFFFF) / 65535f * 2f * MathF.PI;
+                        // Добавляем текущий facing для разнообразия
+                        float angle = baseAngle + player.Facing * 0.3f;
+
+                        float targetX = player.X + scatterDist * MathF.Cos(angle);
+                        float targetY = player.Y + scatterDist * MathF.Sin(angle);
+
+                        // Не меняем Mode — продолжаем текущий режим (атака/авто)
+                        // Просто бежим в точку, ротация продолжает бить таргет
+                        _ctm.MoveTo(targetX, targetY, player.Z, 1.5f);
+
+                        Logger.Info($"Scatter: {scName} angle={angle:F1}rad dist={scatterDist} → ({targetX:F0},{targetY:F0})");
+                    }
+                }
+                catch (Exception ex) { Logger.Error($"Scatter error: {ex.Message}"); }
                 break;
 
             case Command.Goto:
