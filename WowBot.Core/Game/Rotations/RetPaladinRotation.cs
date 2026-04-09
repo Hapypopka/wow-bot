@@ -50,20 +50,9 @@ public class RetPaladinRotation : ICombatRotation
     /// <summary>Генерирует Lua из C# приоритетов. Компактно и читабельно.</summary>
     private string BuildScript(bool instantOnly)
     {
-        // Минимальные Lua-хелперы (один раз)
-        const string helpers = @"
-local _SN={} local function SN(id) if not _SN[id] then _SN[id]=GetSpellInfo(id) end return _SN[id] end
-local function Cast(id) local n=SN(id) if n then CastSpellByName(n) end end
-local function IR(id) local n=SN(id) if not n then return false end local s,d=GetSpellCooldown(n) return s~=nil and s==0 end
-local function HB(id) local sn=SN(id) if not sn then return false end for i=1,40 do local n,_,_,_,_,_,_,_,_,_,sId=UnitBuff('player',i) if not n then return false end if sId==id then return true end end return false end
-local function PHP() local h,hm=UnitHealth('player'),UnitHealthMax('player') if hm==0 then return 1 end return h/hm end
-local function THP() local h,hm=UnitHealth('target'),UnitHealthMax('target') if hm==0 then return 1 end return h/hm end
-local function MP() local m,mm=UnitMana('player'),UnitManaMax('player') if mm==0 then return 1 end return m/mm end
-";
-
         var sb = new System.Text.StringBuilder();
         sb.Append("local function WB_Ret() ");
-        sb.Append(helpers);
+        sb.Append(LuaHelpers.All);
 
         // Pre-checks
         sb.Append("if IsMounted() then return end ");
