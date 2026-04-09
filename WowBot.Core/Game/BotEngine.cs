@@ -457,6 +457,141 @@ public class BotEngine : IDisposable
         }
     }
 
+    /// <summary>Hivemind: установка слушателя, чтение команд, register, ACK</summary>
+    private void HivemindCommTick()
+    {
+        if (Hivemind.CurrentRole != Hivemind.Role.Slave && Hivemind.CurrentRole != Hivemind.Role.Master) return;
+
+        // Устанавливаем слушатель (один раз)
+        if (!Hivemind._slaveListenerInstalled)
+        {
+            _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
+            Hivemind._slaveListenerInstalled = true;
+            Logger.Info("Hivemind: slave listener installed");
+            if (_hiveMacroAddr == 0 && LuaReader != null && LuaReader.IsInitialized)
+            {
+                System.Threading.Thread.Sleep(300);
+                _hiveMacroAddr = FindHiveMacroAddr();
+                Logger.Log(LogCat.Hivemind, $"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
+            }
+        }
+
+        // Читаем команды
+        _hiveCheckTick++;
+        if (_hiveCheckTick < 3 || Hivemind.GossipReading) return;
+        _hiveCheckTick = 0;
+
+        // Команды мастера (для слейвов)
+        string checkLua = Hivemind.GetSlaveReadScript();
+        string? response = _hook.ExecuteLuaWithResult(checkLua);
+        if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
+        if (response != null)
+        {
+            var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
+            bool isNew = time > LastHiveCheck || (time == LastHiveCheck && cmd != _lastHiveCmd);
+            if (cmd != null && isNew)
+            {
+                LastHiveCheck = time;
+                _lastHiveCmd = cmd;
+                if (Hivemind.CurrentRole == Hivemind.Role.Slave &&
+                    !string.IsNullOrEmpty(Hivemind.MasterName) &&
+                    !string.IsNullOrEmpty(sender) &&
+                    sender != Hivemind.MasterName)
+                {
+                    if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: IGNORED {cmd} from {sender} (my master={Hivemind.MasterName})");
+                }
+                else
+                {
+                    Logger.Log(LogCat.Hivemind, $"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
+                    Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
+                }
+            }
+        }
+
+        // Register + ACK (для мастера)
+        if (Hivemind.CurrentRole == Hivemind.Role.Master)
+        {
+            string regLua = Hivemind.GetRegisterReadScript();
+            string? regResponse = _hook.ExecuteLuaWithResult(regLua);
+            if (regResponse != null)
+            {
+                var regParts = regResponse.Split('|');
+                if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
+                {
+                    double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double regTime);
+                    if (regTime > _lastRegisterTime)
+                    {
+                        _lastRegisterTime = regTime;
+                        Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
+                    }
+                }
+            }
+
+            string? ackResp = _hook.ExecuteLuaWithResult("WB_R=(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
+            if (ackResp != null)
+            {
+                var ackParts = ackResp.Split('|');
+                if (ackParts.Length >= 2 && !string.IsNullOrEmpty(ackParts[0]))
+                {
+                    double.TryParse(ackParts[1], System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double ackTime);
+                    if (ackTime > _lastAckTime)
+                    {
+                        _lastAckTime = ackTime;
+                        var ap = ackParts[0].Split('~', 2);
+                        if (ap.Length == 2 && int.TryParse(ap[0], out int ackSeq))
+                            Hivemind.ReceiveAck(ackSeq, ap[1]);
+                    }
+                }
+            }
+            Hivemind.TickAck();
+        }
+
+        // Slave Register (каждые ~10 сек)
+        if (Hivemind.CurrentRole == Hivemind.Role.Slave)
+        {
+            _registerTick++;
+            if (_registerTick >= 66)
+            {
+                _registerTick = 0;
+                Hivemind.SendRegister(PlayerClass);
+            }
+        }
+
+        // Master: Ctrl+ПКМ
+        if (Hivemind.CurrentRole == Hivemind.Role.Master)
+            Hivemind.MasterTick();
+    }
+
+    /// <summary>Баффы — единый тик для solo и slave</summary>
+    private void BuffTick(WowPlayer player)
+    {
+        if (!_buffsEnabled) return;
+        bool hasBuff = _enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) ||
+            !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) ||
+            !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) ||
+            !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm) ||
+            !string.IsNullOrEmpty(SelectedTotemEarth) || !string.IsNullOrEmpty(SelectedTotemFire) ||
+            !string.IsNullOrEmpty(SelectedTotemWater) || !string.IsNullOrEmpty(SelectedTotemAir);
+        if (!hasBuff) return;
+
+        _buffCheckTick++;
+        bool classBuffCheck = _buffCheckTick % 3 == 0;
+        bool fullBuffCheck = _buffCheckTick >= 20;
+        if (fullBuffCheck) _buffCheckTick = 0;
+        if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
+        {
+            string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
+            if (!string.IsNullOrEmpty(buffScript))
+            {
+                if (fullBuffCheck) Logger.Log(LogCat.Buffs, $"ExecBuffs: len={buffScript.Length}");
+                _hook.ExecuteLua(buffScript, 500);
+                if (fullBuffCheck) _blessingCooldown = 40;
+            }
+        }
+    }
+
     /// <summary>Полная остановка follow</summary>
     private void StopFollowMovement()
     {
@@ -574,144 +709,11 @@ public class BotEngine : IDisposable
             string glovesLua = IsSpellEnabled("Gloves") ? "do local s,d=GetInventoryItemCooldown('player',10) if s==0 and UnitAffectingCombat('player') then UseInventoryItem(10) end end " : "";
             string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_AEMIN={AoeMinEnemies} " + glovesLua;
 
-            // === HIVEMIND: слушаем addon messages (и мастер, и слейв) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave || Hivemind.CurrentRole == Hivemind.Role.Master)
-            {
-                // Устанавливаем слушатель (один раз)
-                if (!Hivemind._slaveListenerInstalled)
-                {
-                    _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
-                    Hivemind._slaveListenerInstalled = true;
-                    Logger.Info("Hivemind: slave listener installed");
-                    // Найти адрес макроса #2 для прямого чтения
-                    if (_hiveMacroAddr == 0 && LuaReader != null && LuaReader.IsInitialized)
-                    {
-                        System.Threading.Thread.Sleep(300);
-                        _hiveMacroAddr = FindHiveMacroAddr();
-                        Logger.Log(LogCat.Hivemind, $"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
-                    }
-                }
+            // === HIVEMIND: коммуникация (addon messages, register, ACK) ===
+            HivemindCommTick();
 
-                // Читаем команды через Lua C API (без макросов!)
-                _hiveCheckTick++;
-                if (_hiveCheckTick >= 3 && !Hivemind.GossipReading)
-                {
-                    _hiveCheckTick = 0;
-
-                    // Команды мастера (для слейвов)
-                    string checkLua = Hivemind.GetSlaveReadScript();
-                    string? response = _hook.ExecuteLuaWithResult(checkLua);
-                    if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
-                    if (response != null)
-                    {
-                        var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
-                        // Выполнять если: новый таймстамп ИЛИ другая команда с тем же таймстампом
-                        bool isNew = time > LastHiveCheck || (time == LastHiveCheck && cmd != _lastHiveCmd);
-                        if (cmd != null && isNew)
-                        {
-                            LastHiveCheck = time;
-                            _lastHiveCmd = cmd;
-                            // Слейв: игнорировать команды от чужих мастеров
-                            if (Hivemind.CurrentRole == Hivemind.Role.Slave &&
-                                !string.IsNullOrEmpty(Hivemind.MasterName) &&
-                                !string.IsNullOrEmpty(sender) &&
-                                sender != Hivemind.MasterName)
-                            {
-                                if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: IGNORED {cmd} from {sender} (my master={Hivemind.MasterName})");
-                                // не выполняем
-                            }
-                            else
-                            {
-                                Logger.Log(LogCat.Hivemind, $"Hivemind: received {cmd} from {sender} arg={arg} time={time}");
-                                Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
-                            }
-                        }
-                    }
-
-                    // Register + ACK от слейвов (для мастера)
-                    if (Hivemind.CurrentRole == Hivemind.Role.Master)
-                    {
-                        string regLua = Hivemind.GetRegisterReadScript();
-                        string? regResponse = _hook.ExecuteLuaWithResult(regLua);
-                        if (regResponse != null)
-                        {
-                            var regParts = regResponse.Split('|');
-                            if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
-                            {
-                                double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
-                                    System.Globalization.CultureInfo.InvariantCulture, out double regTime);
-                                if (regTime > _lastRegisterTime)
-                                {
-                                    _lastRegisterTime = regTime;
-                                    Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
-                                }
-                            }
-                        }
-
-                        // ACK чтение
-                        string? ackResp = _hook.ExecuteLuaWithResult("WB_R=(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
-                        if (ackResp != null)
-                        {
-                            var ackParts = ackResp.Split('|');
-                            if (ackParts.Length >= 2 && !string.IsNullOrEmpty(ackParts[0]))
-                            {
-                                double.TryParse(ackParts[1], System.Globalization.NumberStyles.Any,
-                                    System.Globalization.CultureInfo.InvariantCulture, out double ackTime);
-                                if (ackTime > _lastAckTime)
-                                {
-                                    _lastAckTime = ackTime;
-                                    // Парсим "5~Забудь"
-                                    var ap = ackParts[0].Split('~', 2);
-                                    if (ap.Length == 2 && int.TryParse(ap[0], out int ackSeq))
-                                        Hivemind.ReceiveAck(ackSeq, ap[1]);
-                                }
-                            }
-                        }
-
-                        // ACK retry тик
-                        Hivemind.TickAck();
-                    }
-                }
-            }
-
-            // === HIVEMIND SLAVE: периодический Register (каждые ~10 сек) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave)
-            {
-                _registerTick++;
-                if (_registerTick >= 66) // 66 * 150мс ≈ 10 сек
-                {
-                    _registerTick = 0;
-                    Hivemind.SendRegister(PlayerClass);
-                }
-            }
-
-            // === HIVEMIND MASTER: Ctrl+ПКМ → направить слейвов ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Master)
-            {
-                Hivemind.MasterTick();
-            }
-
-            // === БАФФЫ ДЛЯ СЛЕЙВОВ (до return из слейв-блоков) ===
-            if (Hivemind.CurrentRole == Hivemind.Role.Slave && _buffsEnabled &&
-                (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) ||
-                 !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) ||
-                 !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm) ||
-                 !string.IsNullOrEmpty(SelectedTotemEarth) || !string.IsNullOrEmpty(SelectedTotemFire) ||
-                 !string.IsNullOrEmpty(SelectedTotemWater) || !string.IsNullOrEmpty(SelectedTotemAir)))
-            {
-                _buffCheckTick++;
-                bool classBuffCheck = _buffCheckTick % 3 == 0;
-                bool fullBuffCheck = _buffCheckTick >= 20;
-                if (fullBuffCheck) _buffCheckTick = 0;
-                if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
-                {
-                    string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
-                    if (!string.IsNullOrEmpty(buffScript))
-                    {
-                        _hook.ExecuteLua(buffScript, 500);
-                    }
-                }
-            }
+            // === БАФФЫ (единые для solo и slave) ===
+            BuffTick(player);
 
             // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
@@ -784,27 +786,7 @@ public class BotEngine : IDisposable
             _logTick++;
             if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); var p = _objectManager.LocalPlayer; Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} NCE={CountNearbyCombatEnemies(p!)} dyn={_objectManager.DynObjects.Count} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); if (t != null && p != null) Logger.Info($"Hitbox: player BR={p.BoundingRadius:F2} CR={p.CombatReach:F2} | target BR={t.BoundingRadius:F2} CR={t.CombatReach:F2} name={t.Name}"); }
 
-            // === БАФФЫ ===
-            if (_buffsEnabled && (_enabledBuffs.Count > 0 || !string.IsNullOrEmpty(SelectedSeal) || !string.IsNullOrEmpty(SelectedBlessing) || !string.IsNullOrEmpty(SelectedAura) || !string.IsNullOrEmpty(SelectedShout) || !string.IsNullOrEmpty(SelectedStance) || !string.IsNullOrEmpty(SelectedPresence) || !string.IsNullOrEmpty(SelectedFeralForm)))
-            {
-                _buffCheckTick++;
-                bool classBuffCheck = _buffCheckTick % 3 == 0;
-                bool fullBuffCheck = _buffCheckTick >= 20;
-                if (fullBuffCheck) _buffCheckTick = 0;
-                if ((classBuffCheck || fullBuffCheck) && !player.IsCasting)
-                {
-                    string buffScript = fullBuffCheck ? BuildBuffScript() : BuildClassBuffScript();
-                    if (!string.IsNullOrEmpty(buffScript))
-                    {
-                        if (fullBuffCheck) Logger.Log(LogCat.Buffs, $"ExecBuffs: len={buffScript.Length} seal={SelectedSeal} aura={SelectedAura} bless={SelectedBlessing} script={buffScript.Substring(0, Math.Min(buffScript.Length, 500))}");
-                        _hook.ExecuteLua(buffScript, 500);
-                        if (fullBuffCheck) _blessingCooldown = 40;
-                        // Хилеры: не прерываем — должны хилить после баффов
-                        if (!IsHealer)
-                            return;
-                    }
-                }
-            }
+            // Баффы solo обрабатываются в BuffTick() выше
 
 
 
