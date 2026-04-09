@@ -185,6 +185,7 @@ public class BotEngine : IDisposable
         _buffManager = new BuffManager();
         _combatHelper = new CombatHelper(objectManager, hook, ctm);
         _combatExecutor = new CombatExecutor(hook, navigation, _combatPositioning, _combatHelper);
+        _multiDotHelper = new MultiDotHelper(objectManager);
 
         // Навигация через навмеш (опционально)
         NavEngine = new WowBot.Core.Navigation.NavEngine(ctm, objectManager);
@@ -201,6 +202,7 @@ public class BotEngine : IDisposable
     private readonly BuffManager _buffManager;
     private readonly CombatHelper _combatHelper;
     private readonly CombatExecutor _combatExecutor;
+    private readonly MultiDotHelper _multiDotHelper;
 
     public bool MoveBehindEnabled { get; set; }
 
@@ -889,127 +891,12 @@ public class BotEngine : IDisposable
     /// Выбирает скрипт: AoE мультидот или обычная ротация.
     /// C# собирает имена мобов рядом, Lua проверяет дебаффы и кастует.
     /// </summary>
-    private string GetRotationScript(WowPlayer player)
-    {
-        if (!_aoeEnabled || !_useMultiDot)
-            return _fullScript;
-
-        var mainTarget = _objectManager.GetTarget();
-        if (mainTarget == null || !mainTarget.IsAlive)
-            return _fullScript;
-
-        // Собираем уникальные имена мобов рядом (кроме основного таргета)
-        var nearbyNames = new List<string>();
-        foreach (var unit in _objectManager.Units)
-        {
-            if (!unit.IsAlive) continue;
-            if (unit.Guid == mainTarget.Guid) continue;
-            if (player.DistanceTo(unit) > 30f) continue;
-
-            string name = unit.Name;
-            if (string.IsNullOrEmpty(name)) continue;
-            if (!nearbyNames.Contains(name))
-                nearbyNames.Add(name);
-            if (nearbyNames.Count >= _maxDotTargets)
-                break;
-        }
-
-        if (nearbyNames.Count == 0)
-            return _fullScript;
-
-        // Считаем мобов в 10м от ТАРГЕТА (для Mind Sear)
-        int unitsNearTarget = 0;
-        foreach (var unit in _objectManager.Units)
-        {
-            if (!unit.IsAlive) continue;
-            if (unit.Guid == mainTarget.Guid) continue;
-            if (mainTarget.DistanceTo(unit) <= 10f)
-                unitsNearTarget++;
-        }
-
-        // Формируем Lua-массив имён мобов
-        var luaNames = string.Join(",", nearbyNames.Select(n => "'" + n.Replace("'", "\\'") + "'"));
-        int mindSearCount = _useMindSear ? _mindSearTargets : 999;
-        float dispThreshold = DispManaThreshold / 100f;
-        float sfThreshold = SFManaThreshold / 100f;
-
-        // Lua скрипт: полная SP ротация + мультидот
-        return @"
-local function WB_AoE()
-    if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
-    -- GCD check (SP-only AoE script, VT всегда в спеллбуке)
-    local gS,gD = GetSpellCooldown('Прикосновение вампира')
-    if gS and gS > 0 and gD and gD <= 1.5 then return end
-    if UnitIsDeadOrGhost('player') then return end
-    if not UnitAffectingCombat('player') then return end
-    if not UnitExists('target') or UnitIsDeadOrGhost('target') then return end
-    if not UnitCanAttack('player','target') then return end
-
-    local function IsReady(name)
-        local s,d=GetSpellCooldown(name)
-        return s~=nil and s==0
-    end
-    local function HasBuff(name)
-        for i=1,40 do
-            local n=UnitBuff('player',i)
-            if not n then return false end
-            if n==name then return true end
-        end
-        return false
-    end
-    local function HasDebuff(unit,name)
-        for i=1,40 do
-            local n=UnitDebuff(unit,i)
-            if not n then return false end
-            if n==name then return true end
-        end
-        return false
-    end
-    local function MP()
-        local m,mm=UnitMana('player'),UnitManaMax('player')
-        if mm==0 then return 1 end
-        return m/mm
-    end
-
-    -- Shadowform
-    if not HasBuff('Облик Тьмы') then CastSpellByName('Облик Тьмы') return end
-
-    -- Dispersion (по порогу маны)
-    if MP() < " + dispThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture) + @" and IsReady('Слияние с Тьмой') then CastSpellByName('Слияние с Тьмой') return end
-
-    -- Shadowfiend (по порогу маны)
-    if MP() < " + sfThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture) + @" and IsReady('Исчадие Тьмы') then CastSpellByName('Исчадие Тьмы') return end
-
-    -- Доты на основной таргет (защита от double-cast: пропускаем если кастили < 2 сек назад)
-    if not HasDebuff('target','Прикосновение вампира') then if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') return end end
-    if not HasDebuff('target','Всепожирающая чума') then if not WB_DP or GetTime()-WB_DP>2 then WB_DP=GetTime() CastSpellByName('Всепожирающая чума') return end end
-    if not HasDebuff('target','Слово Тьмы: Боль') then if not WB_SWP or GetTime()-WB_SWP>2 then WB_SWP=GetTime() CastSpellByName('Слово Тьмы: Боль') return end end
-
-    -- Основной задотан — мультидот VT на других
-    local mainGUID=UnitGUID('target')
-    local casted=false
-    local mobs={" + luaNames + @"}
-    for _,name in ipairs(mobs) do
-        TargetUnit(name)
-        if UnitGUID('target')~=mainGUID and UnitExists('target') and not UnitIsDeadOrGhost('target') and UnitCanAttack('player','target') and not HasDebuff('target','Прикосновение вампира') then
-            if not WB_VT or GetTime()-WB_VT>2 then WB_VT=GetTime() CastSpellByName('Прикосновение вампира') casted=true end
-        end
-        -- Всегда возвращаем таргет
-        if UnitGUID('target')~=mainGUID then TargetLastTarget() end
-        if casted then return end
-    end
-    -- Финальная проверка
-    if UnitGUID('target')~=mainGUID then TargetLastTarget() end
-
-    -- Все задотаны — Mind Blast / Mind Sear / Mind Flay
-    local _,_,_,_,mbPts = GetTalentInfo(3,8)
-    if mbPts and mbPts > 0 and IsReady('Взрыв разума') then CastSpellByName('Взрыв разума') return end
-    if " + unitsNearTarget + @" >= " + mindSearCount + @" then CastSpellByName('Иссушение разума') return end
-    CastSpellByName('Пытка разума')
-end
-WB_AoE()
-";
-    }
+    // GetRotationScript → делегирование в MultiDotHelper
+    private string GetRotationScript(WowPlayer player) =>
+        _multiDotHelper.GetRotationScript(player, _fullScript,
+            _aoeEnabled, _useMultiDot, _maxDotTargets,
+            _useMindSear, _mindSearTargets,
+            DispManaThreshold, SFManaThreshold);
 
     // --- Buff system ---
 

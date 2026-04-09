@@ -21,9 +21,21 @@
   - `Game/Navigation.cs` — FaceTarget (запись float в +0x7A8), FollowUnit
   - `Game/ClickToMove.cs` — CTM через запись координат в память
   - `Game/LuaReader.cs` — двухпроходный скан макроса для чтения Lua→C#
-  - `Game/BotEngine.cs` — главный координатор: таймер 150мс, Follow/Rotation/Buffs/AoE
-  - `Game/Rotations/AllRotations.cs` — ВСЕ ротации (5 спеков) в одном Lua-скрипте
+  - `Game/BotEngine.cs` — тонкий координатор (~950 строк): таймер 150мс, Tick() делегирует в модули
+  - `Game/BuffManager.cs` — вся логика баффов (seal/blessing/aura/shout/stance/totems/pet)
+  - `Game/CombatHelper.cs` — подсчёт врагов, SmartTaunt, GroundAoE, AoE Avoidance
+  - `Game/CombatExecutor.cs` — ЕДИНЫЙ боевой тик для solo И slave (позиционирование + ротация)
+  - `Game/MultiDotHelper.cs` — SP мультидот AoE ротация
+  - `Game/CombatPositioning.cs` — MoveBehind (мили за спину), RangedPos (ранж сбоку)
+  - `Game/Rotations/AllRotations.cs` — Lua-скрипты ротаций (хранилище)
+  - `Game/Rotations/{Class}Rotation.cs` — 10 файлов, каждый класс реализует ICombatRotation
+  - `Game/Rotations/RotationRegistry.cs` — поиск ротации по классу
   - `Logger.cs` — wowbot.log рядом с exe
+
+- **WowBot.Abstractions** — интерфейсы (net8.0-windows, x86)
+  - `IMemoryReader`, `IGameHook`, `IObjectManager`, `INavigation`
+  - `ICombatRotation`, `ICommandSource`
+  - `Entities/IWowUnit`, `IWowPlayer`, `IWowDynObject`
 
 - **WowBot.Injector** — WPF приложение (net8.0-windows, x86)
   - `MainWindow.xaml.cs` — Attach/Detach, Lua Console, Dump, update loop 200мс
@@ -134,12 +146,19 @@ publish\WowBot.Injector.exe
 8. **Логи** — если тестировщик скинул wowbot.log, ОБЯЗАТЕЛЬНО прочитай его (Read tool) перед диагностикой.
 9. **Авто-ревью** — после больших изменений (3+ файлов или новая система) ОБЯЗАТЕЛЬНО запусти `/code-review` перед коммитом. Это ловит баги типа undefined functions, неправильные spell ID, забытые проверки.
 
-### Структура кода (НЕ МЕНЯТЬ):
-- `AllRotations.cs` — ВСЕ ротации в одном файле, per-class методы, spell ID хелперы (SN/Cast/IR/HB/HD/NR)
-- `BotEngine.cs` — координатор: таймер, follow, rotation, buffs — ОДИН файл
-- `CombatPositioning.cs` — позиционирование в бою (MoveBehind, RangedPos)
-- `OverlayWindow.xaml.cs` — ВСЕ UI в одном файле
+### Структура кода v2:
+- `BotEngine.cs` — тонкий координатор (~950 строк), Tick() делегирует в модули
+- `CombatExecutor.cs` — **ЕДИНЫЙ бой для solo и slave** (позиционирование, AoE, face, rotation)
+- `BuffManager.cs` — баффы (seal/blessing/aura/shout/stance/totems/pet)
+- `CombatHelper.cs` — подсчёт врагов, SmartTaunt, GroundAoE, AoE Avoidance
+- `MultiDotHelper.cs` — SP мультидот
+- `CombatPositioning.cs` — MoveBehind, RangedPos
+- `Rotations/{Class}Rotation.cs` — 10 файлов, каждый класс отдельно (реализует ICombatRotation)
+- `AllRotations.cs` — хранилище Lua-скриптов, spell ID хелперы (SN/Cast/IR/HB/HD/NR)
+- `OverlayWindow.xaml.cs` — UI
 - `EndSceneHook.cs` — хук D3D9, НЕ трогать без крайней необходимости
+
+### ПРАВИЛО v2: при добавлении боевых фич — добавлять в CombatExecutor, НЕ в BotEngine.Tick()!
 
 ## Известные проблемы
 - Break-CC: расовые не срабатывают — UnitRace на WoWCircle возвращает неизвестное значение (TODO)
