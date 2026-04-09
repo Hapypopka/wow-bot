@@ -562,7 +562,12 @@ public class BotEngine : IDisposable
             return;
         }
 
+        // TRACE: логируем каждое действие которое может двигать персонажа
+        bool mb = _combatPositioning.IsMovingBehind;
+        Logger.Info($"TRACE SlaveAttack: mb={mb} casting={player.IsCasting} pos=({player.X:F0},{player.Y:F0})");
+
         // Поворот к таргету (C# запись facing — не конфликтует с Lua MoveBackward)
+        Logger.Info($"TRACE: FaceInstant CALLED mb={mb}");
         _navigation.FaceInstant(player, slaveTarget);
 
         if (player.IsCasting) return;
@@ -576,7 +581,7 @@ public class BotEngine : IDisposable
         // MoveBehind: если активно перемещение за спину — не запускаем Lua approach (иначе MoveForwardStart перебивает CTM)
         if (_combatPositioning.IsMovingBehind)
         {
-            // Только ротация, без approach
+            Logger.Info("TRACE: approach BLOCKED (IsMovingBehind)");
             _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck, 500);
             return;
         }
@@ -589,6 +594,7 @@ public class BotEngine : IDisposable
             $"if not CheckInteractDistance('target',{distId}) then MoveForwardStart() WB_FWD=1 " +
             $"elseif WB_FWD then MoveForwardStop() WB_FWD=nil end ";
 
+        Logger.Info($"TRACE: approach+rotation EXEC");
         _slaveApproaching = true;
         string script = approachLua + enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
         _hook.ExecuteLua(script, 500);
@@ -1129,15 +1135,16 @@ public class BotEngine : IDisposable
                     _combatPositioning.IsHealer = IsHealer;
                     _combatPositioning.PlayerClass = PlayerClass;
                     _combatPositioning.SpecName = _specName;
+                    bool movingBehind = false;
                     if (MoveBehindEnabled && hasTarget && targetInCombat && target != null)
                     {
-                        if (_combatPositioning.TryMoveBehind(player, target)) { /* движемся за спину — НЕ вызываем FaceInstant, он перебивает CTM */ }
+                        if (_combatPositioning.TryMoveBehind(player, target)) { movingBehind = true; }
                         else if (_combatPositioning.TryRangedPosition(player, target)) { _navigation.FaceInstant(player, target); }
                     }
 
                     // Ground AoE (Гроза и т.д.) — если врагов >= порог
-                    if (hasTarget && targetInCombat && target != null && TryGroundAoE(player, target)) { }
-                    else
+                    if (!movingBehind && hasTarget && targetInCombat && target != null && TryGroundAoE(player, target)) { }
+                    else if (!movingBehind)
                     {
                         bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer;
                         if (needFace && !_navigation.FaceInstant(player, target!)) { }
