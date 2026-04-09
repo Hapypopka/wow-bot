@@ -2,7 +2,7 @@ using WowBot.Abstractions;
 
 namespace WowBot.Core.Game.Rotations;
 
-/// <summary>Priest (Shadow/Disc/Holy) — хилерские спеки сложные. Делегирует в AllRotations.</summary>
+/// <summary>Priest — Shadow DPS + Disc/Holy хилеры. Полное тело из AllRotations, обёрнутое LuaHelpers.</summary>
 public class PriestRotation : ICombatRotation
 {
     public string Name => "Priest (Shadow/Disc/Holy)";
