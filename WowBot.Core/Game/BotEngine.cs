@@ -319,14 +319,23 @@ public class BotEngine : IDisposable
             .Replace("not UnitAffectingCombat('player')", "false");
     }
 
-    /// <summary>Перечитать скрипты с диска (hot-reload без перезапуска)</summary>
+    /// <summary>Перечитать скрипты (hot-reload: C# ротация или Lua с диска)</summary>
     public void ReloadScripts()
     {
         if (string.IsNullOrEmpty(PlayerClass)) return;
-        var fullScript = Rotations.AllRotations.GetFullScript(PlayerClass);
-        var instantScript = Rotations.AllRotations.GetInstantScript(PlayerClass);
-        LoadRotation(instantScript, fullScript);
-        Logger.Info($"Scripts reloaded for {PlayerClass}");
+        var rotation = Rotations.RotationRegistry.Find(PlayerClass, _specName);
+        if (rotation != null)
+        {
+            LoadRotation(rotation.GetInstantScript(), rotation.GetFullScript());
+            Logger.Info($"Scripts reloaded: {rotation.Name} (C#)");
+        }
+        else
+        {
+            var fullScript = Rotations.AllRotations.GetFullScript(PlayerClass);
+            var instantScript = Rotations.AllRotations.GetInstantScript(PlayerClass);
+            LoadRotation(instantScript, fullScript);
+            Logger.Info($"Scripts reloaded: {PlayerClass} (Lua fallback)");
+        }
     }
 
     // --- Follow target ---

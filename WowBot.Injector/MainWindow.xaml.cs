@@ -519,9 +519,21 @@ public partial class MainWindow : Window
             _botEngine.SpecName = specName;
             _botEngine.LuaReader = _luaReader;
             AllRotations.ExportScripts(); // экспорт ПЕРЕД загрузкой — гарантирует актуальные скрипты
-            var fullScript = AllRotations.GetFullScript(playerClass);
-            var instantScript = AllRotations.GetInstantScript(playerClass);
-            WowBot.Core.Logger.Info($"Scripts generated: full={fullScript.Length} instant={instantScript.Length}");
+            // v2: RotationRegistry — ищем C# ротацию по классу+спеку, fallback на AllRotations
+            var rotation = WowBot.Core.Game.Rotations.RotationRegistry.Find(playerClass, specName);
+            string fullScript, instantScript;
+            if (rotation != null)
+            {
+                fullScript = rotation.GetFullScript();
+                instantScript = rotation.GetInstantScript();
+                WowBot.Core.Logger.Info($"Rotation: {rotation.Name} (C#) full={fullScript.Length} instant={instantScript.Length}");
+            }
+            else
+            {
+                fullScript = AllRotations.GetFullScript(playerClass);
+                instantScript = AllRotations.GetInstantScript(playerClass);
+                WowBot.Core.Logger.Info($"Rotation: {playerClass} (Lua fallback) full={fullScript.Length} instant={instantScript.Length}");
+            }
             _botEngine.LoadRotation(instantScript, fullScript);
 
             // Навигация: пробуем подключиться к NavServer
