@@ -82,7 +82,7 @@ public class CombatPositioning
         if (_logTick >= 20) { _logTick = 0; Logger.Info($"MoveBehind check: behind={behind} inFront={inFront} dist={dist:F1} moving={IsMovingBehind} player=({player.X:F0},{player.Y:F0}) target=({target.X:F0},{target.Y:F0}) tFacing={target.Facing:F2}"); }
 
         // Интервал: рога/кот — 4 тика (600мс), остальные — 10 тиков (1.5с)
-        int interval = (PlayerClass == "ROGUE" || (PlayerClass == "DRUID" && SpecName?.Contains("Feral") == true)) ? 4 : 10;
+        int interval = (PlayerClass == "ROGUE" || (PlayerClass == "DRUID" && SpecName?.Contains("Feral") == true)) ? 3 : 5;
         _repositionTick++;
         if (_repositionTick < interval) { return IsMovingBehind; }
         _repositionTick = 0;
