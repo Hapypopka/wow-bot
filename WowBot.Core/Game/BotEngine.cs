@@ -184,6 +184,7 @@ public class BotEngine : IDisposable
         _combatPositioning = new CombatPositioning(ctm);
         _buffManager = new BuffManager();
         _combatHelper = new CombatHelper(objectManager, hook, ctm);
+        _combatExecutor = new CombatExecutor(hook, navigation, _combatPositioning, _combatHelper);
 
         // Навигация через навмеш (опционально)
         NavEngine = new WowBot.Core.Navigation.NavEngine(ctm, objectManager);
@@ -199,6 +200,7 @@ public class BotEngine : IDisposable
     private readonly CombatPositioning _combatPositioning;
     private readonly BuffManager _buffManager;
     private readonly CombatHelper _combatHelper;
+    private readonly CombatExecutor _combatExecutor;
 
     public bool MoveBehindEnabled { get; set; }
 
@@ -347,67 +349,44 @@ public class BotEngine : IDisposable
         _isFollowMoving = true;
     }
 
-    /// <summary>Слейв: подбег к таргету + ротация. Используется в Attacking и Auto.</summary>
-    private bool _slaveApproaching;
+    /// <summary>Создать CombatOptions из текущего состояния BotEngine</summary>
+    private CombatOptions MakeCombatOptions(string enemyCountLua, bool needApproach = false, bool noCombatCheck = false)
+    {
+        return new CombatOptions
+        {
+            RotationScript = noCombatCheck ? _fullScriptNoCombatCheck : _fullScript,
+            EnemyCountLua = enemyCountLua,
+            SpellFlagsLua = SpellFlagsLua,
+            PlayerClass = PlayerClass,
+            SpecName = _specName,
+            IsMeleeSpec = IsMeleeSpec,
+            IsTankSpec = IsTankSpec,
+            IsHealer = IsHealer,
+            PlayerInCombat = _objectManager.LocalPlayer?.InCombat == true,
+            MoveBehindEnabled = MoveBehindEnabled,
+            AoeEnabled = _aoeEnabled,
+            AoeMinEnemies = AoeMinEnemies,
+            AutoFace = _autoFace,
+            NeedApproach = needApproach,
+        };
+    }
 
+    /// <summary>Слейв: подбег к таргету + ротация. Используется в Attacking и Auto.</summary>
     private void SlaveAttackTick(Entities.WowPlayer player, string enemyCountLua)
     {
-        // AoE Avoidance (DynObject — стандартные серверы)
         if (AoeAvoidEnabled && IsAoeFleeing) return;
         if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
 
         var slaveTarget = _objectManager.GetTarget();
         if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat)
         {
-            // Нет таргета — остановить подход
-            if (_slaveApproaching) { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); _slaveApproaching = false; }
+            _combatExecutor.StopApproach();
             return;
         }
 
-        if (player.IsCasting) return;
-
-        // MoveBehind / RangedPos (позиционирование в бою)
-        _combatPositioning.IsMelee = IsMeleeSpec;
-        _combatPositioning.IsTank = IsTankSpec;
-        _combatPositioning.IsHealer = IsHealer;
-        _combatPositioning.PlayerClass = PlayerClass;
-        _combatPositioning.SpecName = _specName;
-        bool movingBehind = false;
-        if (MoveBehindEnabled)
-        {
-            if (_combatPositioning.TryMoveBehind(player, slaveTarget)) { movingBehind = true; }
-            else if (_combatPositioning.TryRangedPosition(player, slaveTarget)) { _navigation.FaceInstant(player, slaveTarget); }
-        }
-
-        // Поворот к таргету
-        if (!movingBehind)
-            _navigation.FaceInstant(player, slaveTarget);
-
-        // MoveBehind активно — не запускаем approach (MoveForwardStart перебивает CTM)
-        if (_combatPositioning.IsMovingBehind)
-        {
-            _hook.ExecuteLua(enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck, 500);
-            return;
-        }
-
-        bool isMelee = PlayerClass == "WARRIOR" || PlayerClass == "ROGUE" ||
-                       PlayerClass == "DEATHKNIGHT" ||
-                       (PlayerClass == "PALADIN" && !IsHealer) ||
-                       (PlayerClass == "DRUID" && _specName?.Contains("Feral") == true) ||
-                       (PlayerClass == "SHAMAN" && _specName?.Contains("Enhancement") == true);
-
-        // Ground AoE
-        if (TryGroundAoE(player, slaveTarget)) return;
-
-        // Approach через Lua
-        int distId = isMelee ? 3 : 1;
-        string approachLua =
-            $"if not CheckInteractDistance('target',{distId}) then MoveForwardStart() WB_FWD=1 " +
-            $"elseif WB_FWD then MoveForwardStop() WB_FWD=nil end ";
-
-        _slaveApproaching = true;
-        string script = approachLua + enemyCountLua + SpellFlagsLua + _fullScriptNoCombatCheck;
-        _hook.ExecuteLua(script, 500);
+        // Единый боевой тик — тот же код что и solo!
+        _combatExecutor.ExecuteCombatTick(player, slaveTarget,
+            MakeCombatOptions(enemyCountLua, needApproach: true, noCombatCheck: true));
     }
 
     /// <summary>Полная остановка follow</summary>
@@ -456,8 +435,7 @@ public class BotEngine : IDisposable
     private void StopAoeMovement()
     {
         _combatHelper.ResetAoeFlee();
-        _slaveApproaching = false;
-        try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
+        _combatExecutor.StopApproach();
     }
 
     private volatile bool _tickPaused;
@@ -696,10 +674,9 @@ public class BotEngine : IDisposable
                 SlaveCtrl.FollowDistance = _followDistance;
 
                 // Если вышли из боевого режима — остановить Lua approach
-                if (Hivemind.Mode != Hivemind.SlaveMode.Attacking && Hivemind.Mode != Hivemind.SlaveMode.Auto && _slaveApproaching)
+                if (Hivemind.Mode != Hivemind.SlaveMode.Attacking && Hivemind.Mode != Hivemind.SlaveMode.Auto && _combatExecutor.IsApproaching)
                 {
-                    _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50);
-                    _slaveApproaching = false;
+                    _combatExecutor.StopApproach();
                 }
 
                 switch (Hivemind.Mode)
@@ -939,38 +916,13 @@ public class BotEngine : IDisposable
                     return;
                 }
 
-                // Умный таунт: C# сканирует ObjectManager на мобов бьющих союзников
-                if (playerInCombat && !IsHealer)
-                    TrySmartTaunt(player);
-
+                // Единый боевой тик — тот же CombatExecutor что и slave!
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    // Позиционирование в бою (MoveBehind для мили, RangedPos для ранж)
-                    _combatPositioning.IsMelee = IsMeleeSpec;
-                    _combatPositioning.IsTank = IsTankSpec;
-                    _combatPositioning.IsHealer = IsHealer;
-                    _combatPositioning.PlayerClass = PlayerClass;
-                    _combatPositioning.SpecName = _specName;
-                    bool movingBehind = false;
-                    if (MoveBehindEnabled && hasTarget && targetInCombat && target != null)
-                    {
-                        if (_combatPositioning.TryMoveBehind(player, target)) { movingBehind = true; }
-                        else if (_combatPositioning.TryRangedPosition(player, target)) { _navigation.FaceInstant(player, target); }
-                    }
-
-                    // Ground AoE (Гроза и т.д.) — если врагов >= порог
-                    if (!movingBehind && hasTarget && targetInCombat && target != null && TryGroundAoE(player, target)) { }
-                    else if (!movingBehind)
-                    {
-                        bool needFace = hasTarget && targetInCombat && _autoFace && !IsHealer;
-                        if (needFace && !_navigation.FaceInstant(player, target!)) { }
-                        else
-                        {
-                            string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
-                            if (_logTick == 0) Logger.Log(LogCat.Rotation, $"ExecRotation: scriptLen={script.Length} healer={IsHealer}");
-                            _hook.ExecuteLua(script, 500);
-                        }
-                    }
+                    var opts = MakeCombatOptions(enemyCountLua);
+                    // Solo: используем GetRotationScript (с мультидот) вместо plain _fullScript
+                    _combatExecutor.ExecuteCombatTick(player, target,
+                        opts with { RotationScript = GetRotationScript(player) });
                 }
                 return;
             }
@@ -993,18 +945,12 @@ public class BotEngine : IDisposable
             }
             else
             {
-                // В дистанции — полная ротация (только в бою)
+                // В дистанции — единый боевой тик
                 if ((hasTarget && targetInCombat) || IsHealer || playerInCombat)
                 {
-                    // Ground AoE (Гроза и т.д.) — если врагов >= порог
-                    if (hasTarget && targetInCombat && target != null && TryGroundAoE(player, target))
-                    { /* AoE каст начат, пропускаем обычную ротацию */ }
-                    else if (hasTarget && targetInCombat && _autoFace && !_navigation.FaceInstant(player, target!)) { }
-                    else
-                    {
-                        string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
-                        _hook.ExecuteLua(script, 500);
-                    }
+                    var opts = MakeCombatOptions(enemyCountLua);
+                    _combatExecutor.ExecuteCombatTick(player, target,
+                        opts with { RotationScript = GetRotationScript(player) });
                 }
             }
         }
