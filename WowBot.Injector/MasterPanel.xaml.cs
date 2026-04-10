@@ -850,6 +850,21 @@ public partial class MasterPanel : Window
         BtnScatter.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ffcccc"));
     }
 
+    // --- Ghost: RepopMe + Path recording ---
+    public event Action? OnRepop;
+    public event Action<bool>? OnRecordPath; // true=start, false=stop
+    private bool _recording;
+
+    private void BtnRepop_Click(object sender, RoutedEventArgs e) => OnRepop?.Invoke();
+
+    private void BtnRecordPath_Click(object sender, RoutedEventArgs e)
+    {
+        _recording = !_recording;
+        BtnRecordPath.Content = _recording ? "⏹ Стоп запись" : "📍 Запись пути";
+        BtnRecordPath.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_recording ? "#5a2a2a" : "#1a1a2a"));
+        OnRecordPath?.Invoke(_recording);
+    }
+
     private void FlashButton(System.Windows.Controls.Button btn, string bgOn, string fgOn, string bgOff, string fgOff)
     {
         btn.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgOn));

@@ -285,6 +285,62 @@ public partial class MainWindow : Window
             if (_botEngine == null) return;
             _botEngine.Hivemind.CmdTauntOT();
         };
+        // Ghost: RepopMe + Path recording
+        _masterPanel.OnRepop += () =>
+        {
+            WowBot.Core.Logger.Info($"OnRepop: botEngine={_botEngine != null} hook={_endSceneHook != null}");
+            if (_botEngine == null || _endSceneHook == null) return;
+            // Мастер покидает тело + запускает ghost run
+            _endSceneHook.ExecuteLua("RepopMe()", 200);
+            _botEngine.StartGhostRun();
+            // Слейвы через Hivemind
+            _botEngine.Hivemind.SendCommand(WowBot.Core.Game.Hivemind.Command.Wipe, "repop");
+            WowBot.Core.Logger.Info("OnRepop: sent RepopMe + ghost run to all");
+        };
+        System.Windows.Threading.DispatcherTimer? _pathRecordTimer = null;
+        List<(float x, float y, float z)>? _recordedPath = null;
+        _masterPanel.OnRecordPath += (start) =>
+        {
+            if (_endSceneHook == null || _objectManager == null) return;
+            if (start)
+            {
+                _recordedPath = new();
+                _pathRecordTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
+                _pathRecordTimer.Tick += (s, e) =>
+                {
+                    var p = _objectManager.LocalPlayer;
+                    if (p == null) return;
+                    // Не добавлять дубли (если стоим на месте)
+                    if (_recordedPath!.Count > 0)
+                    {
+                        var last = _recordedPath[^1];
+                        float dx = p.X - last.x, dy = p.Y - last.y, dz = p.Z - last.z;
+                        if (dx * dx + dy * dy + dz * dz < 4f) return; // <2м — пропуск
+                    }
+                    _recordedPath.Add((p.X, p.Y, p.Z));
+                    WowBot.Core.Logger.Info($"PathRecord: point #{_recordedPath.Count} ({p.X:F1},{p.Y:F1},{p.Z:F1})");
+                };
+                _pathRecordTimer.Start();
+                WowBot.Core.Logger.Info("PathRecord: STARTED");
+            }
+            else
+            {
+                _pathRecordTimer?.Stop();
+                _pathRecordTimer = null;
+                if (_recordedPath != null && _recordedPath.Count > 0)
+                {
+                    string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+                    string routesDir = System.IO.Path.Combine(basePath, "Routes");
+                    System.IO.Directory.CreateDirectory(routesDir);
+                    string fileName = $"ghost_route_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+                    string filePath = System.IO.Path.Combine(routesDir, fileName);
+                    var lines = _recordedPath.Select(p => string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1};{1:F1};{2:F1}", p.x, p.y, p.z));
+                    System.IO.File.WriteAllLines(filePath, lines);
+                    WowBot.Core.Logger.Info($"PathRecord: SAVED {_recordedPath.Count} points → {filePath}");
+                }
+                _recordedPath = null;
+            }
+        };
         // Interact / Gossip
         _masterPanel.OnInteract += () =>
         {

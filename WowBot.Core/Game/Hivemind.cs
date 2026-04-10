@@ -866,11 +866,21 @@ WB_HIVE_REG_TIME = 0
         }
         arg = cleanedArg;
 
-        // Wipe — хилы стоп
+        // Wipe — хилы стоп / repop
         if (cmd == Command.Wipe)
         {
-            WipeMode = !WipeMode;
-            Logger.Info($"Hivemind: SLAVE wipe mode = {WipeMode}");
+            string cleanArg3 = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
+            if (cleanArg3 == "repop")
+            {
+                _hook.ExecuteLua("RepopMe()", 200);
+                _botEngine?.StartGhostRun();
+                Logger.Info("Hivemind: SLAVE RepopMe — покинул тело + ghost run");
+            }
+            else
+            {
+                WipeMode = !WipeMode;
+                Logger.Info($"Hivemind: SLAVE wipe mode = {WipeMode}");
+            }
             return;
         }
 

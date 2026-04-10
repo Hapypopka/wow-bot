@@ -378,6 +378,125 @@ public class BotEngine : IDisposable
 
     public bool AoeAvoidEnabled { get; set; } = true;
 
+    // Ghost route — полёт призрака по маршруту
+    private List<(float x, float y, float z)>? _ghostRoute;
+    private int _ghostRouteIndex; // -1 = ждём загрузки
+    private bool _ghostRunning;
+    private int _ghostAliveCheckTick;
+
+    public void StartGhostRun()
+    {
+        if (_ghostRoute == null || _ghostRoute.Count == 0)
+            LoadGhostRoute();
+        if (_ghostRoute == null || _ghostRoute.Count == 0)
+        {
+            Logger.Info("GhostRun: нет маршрута (Routes/*.txt)");
+            return;
+        }
+        _ghostRouteIndex = -1; // -1 = ждём загрузки
+        _ghostRunning = true;
+        _ghostAliveCheckTick = 0;
+        EnsureRunning();
+        Logger.Info($"GhostRun: STARTED, {_ghostRoute.Count} points, waiting for load screen");
+    }
+
+    private void LoadGhostRoute()
+    {
+        string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+        string routesDir = System.IO.Path.Combine(basePath, "Routes");
+        if (!System.IO.Directory.Exists(routesDir)) return;
+        // Берём последний файл
+        var files = System.IO.Directory.GetFiles(routesDir, "ghost_route_*.txt").OrderByDescending(f => f).ToArray();
+        if (files.Length == 0) return;
+        _ghostRoute = new();
+        foreach (var line in System.IO.File.ReadAllLines(files[0]))
+        {
+            var parts = line.Split(';');
+            if (parts.Length >= 3 &&
+                float.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float y) &&
+                float.TryParse(parts[2], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float z))
+                _ghostRoute.Add((x, y, z));
+        }
+        Logger.Info($"GhostRun: loaded {_ghostRoute.Count} points from {files[0]}");
+    }
+
+    private void GhostRunTick()
+    {
+        if (!_ghostRunning || _ghostRoute == null) return;
+
+        // Фаза 1: ждём загрузки — проверяем Lua каждый тик
+        if (_ghostRouteIndex == -1)
+        {
+            try
+            {
+                var check = _hook.ExecuteLuaWithResult("WB_R=UnitIsDeadOrGhost('player') and '1' or '0'");
+                if (check != "1") return; // ещё грузится или живой
+            }
+            catch { return; } // hook не работает — ждём
+
+            // Загрузились! Найти ближайшую точку маршрута
+            var player = _objectManager.LocalPlayer;
+            if (player == null) return;
+
+            float bestDist = float.MaxValue;
+            int bestIdx = 0;
+            for (int i = 0; i < _ghostRoute.Count; i++)
+            {
+                var p = _ghostRoute[i];
+                float d = (player.X - p.x) * (player.X - p.x) + (player.Y - p.y) * (player.Y - p.y);
+                if (d < bestDist) { bestDist = d; bestIdx = i; }
+            }
+            _ghostRouteIndex = bestIdx;
+            Logger.Info($"GhostRun: loaded! Nearest point={bestIdx}/{_ghostRoute.Count} dist={MathF.Sqrt(bestDist):F0}");
+            return;
+        }
+
+        var pl = _objectManager.LocalPlayer;
+        if (pl == null) return;
+
+        // Проверка: ещё призрак? (каждые ~5 сек, не каждый тик)
+        _ghostAliveCheckTick++;
+        if (_ghostAliveCheckTick >= 33)
+        {
+            _ghostAliveCheckTick = 0;
+            try
+            {
+                var ghostCheck = _hook.ExecuteLuaWithResult("WB_R=UnitIsDeadOrGhost('player') and '1' or '0'");
+                if (ghostCheck == "0")
+                {
+                    _ghostRunning = false;
+                    Logger.Info("GhostRun: ALIVE — stopped");
+                    return;
+                }
+            }
+            catch { } // hook лагнул — не останавливаемся
+        }
+
+        if (_ghostRouteIndex >= _ghostRoute.Count)
+        {
+            // Дошли до конца — RetrieveCorpse
+            _hook.ExecuteLua("RetrieveCorpse()", 200);
+            _ghostRunning = false;
+            Logger.Info("GhostRun: FINISHED — RetrieveCorpse");
+            return;
+        }
+
+        var target = _ghostRoute[_ghostRouteIndex];
+        float dx = pl.X - target.x, dy = pl.Y - target.y;
+        float dist = MathF.Sqrt(dx * dx + dy * dy);
+
+        if (dist < 15f) // близко к точке → следующая (15м — призрак летит быстро)
+        {
+            _ghostRouteIndex++;
+            Logger.Info($"GhostRun: point {_ghostRouteIndex}/{_ghostRoute.Count} reached");
+            return;
+        }
+
+        // Лететь к точке
+        _ctm.MoveTo(target.x, target.y, target.z, 10f);
+    }
+
     public bool IsTankSpec => _specName is "Prot Warrior" or "Prot Paladin" or "Blood DK";
     // Feral Druid: танк только в Bear Form — определяется через IsTankUnit (бафф Bear Form)
 
@@ -899,7 +1018,7 @@ public class BotEngine : IDisposable
         // Обработать команды из очереди (UI, Hivemind)
         ProcessPendingCommands();
 
-        if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) return;
+        if (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive && !_ghostRunning) return;
         if (!_hook.IsHooked) return;
 
         try
@@ -913,9 +1032,17 @@ public class BotEngine : IDisposable
             if (Hivemind.CurrentRole == Hivemind.Role.Master)
                 Hivemind.UpdateCachedPosition(player.X, player.Y, player.Z, player.Facing);
 
-            // Авто-принятие реса для слейвов
+            // Ghost run — полёт призрака по маршруту (приоритет над всем)
+            if (_ghostRunning)
+            {
+                GhostRunTick();
+                return;
+            }
+
+            // Мёртвый слейв: слушаем Hivemind (для RepopMe) + авто-принятие реса
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && player.IsDead)
             {
+                HivemindCommTick(); // чтобы получить RepopMe
                 _hook.ExecuteLua("AcceptResurrect()", 100);
                 return;
             }
