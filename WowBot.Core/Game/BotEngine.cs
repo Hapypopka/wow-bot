@@ -114,7 +114,7 @@ public class BotEngine : IDisposable
     public string PlayerClass { get; set; } = "";
     private bool _isMovingForward;
     private int _healerTickCount;
-    private int _registerTick;
+    private int _registerTick = 20; // стартует с порога — первый Register сразу
     private int _blessingCooldown; // пропустить N баф-чеков после каста благословения
     private double _lastRegisterTime;
     private double _lastAckTime;
@@ -989,8 +989,9 @@ public class BotEngine : IDisposable
         {
             // Один вызов вместо трёх: cmd|arg|sender|time#reg|regSender|regTime#ack|ackTime
             response = _hook.ExecuteLuaWithResult(
+                "local rq=WB_HIVE_REG_Q or '' WB_HIVE_REG_Q='' " +
                 "WB_R=(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0')" +
-                "..'§'..(WB_HIVE_REG or '')..'|'..(WB_HIVE_REG_SENDER or '')..'|'..(WB_HIVE_REG_TIME or '0')" +
+                "..'§'..rq" +
                 "..'§'..(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
         }
         else
@@ -1041,24 +1042,21 @@ public class BotEngine : IDisposable
             // Register + ACK (мастер) — из того же ответа
             if (Hivemind.CurrentRole == Hivemind.Role.Master)
             {
-                if (regPart != null)
+                // Register очередь: "name;class;buffs@sender|name2;class2@sender2"
+                if (!string.IsNullOrEmpty(regPart))
                 {
-                    var regParts = regPart.Split('|');
-                    if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
+                    var entries = regPart.Split('|');
+                    foreach (var entry in entries)
                     {
-                        double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture, out double regTime);
-                        if (regTime > _lastRegisterTime)
+                        if (string.IsNullOrEmpty(entry)) continue;
+                        // формат: name;class;buffs@sender
+                        var atParts = entry.Split('@', 2);
+                        string regData = atParts[0];
+                        if (!string.IsNullOrEmpty(regData))
                         {
-                            _lastRegisterTime = regTime;
-                            Logger.Info($"Hivemind: REGISTER received — data=[{regParts[0]}] time={regTime}");
-                            Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
+                            Logger.Info($"Hivemind: REGISTER received — [{regData}]");
+                            Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regData);
                         }
-                    }
-                    else if (_logTick == 0 && regParts.Length >= 3)
-                    {
-                        // regParts[0] пуст — регистрация не пришла
-                        Logger.Log(LogCat.Hivemind, $"Hivemind: no register data (reg=[{regPart}])");
                     }
                 }
 
@@ -1090,7 +1088,7 @@ public class BotEngine : IDisposable
         if (Hivemind.CurrentRole == Hivemind.Role.Slave)
         {
             _registerTick++;
-            if (_registerTick >= 66)
+            if (_registerTick >= 20) // ~3 сек (было 66 = 10 сек)
             {
                 _registerTick = 0;
                 Hivemind.SendRegister(PlayerClass, GetBuffSettingsString());

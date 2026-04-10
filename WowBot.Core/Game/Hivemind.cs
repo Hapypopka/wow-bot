@@ -774,9 +774,12 @@ WB_HIVE_FRAME:SetScript('OnEvent', function(self, event, prefix, msg, channel, s
         WB_HIVE_ACK = arg or ''
         WB_HIVE_ACK_TIME = GetTime()
     elseif cmd == 'Register' then
-        WB_HIVE_REG = arg or ''
-        WB_HIVE_REG_SENDER = sender or ''
-        WB_HIVE_REG_TIME = GetTime()
+        if not WB_HIVE_REG_Q then WB_HIVE_REG_Q='' end
+        local entry = (arg or '')..'@'..(sender or '')
+        if not WB_HIVE_REG_Q:find(entry, 1, true) then
+            if WB_HIVE_REG_Q ~= '' then WB_HIVE_REG_Q = WB_HIVE_REG_Q..'|'..entry
+            else WB_HIVE_REG_Q = entry end
+        end
     else
         WB_HIVE_CMD = cmd or ''
         WB_HIVE_ARG = arg or ''
@@ -787,8 +790,7 @@ end)
 WB_HIVE_REGISTERED = true
 WB_HIVE_CMD = ''
 WB_HIVE_TIME = 0
-WB_HIVE_REG = ''
-WB_HIVE_REG_TIME = 0
+WB_HIVE_REG_Q = ''
 ";
 
     public static string GetSlaveReadScript() =>
