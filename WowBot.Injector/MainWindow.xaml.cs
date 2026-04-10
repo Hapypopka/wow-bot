@@ -179,6 +179,20 @@ public partial class MainWindow : Window
                     hive.NotifySlavesChanged();
                     hive.CmdRefreshGuid();
                     break;
+                case "guildtp":
+                    // Сначала стоп всем (остановить баффы/ротацию/follow чтобы не сбить каст)
+                    hive.CmdStop();
+                    // Задержка чтобы стоп дошёл до слейвов
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(1500);
+                        Dispatcher.Invoke(() =>
+                        {
+                            _endSceneHook?.ExecuteLua("SendChatMessage('.g t','GUILD')", 200);
+                            hive.CmdGuildTp();
+                        });
+                    });
+                    break;
                 case "guidbytarget":
                     string? tName = hive.GetMasterTargetName();
                     foreach (var s in hive.ConnectedSlaves) s.FollowTargetName = tName ?? "";

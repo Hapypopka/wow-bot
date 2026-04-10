@@ -961,7 +961,10 @@ public class BotEngine : IDisposable
                 Logger.Info("Auto: OUT OF COMBAT — resume follow");
             }
             if (!Hivemind.AutoPauseFollow)
+            {
+                SlaveCtrl.FollowDistance = _followDistance;
                 SlaveCtrl.Tick();
+            }
         }
     }
 
@@ -1288,15 +1291,53 @@ public class BotEngine : IDisposable
             // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
             {
-                // Follow к мастеру — но в авто-режиме НЕ фолловить во время боя
-                bool healerFollow = Hivemind.Mode == Hivemind.SlaveMode.Following ||
-                    Hivemind.Mode == Hivemind.SlaveMode.GoingToPoint ||
-                    (Hivemind.Mode == Hivemind.SlaveMode.Auto && !Hivemind.AutoPauseFollow);
-                if (healerFollow)
+                bool inAutoMode = Hivemind.Mode == Hivemind.SlaveMode.Auto;
+                bool inCombat = player.InCombat;
+
+                // AssistUnit ВСЕГДА в авто — чтобы хил получил таргет мастера
+                if (inAutoMode && !Hivemind.AutoPauseAttack)
+                    Hivemind.SlaveAutoTick();
+
+                var autoTarget = _objectManager.GetTarget();
+                bool hasAutoTarget = autoTarget != null && autoTarget.IsAlive &&
+                    autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
+
+                // В авто-режиме в бою: позиционируемся как ДПС (HPal=мили, остальные=рейнж)
+                if (inAutoMode && (inCombat || hasAutoTarget))
                 {
-                    SlaveCtrl.FollowDistance = _followDistance;
-                    SlaveCtrl.Tick();
+                    var healTarget = _objectManager.GetTarget();
+                    if (healTarget != null && healTarget.IsAlive && healTarget.InCombat &&
+                        healTarget.Type != WowObjectType.Player)
+                    {
+                        bool isMeleeHealer = PlayerClass == "PALADIN"; // HPal = мили хилер
+                        // Approach: HPal → мили рейндж, остальные хилы → 28 ярдов
+                        float effectiveReach = healTarget.CombatReach + player.CombatReach + 0.66f;
+                        float maxDist = isMeleeHealer ? effectiveReach : 28f;
+                        float dist = player.DistanceTo(healTarget);
+                        if (dist > maxDist)
+                        {
+                            float angle = MathF.Atan2(player.Y - healTarget.Y, player.X - healTarget.X);
+                            float stopDist = MathF.Max(effectiveReach, 1.5f);
+                            float destX = healTarget.X + stopDist * MathF.Cos(angle);
+                            float destY = healTarget.Y + stopDist * MathF.Sin(angle);
+                            _navigation.FaceInstant(player, healTarget);
+                            _ctm.MoveTo(destX, destY, healTarget.Z, 1.5f);
+                        }
+                    }
                 }
+                else
+                {
+                    // Вне боя или не авто: follow к мастеру
+                    bool healerFollow = Hivemind.Mode == Hivemind.SlaveMode.Following ||
+                        Hivemind.Mode == Hivemind.SlaveMode.GoingToPoint ||
+                        (inAutoMode && !Hivemind.AutoPauseFollow);
+                    if (healerFollow)
+                    {
+                        SlaveCtrl.FollowDistance = _followDistance;
+                        SlaveCtrl.Tick();
+                    }
+                }
+
                 // Хил ВСЕГДА — каждые ~500мс
                 _healerTickCount++;
                 if (_healerTickCount >= 3)

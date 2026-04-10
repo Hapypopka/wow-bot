@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -352,6 +352,9 @@ public class Hivemind
 
     /// <summary>Мастер: стоп (полный сброс + ClearTarget)</summary>
     public void CmdStop() => SendCommand(Command.Stop);
+
+    /// <summary>Мастер: все пишут .g t в гильд чат</summary>
+    public void CmdGuildTp() => SendCommand(Command.GuildTp);
 
     /// <summary>Мастер: авторежим (follow + авто-ассист)</summary>
     public void CmdAuto()
@@ -827,6 +830,7 @@ WB_HIVE_REG_Q = ''
             "GossipSelect" => Command.GossipSelect,
             "GossipAccept" => Command.GossipAccept,
             "CastHeroism" => Command.CastHeroism,
+            "GuildTp" => Command.GuildTp,
             _ => null
         };
 
@@ -1111,6 +1115,11 @@ WB_HIVE_REG_Q = ''
                 string myName = _objectManager.GetPlayerName() ?? "slave";
                 _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','Pong:{myName}','PARTY')", 200);
                 Logger.Info("Hivemind: SLAVE pong");
+                break;
+
+            case Command.GuildTp:
+                _hook.ExecuteLua("SendChatMessage('.g t','GUILD')", 200);
+                Logger.Info("Hivemind: SLAVE guild tp");
                 break;
         }
 
