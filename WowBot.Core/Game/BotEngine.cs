@@ -218,6 +218,13 @@ public class BotEngine : IDisposable
                     HivemindFollowing = true;
                     _rotationEnabled = true;
                     BuffsEnabled = true;
+                    // Мили: сохранить MoveBehind и выключить (не забегать за спину при Follow)
+                    if (IsMeleeSpec)
+                    {
+                        MoveBehindSavedState = MoveBehindEnabled;
+                        MoveBehindEnabled = false;
+                        Logger.Info($"Follow: MoveBehind OFF (saved={MoveBehindSavedState})");
+                    }
                 }
                 else
                 {
@@ -266,6 +273,12 @@ public class BotEngine : IDisposable
                 _hook.ExecuteLua($"AssistUnit('{cmd.TargetName.Replace("'", "\\'")}') StartAttack()", 200);
                 _rotationEnabled = true;
                 BuffsEnabled = true;
+                // Мили: восстановить MoveBehind из сохранённого состояния
+                if (MoveBehindSavedState != null)
+                {
+                    MoveBehindEnabled = MoveBehindSavedState.Value;
+                    MoveBehindSavedState = null;
+                }
                 EnsureRunning();
                 break;
 
@@ -278,6 +291,12 @@ public class BotEngine : IDisposable
                 HivemindFollowing = true;
                 _rotationEnabled = true;
                 BuffsEnabled = true;
+                // Мили: восстановить MoveBehind
+                if (MoveBehindSavedState != null)
+                {
+                    MoveBehindEnabled = MoveBehindSavedState.Value;
+                    MoveBehindSavedState = null;
+                }
                 EnsureRunning();
                 break;
 
@@ -355,6 +374,7 @@ public class BotEngine : IDisposable
     private readonly List<Abstractions.ICommandSource> _commandSources = new();
 
     public bool MoveBehindEnabled { get; set; }
+    public bool? MoveBehindSavedState { get; private set; } // сохранённое состояние перед Follow
 
     public bool AoeAvoidEnabled { get; set; } = true;
 
@@ -989,7 +1009,7 @@ public class BotEngine : IDisposable
 
             // Лог каждые ~5 сек (33 тиков по 150мс)
             _logTick++;
-            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); var p = _objectManager.LocalPlayer; Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} NCE={CountNearbyCombatEnemies(p!)} dyn={_objectManager.DynObjects.Count} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); if (t != null && p != null) Logger.Info($"Hitbox: player BR={p.BoundingRadius:F2} CR={p.CombatReach:F2} | target BR={t.BoundingRadius:F2} CR={t.CombatReach:F2} name={t.Name}"); }
+            if (_logTick >= 33) { _logTick = 0; var t = _objectManager.GetTarget(); var p = _objectManager.LocalPlayer; Logger.Info($"Tick: rot={_rotationEnabled} follow={_followEnabled} buffs={_buffsEnabled} target={t?.Name ?? "none"} alive={t?.IsAlive} NCE={CountNearbyCombatEnemies(p!)} dyn={_objectManager.DynObjects.Count} flags=\"{SpellFlagsLua?.Substring(0, Math.Min(SpellFlagsLua?.Length ?? 0, 200))}\""); if (t != null && p != null) Logger.Info($"Hitbox: player BR={p.BoundingRadius:F2} CR={p.CombatReach:F2} | target BR={t.BoundingRadius:F2} CR={t.CombatReach:F2} dist={p.DistanceTo(t):F2} name={t.Name}"); }
 
             // Баффы solo обрабатываются в BuffTick() выше
 

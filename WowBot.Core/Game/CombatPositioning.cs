@@ -37,16 +37,14 @@ public class CombatPositioning
         return !IsInFrontArc(target, player.X, player.Y);
     }
 
-    /// <summary>Вычисляет точку за спиной таргета. distFromCenter учитывает хитбокс (как NPCBots GetNearPoint)</summary>
-    private static (float x, float y, float z) GetBehindPosition(WowUnit target, float distFromCenter)
+    /// <summary>Вычисляет точку за спиной таргета. WoW melee range = target.CR + player.CR + 4/3</summary>
+    private static (float x, float y, float z) GetBehindPosition(WowUnit target, WowUnit player)
     {
-        // NPCBots: offset = target.BoundingRadius + bot.CombatReach
-        // У нас нет BoundingRadius, но distFromCenter = текущая дистанция игрока до центра таргета
-        // Это уже включает радиус хитбокса + melee reach → точка за спиной на той же дистанции
-        float distance = MathF.Max(distFromCenter, 2.0f);
+        float effectiveReach = target.CombatReach + player.CombatReach + 0.66f;
+        effectiveReach = MathF.Max(effectiveReach, 2.0f);
         float behindAngle = target.Facing + MathF.PI;
-        float x = target.X + distance * MathF.Cos(behindAngle);
-        float y = target.Y + distance * MathF.Sin(behindAngle);
+        float x = target.X + effectiveReach * MathF.Cos(behindAngle);
+        float y = target.Y + effectiveReach * MathF.Sin(behindAngle);
         return (x, y, target.Z);
     }
 
@@ -107,9 +105,8 @@ public class CombatPositioning
         // Слишком далеко — сначала подбежать (approach обработает)
         if (dist > 12f) { IsMovingBehind = false; return false; }
 
-        // Вычисляем точку за спиной, используя текущую дистанцию до центра как размер хитбокса
-        // Для манекена dist~2, для босса dist~5-6 → автоматически адаптируется
-        var (x, y, z) = GetBehindPosition(target, dist);
+        // Точка за спиной на краю мили рейнджа (target.CR + player.CR + 4/3)
+        var (x, y, z) = GetBehindPosition(target, player);
         _ctm.MoveTo(x, y, z, 0.5f);
         IsMovingBehind = true;
         Logger.Info($"MoveBehind: GO ({x:F1},{y:F1}) behind target facing={target.Facing:F2} dist={dist:F1} inFront={inFront}");
@@ -122,23 +119,8 @@ public class CombatPositioning
     /// </summary>
     public bool TryRangedPosition(WowPlayer player, WowUnit target)
     {
-        if (IsMelee || IsTank) return false;
-        if (IsHealer) return false; // хилеры позиционируются по-другому
-        if (!target.IsAlive || !target.InCombat) return false;
-        if (player.IsCasting) return false;
-
-        _repositionTick++;
-        if (_repositionTick < 15) return false; // каждые ~2.25с
-        _repositionTick = 0;
-
-        float dist = player.DistanceTo(target);
-        // Слишком близко (< 15м) или в передней дуге — перепозиция
-        if (dist > 15f && !IsInFrontArc(target, player.X, player.Y)) return false;
-
-        var (x, y, z) = GetRangedPosition(target, player);
-        _ctm.MoveTo(x, y, z, 1.0f);
-        Logger.Info($"RangedPos: ({x:F1},{y:F1}) at range from target");
-        return true;
+        // Отключено: ренджи просто стоят и кастуют, approach подведёт если далеко
+        return false;
     }
 
     /// <summary>Нормализация угла в диапазон [-PI, PI]</summary>

@@ -79,18 +79,24 @@ public class CombatExecutor
         if (!options.IsHealer && options.PlayerInCombat)
             _combatHelper.TrySmartTaunt(player, options.PlayerClass, options.SpellFlagsLua);
 
-        // 4. Approach для slave (C# CTM)
+        // 4. Approach для slave (C# CTM) — учитываем хитбокс
         if (options.NeedApproach)
         {
             bool isMelee = options.IsMeleeSpec;
-            float maxDist = isMelee ? 5f : 28f;
+            float effectiveReach = target.CombatReach + player.CombatReach + 0.66f;
+            float maxDist = isMelee ? effectiveReach : 28f;
             float dist = player.DistanceTo(target);
             if (dist > maxDist)
             {
+                // Бежим к точке на краю хитбокса, не к центру моба
+                float angle = MathF.Atan2(player.Y - target.Y, player.X - target.X);
+                float stopDist = MathF.Max(effectiveReach, 1.5f);
+                float destX = target.X + stopDist * MathF.Cos(angle);
+                float destY = target.Y + stopDist * MathF.Sin(angle);
                 _navigation.FaceInstant(player, target);
-                _ctm.MoveTo(target.X, target.Y, target.Z, maxDist * 0.8f);
+                _ctm.MoveTo(destX, destY, target.Z, 1.5f);
                 _slaveApproaching = true;
-                return true; // не кастуем ротацию пока бежим
+                return true;
             }
             else if (_slaveApproaching)
             {
