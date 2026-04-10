@@ -109,9 +109,17 @@ public class WowUnit : WowObject, IWowUnit
             auraTable = Memory.ReadUInt32(BaseAddress + Offsets.AuraTableAlt);
         }
 
-        for (int i = 0; i < auraCount && i < 80; i++)
+        if (auraCount <= 0 || auraCount > 80) return result;
+
+        // Батч: читаем весь блок аур за один syscall
+        int totalBytes = auraCount * (int)Offsets.AuraSize;
+        byte[] block = Memory.ReadBytes(auraTable, totalBytes);
+
+        for (int i = 0; i < auraCount; i++)
         {
-            int spellId = Memory.ReadInt32(auraTable + (uint)(i * Offsets.AuraSize) + Offsets.AuraSpellId);
+            int offset = i * (int)Offsets.AuraSize + (int)Offsets.AuraSpellId;
+            if (offset + 4 > block.Length) break;
+            int spellId = BitConverter.ToInt32(block, offset);
             if (spellId > 0)
                 result.Add(spellId);
         }

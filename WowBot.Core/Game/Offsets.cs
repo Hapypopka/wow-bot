@@ -39,6 +39,8 @@ public static class Offsets
     public const uint UnitFieldFactionTemplate = 0x37; // idx=55 (рядом с level)
     public const uint UnitFieldDisplayId = 0x3E;  // idx=62
     public const uint UnitFieldFlags = 0x3B;      // idx=59
+    public const uint UnitFieldBoundingRadius = 0x41; // idx=65, float — хитбокс модели
+    public const uint UnitFieldCombatReach = 0x42;    // idx=66, float — дистанция мили-удара
 
     // --- Каст ---
     public const uint CurrentCastId = 0xA60;

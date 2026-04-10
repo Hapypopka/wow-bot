@@ -719,7 +719,6 @@ public class Hivemind
 
     public static string GetSlaveListenerScript() => $@"
 if WB_HIVE_FRAME then WB_HIVE_FRAME:UnregisterAllEvents() WB_HIVE_FRAME:SetScript('OnEvent',nil) end
-local g,_=GetNumMacros() if g<2 then CreateMacro('WH',1,'init') end
 WB_HIVE_FRAME = CreateFrame('Frame')
 WB_HIVE_FRAME:RegisterEvent('CHAT_MSG_ADDON')
 WB_HIVE_FRAME:SetScript('OnEvent', function(self, event, prefix, msg, channel, sender)

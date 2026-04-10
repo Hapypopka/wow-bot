@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WowBot - Overlay & Rotation System Documentation</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0a0a0f;
+    color: #c0c0c8;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    display: flex;
+}
+a { color: #c8aa6e; text-decoration: none; }
+a:hover { color: #f0d080; text-decoration: underline; }
+
+/* Sidebar */
+#sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 280px;
+    height: 100vh;
+    background: #0d0d14;
+    border-right: 1px solid #1e1e2a;
+    overflow-y: auto;
+    padding: 16px 12px;
+    z-index: 100;
+}
+#sidebar h2 {
+    color: #c8aa6e;
+    font-size: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #2a2a3a;
+}
+#sidebar ul { list-style: none; }
+#sidebar ul li { margin: 2px 0; }
+#sidebar ul li a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: #888;
+    transition: all 0.2s;
+}
+#sidebar ul li a:hover { background: #16161e; color: #c8aa6e; text-decoration: none; }
+#sidebar ul li.section > a { color: #c8aa6e; font-weight: 600; font-size: 13px; margin-top: 8px; }
+#sidebar ul li.sub a { padding-left: 22px; font-size: 12px; }
+
+/* Main content */
+#content {
+    margin-left: 280px;
+    padding: 32px 40px;
+    max-width: 1100px;
+    width: 100%;
+}
+h1 {
+    color: #c8aa6e;
+    font-size: 28px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #c8aa6e;
+    padding-bottom: 12px;
+}
+h1 small { font-size: 14px; color: #666; font-weight: normal; display: block; margin-top: 4px; }
+h2 {
+    color: #c8aa6e;
+    font-size: 22px;
+    margin-top: 40px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #2a2a3a;
+}
+h3 {
+    color: #e0c878;
+    font-size: 17px;
+    margin-top: 24px;
+    margin-bottom: 10px;
+}
+h4 {
+    color: #b8a060;
+    font-size: 14px;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+p { margin-bottom: 12px; }
+
+/* Cards */
+.card {
+    background: #12121a;
+    border: 1px solid #1e1e2a;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+.card-header {
+    color: #c8aa6e;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+th {
+    background: #16161e;
+    color: #c8aa6e;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 2px solid #2a2a3a;
+    font-weight: 600;
+}
+td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #1a1a24;
+}
+tr:hover td { background: #14141c; }
+.spell-id { color: #6a8; font-family: Consolas, monospace; font-size: 12px; }
+.default-on { color: #5ab57a; }
+.default-off { color: #b55a5a; }
+
+/* Code blocks */
+code {
+    background: #16161e;
+    color: #d8c878;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12.5px;
+}
+pre {
+    background: #0e0e16;
+    border: 1px solid #1e1e2a;
+    border-radius: 6px;
+    padding: 14px 18px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #b0b0b8;
+}
+pre .kw { color: #c586c0; }
+pre .fn { color: #dcdcaa; }
+pre .str { color: #ce9178; }
+pre .num { color: #b5cea8; }
+pre .cm { color: #608b4e; }
+
+/* Badges / Tags */
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 4px;
+}
+.tag-dps { background: #3a2020; color: #e06060; }
+.tag-healer { background: #203a20; color: #60e060; }
+.tag-tank { background: #20203a; color: #6080e0; }
+.tag-burst { background: #3a3020; color: #e0c040; }
+.tag-aoe { background: #302030; color: #c060c0; }
+.tag-radio { background: #1a2a3a; color: #60a0d0; }
+.tag-toggle { background: #2a2a20; color: #a0a060; }
+
+/* Class colors */
+.c-warrior { color: #C79C6E; }
+.c-paladin { color: #F58CBA; }
+.c-hunter { color: #ABD473; }
+.c-rogue { color: #FFF569; }
+.c-priest { color: #FFFFFF; }
+.c-dk { color: #C41F3B; }
+.c-shaman { color: #0070DE; }
+.c-mage { color: #69CCF0; }
+.c-warlock { color: #9482C9; }
+.c-druid { color: #FF7D0A; }
+
+/* Flow diagram */
+.flow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 12px 0; }
+.flow-step {
+    background: #16161e;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #c0c0c8;
+}
+.flow-arrow { color: #c8aa6e; font-size: 16px; }
+
+/* Note */
+.note {
+    background: #1a1a10;
+    border-left: 3px solid #c8aa6e;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 13px;
+}
+.warn {
+    background: #1a1010;
+    border-left: 3px solid #c04040;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 13px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+/* Spec sections */
+.spec-block {
+    border-left: 3px solid #2a2a3a;
+    padding-left: 16px;
+    margin: 12px 0 20px;
+}
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+    <h2>WowBot Docs</h2>
+    <ul>
+        <li class="section"><a href="#overview">1. Оверлей -- обзор</a></li>
+        <li class="section"><a href="#rotation-section">2. Раздел Ротация</a></li>
+        <li class="sub"><a href="#spec-warrior">Воин</a></li>
+        <li class="sub"><a href="#spec-paladin">Паладин</a></li>
+        <li class="sub"><a href="#spec-hunter">Охотник</a></li>
+        <li class="sub"><a href="#spec-rogue">Разбойник</a></li>
+        <li class="sub"><a href="#spec-priest">Жрец</a></li>
+        <li class="sub"><a href="#spec-dk">Рыцарь смерти</a></li>
+        <li class="sub"><a href="#spec-shaman">Шаман</a></li>
+        <li class="sub"><a href="#spec-mage">Маг</a></li>
+        <li class="sub"><a href="#spec-warlock">Чернокнижник</a></li>
+        <li class="sub"><a href="#spec-druid">Друид</a></li>
+        <li class="section"><a href="#bursts">3. Раздел Бурсты</a></li>
+        <li class="section"><a href="#aoe">4. Раздел AoE</a></li>
+        <li class="section"><a href="#buffs">5. Раздел Баффы</a></li>
+        <li class="sub"><a href="#buffs-radio">Радио-группы</a></li>
+        <li class="sub"><a href="#buffs-classbuffs">Баффы по классам</a></li>
+        <li class="sub"><a href="#buffs-script">Генерация Lua</a></li>
+        <li class="section"><a href="#follow">6. Раздел Следование</a></li>
+        <li class="section"><a href="#rotation-engine">7. Ротации -- как работает</a></li>
+        <li class="sub"><a href="#helpers">Lua хелперы</a></li>
+        <li class="sub"><a href="#tick-flow">Цикл BotEngine</a></li>
+        <li class="section"><a href="#class-rotations">8. Ротации -- каждый класс</a></li>
+        <li class="sub"><a href="#rot-warrior">Воин</a></li>
+        <li class="sub"><a href="#rot-paladin">Паладин</a></li>
+        <li class="sub"><a href="#rot-hunter">Охотник</a></li>
+        <li class="sub"><a href="#rot-rogue">Разбойник</a></li>
+        <li class="sub"><a href="#rot-priest">Жрец</a></li>
+        <li class="sub"><a href="#rot-dk">Рыцарь смерти</a></li>
+        <li class="sub"><a href="#rot-shaman">Шаман</a></li>
+        <li class="sub"><a href="#rot-mage">Маг</a></li>
+        <li class="sub"><a href="#rot-warlock">Чернокнижник</a></li>
+        <li class="sub"><a href="#rot-druid">Друид</a></li>
+        <li class="section"><a href="#breakcc">9. Break-CC</a></li>
+        <li class="section"><a href="#maintank">10. MainTank определение</a></li>
+        <li class="section"><a href="#settings">11. Настройки</a></li>
+    </ul>
+</nav>
+
+<main id="content">
+
+<!-- ============================================================ -->
+<h1 id="overview">1. Оверлей -- обзор
+<small>OverlayWindow.xaml.cs -- прозрачный оверлей поверх WoW</small>
+</h1>
+
+<div class="card">
+<div class="card-header">Что это</div>
+<p>Прозрачное WPF-окно, которое отображается поверх клиента WoW 3.3.5a. Главная особенность: окно имеет стиль <code>WS_EX_NOACTIVATE</code> (константа 0x08000000), что означает, что клики по оверлею <strong>не забирают фокус</strong> у WoW. Игрок может нажимать кнопки в оверлее, не теряя управление персонажем.</p>
+</div>
+
+<h3>Визуальная структура</h3>
+<p>Оверлей состоит из трёх слоёв:</p>
+<table>
+<tr><th>Элемент</th><th>Назначение</th><th>Поведение</th></tr>
+<tr><td><code>MainButton</code></td><td>Основная кнопка (круглая)</td><td>Клик = открыть/закрыть меню. Drag = перетащить окно. Позиция сохраняется в настройках.</td></tr>
+<tr><td><code>MenuPanel</code></td><td>Главное меню (вертикальный список)</td><td>Пункты: Rotation, AoE, Buffs, Follow, Target, Hivemind, Reload, Lua</td></tr>
+<tr><td><code>SubPanel</code> / <code>SubContent</code></td><td>Подменю (контент секции)</td><td>Перестраивается динамически при выборе пункта меню</td></tr>
+</table>
+
+<h3>Пункты меню</h3>
+<table>
+<tr><th>Пункт</th><th>Метод</th><th>Описание</th></tr>
+<tr><td>Rotation</td><td><code>BuildRotationSubmenu()</code></td><td>Тоглы спеллов + бурсты + слайдеры маны</td></tr>
+<tr><td>AoE</td><td><code>BuildAoeSubmenu()</code></td><td>AoE тоглы по классу + слайдер мин. врагов</td></tr>
+<tr><td>Buffs</td><td><code>BuildBuffsSubmenu()</code></td><td>Баффы, радио-выборы (печати, ауры, тотемы...)</td></tr>
+<tr><td>Follow</td><td><code>BuildFollowSubmenu()</code></td><td>Цель следования + слайдер дистанции</td></tr>
+<tr><td>Target</td><td><code>BuildTargetSubmenu()</code></td><td>Автоповорот, автовыбор, забегание за спину, AoE уклонение</td></tr>
+<tr><td>Hivemind</td><td><code>BuildHivemindSubmenu()</code></td><td>Мультибоксинг: мастер/слейв, команды, список слейвов</td></tr>
+<tr><td>Reload</td><td><code>OnReloadScripts</code></td><td>Перечитать Lua скрипты с диска (hot-reload)</td></tr>
+<tr><td>Lua</td><td><code>LuaToggle_Click</code></td><td>Lua консоль: всплывающее окно для выполнения произвольных команд</td></tr>
+</table>
+
+<h3>Как работают тоглы</h3>
+<p>Каждый тогл -- это <code>ToggleButton</code> 34x34 пикселя с иконкой спелла. Состояние (IsChecked) собирается в таблицу <code>WB_S</code> через метод <code>GetSpellFlagsLua()</code> и передаётся в Lua-скрипт ротации перед каждым выполнением.</p>
+<pre><span class="cm">// Пример вывода GetSpellFlagsLua():</span>
+WB_S={VT=true,DP=true,SWP=true,MB=true,MF=true,SF=true,Disp=true}</pre>
+
+<!-- ============================================================ -->
+<h2 id="rotation-section">2. Раздел Ротация</h2>
+
+<p>Метод <code>BuildRotationSubmenu()</code> строит подменю ротации на основе текущего спека игрока. Спеллы берутся из словаря <code>SpecSpells</code>, бурсты -- из <code>SpecBursts</code>.</p>
+
+<h3>Алгоритм построения</h3>
+<ol>
+<li>Определить <code>specKey</code> по текущему спеку (напр. "Shadow Priest")</li>
+<li>Найти массив спеллов в <code>SpecSpells[specKey]</code></li>
+<li>Для каждого спелла создать иконку 34x34 в <code>WrapPanel</code></li>
+<li>Состояние загружается из сохранённых настроек или используется дефолт</li>
+<li>Добавить секцию бурстов из <code>SpecBursts[specKey]</code> (по дефолту OFF)</li>
+<li>Добавить специфичные для спека слайдеры (мана Dispersion, мана SF и т.д.)</li>
+<li>Для танковых спеков добавить секцию "Танкование" (AutoTaunt, DefCD, AoEThreat)</li>
+<li>Для паладинов добавить выбор правосудия (радио JoW / JoL)</li>
+</ol>
+
+<h3>Таблица спеллов по спекам</h3>
+
+<!-- WARRIOR -->
+<h4 id="spec-warrior" class="c-warrior">Воин (Warrior)</h4>
+
+<p><strong>Arms Warrior</strong></p>
+<table>
+<tr><th>Key</th><th>Иконка</th><th>Заклинание</th><th>По умолч.</th></tr>
+<tr><td>MS</td><td>ability_warrior_savageblow.jpg</td><td>Смертельный удар</td><td class="default-on">ON</td></tr>
+<tr><td>Rend</td><td>ability_gouge.jpg</td><td>Кровопускание</td><td class="default-on">ON</td></tr>
+<tr><td>OP</td><td>ability_meleedamage.jpg</td><td>Превосходство</td><td class="default-on">ON</td></tr>
+<tr><td>Execute</td><td>inv_sword_48.jpg</td><td>Казнь</td><td class="default-on">ON</td></tr>
+<tr><td>Slam</td><td>ability_warrior_decisivestrike.jpg</td><td>Мощный удар</td><td class="default-on">ON</td></tr>
+<tr><td>Cleave</td><td>ability_warrior_cleave.jpg</td><td>Рассекающий удар</td><td class="default-on">ON</td></tr>
+</table>
+
+<p><strong>Fury Warrior</strong></p>
+<table>
+<tr><th>Key</th><th>Иконка</th><th>Заклинание</th><th>По умолч.</th></tr>
+<tr><td>BT</td><td>spell_nature_bloodlust.jpg</td><td>Кровожадность</td><td class="default-on">ON</td></tr>
+<tr><td>WW</td><td>ability_whirlwind.jpg</td><td>Вихрь</td><td class="default-on">ON</td></tr>
+<tr><td>Execute</td><td>inv_sword_48.jpg</td><td>Казнь</td><td class="default-on">ON</td></tr>
+<tr><td>Slam</td><td>ability_warrior_decisivestrike.jpg</td><td>Мощный удар</td><td class="default-on">ON</td></tr>
+</table>
+
+<p><strong>Prot Warrior</strong></p>
+<table>
+<tr><th>Key</th><th>Иконка</th><th>Заклинание</th><th>По умолч.</th></tr>
+<tr><td>HS</td><td>ability_rogue_ambush.jpg</td><td>Удар героя</td><td class="default-on">ON</td></tr>
+<tr><td>BR</td><td>spell_nature_ancestralguardian.jpg</td><td>Кровавая ярость</td><td class="default-off">OFF</td></tr>
+<tr><td>SW</td><td>ability_warrior_shieldwall.jpg</td><td>Глухая оборона</td><td class="default-on">ON</td></tr>
+<tr><td>LS</td><td>spell_holy_ashestoashes.jpg</td><td>Ни шагу назад</td><td class="default-on">ON</td></tr>
+<tr><td>SB</td><td>ability_defend.jpg</td><td>Блок щитом</td><td class="default-on">ON</td></tr>
+<tr><td>ShieldSlam</td><td>inv_shield_05.jpg</td><td>Мощный удар щитом</td><td class="default-on">ON</td></tr>
+<tr><td>Revenge</td><td>ability_warrior_revenge.jpg</td><td>Реванш</td><td class="default-on">ON</td></tr>
+<tr><td>TC</td><td>spell_nature_thunderclap.jpg</td><td>Удар грома</td><td class="default-on">ON</td></tr>
+<tr><td>ShockW</td><td>ability_warrior_shockwave.jpg</td><td>Ударная волна</td><td class="default-on">ON</td></tr>
+<tr><td>Devastate</td><td>inv_sword_11.jpg</td><td>Сокрушение</td><td class="default-on">ON</td></tr>
+</table>
+
+<!-- PALADIN -->
+<h4 id="spec-paladin" class="c-paladin">Паладин (Paladin)</h4>
+
+<p><strong>Ret Paladin</strong></p>
+<table>
+<tr><th>Key</th><th>Заклинание</th><th>По умолч.</th></tr>
+<tr><td>Judge</td><td>Правосудие</td><td class="default-on">ON</td></tr>
+<tr><td>CS</td><td>Удар воина Света</td><td class="default-on">ON</td></tr>
+<tr><td>DS</td><td>Божественная буря</td><td class="default-on">ON</td></tr>
+<tr><td>Cons</td><td>Освящение</td><td class="default-on">ON</td></tr>
+<tr><td>Exo</td><td>Экзорцизм</td><td class="default-on">ON</td></tr>
+<tr><td>HoW</td><td>Молот гнева</td><td class="default-on">ON</td></tr>
+<tr><td>SS</td><td>Священный щит</td><td class="default-on">ON</td></tr>
+</table>
+
+<p><strong>Prot Paladin</strong></p>
+<table>
+<tr><th>Key</th><th>Заклинание</th><th>По умолч.</th></tr>
+<tr><td>Plea</td><td>Святая клятва</td><td class="default-on">ON</td></tr>
+<tr><td>HoR</td><td>Молот праведника</td><td class="default-on">ON</td></tr>
+<tr><td>ShoR</td><td>Щит праведности</td><td class="default-on">ON</td></tr>
+<tr><td>HolyShield</td><td>Щит небес</td><td class="default-on">ON</td></tr>
+<tr><td>Judge</td><td>Правосудие</td><td class="default-on">ON</td></tr>
+<tr><td>Cons</td><td>Освящение</td><td class="default-on">ON</td></tr>
+<tr><td>HW</td><td>Гнев небес</td><td class="default-on">ON</td></tr>
+<tr><td>AS</td><td>Щит мстителя</td><td class="default-on">ON</td></tr>
+<tr><td>SS</td><td>Священный щит</td><td class="default-off">OFF</td></tr>
+</table>
+
+<p><strong>Holy Paladin</strong></p>
+<table>
+<tr><th>Key</th><th>Заклинание</th><th>По умолч.</th></tr>
+<tr><td>HL</td><td>Свет небес</td><td class="default-on">ON</td></tr>
+<tr><td>FL</td><td>Вспышка Света</td><td class="default-off">OFF</td></tr>
+<tr><td>HS</td><td>Шок небес</td><td class="default-on">ON</td></tr>
+<tr><td>Beacon</td><td>Частица Света</td><td class="default-on">ON</td></tr>
+<tr><td>SS</td><td>Священный щит</td><td class="default-on">ON</td></tr>
+<tr><td>Plea</td><td>Святая клятва</td><td class="default-on">ON</td></tr>
+<tr><td>DF</td><td>Божественное одобрение</td><td class="default-on">ON</td></tr>
+<tr><td>LoH</td><td>Возложение рук</td><td class="default-off">OFF</td></tr>
+<tr><td>Dispel</td><td>Автодиспел</td><td class="default-on">ON</td></tr>
+<tr><td>AutoRes</td><td>Авторес</td><td class="default-on">ON</td></tr>
+</table>
+
+<!-- HUNTER -->
+<h4 id="spec-hunter" class="c-hunter">Охотник (Hunter)</h4>
+
+<p><strong>BM Hunter</strong>: Track, Mark, Kill, Kill2, Serpent, Aimed, Arcane, Steady (все ON)</p>
+<p><strong>MM Hunter</strong>: Track, Dragonhawk, Mark, Kill, Kill2, Chimera, Serpent, Aimed, Readiness, Silence, Steady (все ON)</p>
+<p><strong>Survival Hunter</strong>: Track, Mark, Kill, Explosive, Black, Serpent, Aimed, Arcane, Steady (все ON)</p>
+
+<!-- ROGUE -->
+<h4 id="spec-rogue" class="c-rogue">Разбойник (Rogue)</h4>
+<p><strong>Assassination</strong>: Envenom, Rupture, Mutilate (все ON)</p>
+<p><strong>Combat</strong>: SnD, Rupture, Evis, SS (все ON)</p>
+<p><strong>Subtlety</strong>: Hemo, Rupture, Evis, BS (все ON)</p>
+
+<!-- PRIEST -->
+<h4 id="spec-priest" class="c-priest">Жрец (Priest)</h4>
+<p><strong>Shadow</strong>: VT, DP, SWP, MB, MF, SF, Disp (все ON) + слайдеры маны</p>
+<p><strong>Disc</strong>: PW, Penance, PS, Flash, PoM, Renew, Dispel, AutoRes (все ON)</p>
+<p><strong>Holy</strong>: CoH, Guardian, PoM, Renew, Flash, GHeal, Binding, Dispel, AutoRes (все ON)</p>
+
+<!-- DK -->
+<h4 id="spec-dk" class="c-dk">Рыцарь смерти (Death Knight)</h4>
+<p><strong>Blood</strong>: IT, PS, Pest, DS, HS, BS, RS (все ON)</p>
+<p><strong>Frost</strong>: IT, PS, Pest, HB, Oblit, BS, FS, BT, ERW, HoW (все ON)</p>
+<p><strong>Unholy</strong>: IT, PS, SS, BS, BT, DC, UB, ERW (все ON)</p>
+
+<!-- SHAMAN -->
+<h4 id="spec-shaman" class="c-shaman">Шаман (Shaman)</h4>
+<p><strong>Elemental</strong>: CallSpirits, FS, LvB, TnL, CL, LB (все ON)</p>
+<p><strong>Enhancement</strong>: CallSpirits, Searing, LS, SS, FS, ES, LB_MW, FN, LL (все ON)</p>
+<p><strong>Resto</strong>: CallSpirits, RT, NS, CH, LHW, HW, ES, Dispel, AutoRes (все ON)</p>
+
+<!-- MAGE -->
+<h4 id="spec-mage" class="c-mage">Маг (Mage)</h4>
+<p><strong>Arcane</strong>: Mirror, Barrage, Evoc, AB (все ON)</p>
+<p><strong>Fire</strong>: Mirror, Combust, LB, Pyro, Scorch, FB (все ON)</p>
+<p><strong>Frost</strong>: Mirror, DF, IL, FFB, FBolt (все ON)</p>
+
+<!-- WARLOCK -->
+<h4 id="spec-warlock" class="c-warlock">Чернокнижник (Warlock)</h4>
+<p><strong>Affliction</strong>: Haunt, UA, Corruption, Immolate, DF, ShadowBolt, LifeTap (ON), LTGlyph (<span class="default-off">OFF</span>)</p>
+<p><strong>Demonology</strong>: DemonEmpower, ImmoAura, Corruption, Immolate, SoulFire, Incinerate, ShadowBolt, LifeTap (ON), LTGlyph (<span class="default-off">OFF</span>)</p>
+<p><strong>Destruction</strong>: Chaos, Conflag, Immolate, Corruption, Incinerate, LifeTap (ON), LTGlyph (<span class="default-off">OFF</span>)</p>
+
+<!-- DRUID -->
+<h4 id="spec-druid" class="c-druid">Друид (Druid)</h4>
+<p><strong>Balance</strong>: Rebirth, Moonkin, FF, IS, MF_d, Starfire, Wrath, Innervate (все ON)</p>
+<p><strong>Feral</strong>: Rebirth, Roar, FF_cat, Mangle, Rake, Rip, FB, Shred (Cat) + FF_bear, Mangle_b, Lacerate, Swipe, Maul (Bear) -- все ON</p>
+<p><strong>Resto</strong>: Rebirth, ToL, WG, NS, SM, Rejuv, LB, Regrowth, Nourish, Dispel, AutoRes (все ON)</p>
+
+<!-- ============================================================ -->
+<h2 id="bursts">3. Раздел Бурсты</h2>
+
+<p>Бурсты отображаются отдельной секцией "Бурсты" в подменю ротации. <strong>Все бурсты по умолчанию OFF</strong> -- игрок включает нужные вручную. Хранятся в словаре <code>SpecBursts</code>.</p>
+
+<table>
+<tr><th>Спек</th><th>Key</th><th>Заклинание</th></tr>
+<tr><td class="c-warrior">Arms Warrior</td><td>Reck</td><td>Безрассудство</td></tr>
+<tr><td class="c-warrior">Fury Warrior</td><td>Reck, BR</td><td>Безрассудство, Кровавая ярость</td></tr>
+<tr><td class="c-paladin">Ret Paladin</td><td>AW</td><td>Гнев карателя</td></tr>
+<tr><td class="c-paladin">Prot Paladin</td><td>AW</td><td>Гнев карателя</td></tr>
+<tr><td class="c-druid">Feral Druid</td><td>Berserk, TF</td><td>Берсерк, Тигриное неистовство</td></tr>
+<tr><td class="c-druid">Balance Druid</td><td>Treants, Starfall</td><td>Сила Природы, Звездопад</td></tr>
+<tr><td class="c-warlock">Demonology Lock</td><td>Meta</td><td>Метаморфоза</td></tr>
+<tr><td class="c-hunter">BM Hunter</td><td>BW, Bestial</td><td>Повелитель зверей, Звериный гнев</td></tr>
+<tr><td class="c-hunter">MM Hunter</td><td>Rapid, CotW</td><td>Быстрая стрельба, Зов дикой природы</td></tr>
+<tr><td class="c-mage">Arcane Mage</td><td>AP</td><td>Мощь тайной магии</td></tr>
+<tr><td class="c-shaman">Enhancement Shaman</td><td>Hero, FET, SR, Wolves</td><td>Героизм, Тотем элементаля огня, Ярость шамана (<span class="default-on">ON</span>), Дух дикого волка</td></tr>
+<tr><td class="c-shaman">Elemental Shaman</td><td>Hero, FET</td><td>Героизм, Тотем элементаля огня</td></tr>
+<tr><td class="c-shaman">Resto Shaman</td><td>Hero</td><td>Героизм</td></tr>
+<tr><td class="c-rogue">Assassination Rogue</td><td>HFB</td><td>Жажда убийства</td></tr>
+<tr><td class="c-rogue">Combat Rogue</td><td>KS</td><td>Череда убийств</td></tr>
+<tr><td class="c-dk">Blood DK</td><td>VB</td><td>Кровь вампира</td></tr>
+<tr><td class="c-dk">Frost DK</td><td>UA</td><td>Несокрушимая броня</td></tr>
+<tr><td class="c-dk">Unholy DK</td><td>Gargoyle</td><td>Призыв горгульи</td></tr>
+</table>
+
+<p>Дополнительно: если на персонаже обнаружены перчатки с use-эффектом (<code>_hasGlovesUse</code>), к бурстам добавляется тогл "Перчатки (use)" с ключом <code>Gloves</code>, по дефолту OFF.</p>
+
+<!-- ============================================================ -->
+<h2 id="aoe">4. Раздел AoE</h2>
+
+<p>Метод <code>BuildAoeSubmenu()</code>. Глобальный слайдер <code>WB_AEMIN</code> (мин. врагов для AoE, диапазон 2-10, дефолт 3) доступен для всех классов. Количество врагов подсчитывается в C# (<code>CountNearbyCombatEnemies</code>) и передаётся в Lua как <code>WB_NCE</code>.</p>
+
+<h3>AoE по классам</h3>
+<table>
+<tr><th>Спек</th><th>Опции</th><th>Механика</th></tr>
+<tr><td>Shadow Priest</td><td>MultiDot VT (ON), Mind Sear (ON), слайдеры макс целей</td><td>C# собирает имена мобов, Lua навешивает VT по очереди. Mind Sear по порогу.</td></tr>
+<tr><td>Balance Druid</td><td>Hurricane (ON)</td><td>Ground AoE: C# кастует "Гроза" + TerrainClick на позицию таргета</td></tr>
+<tr><td>Ret/Prot Paladin</td><td>Печать повиновения при 2+ врагах</td><td>AoE свап печати: SoV &lt;-&gt; SoC автоматически</td></tr>
+<tr><td>Warlock (все спеки)</td><td>Seed of Corruption (ON)</td><td>Семя порчи спам при WB_NCE >= WB_AEMIN</td></tr>
+<tr><td>Hunter (все спеки)</td><td>Volley (ON), MultiShot (ON)</td><td>Volley = ground AoE через TerrainClick. MultiShot при стоянке.</td></tr>
+<tr><td>Feral Druid</td><td>SwipeCat (ON)</td><td>Размах в форме кота при WB_NCE >= WB_AEMIN</td></tr>
+<tr><td>Enhancement Shaman</td><td>CL (ON)</td><td>Цепная молния при Водовороте 5 стаков + AoE</td></tr>
+<tr><td>DK (все спеки)</td><td>Pest (ON), DnD (ON)</td><td>Мор для разноса болезней. Смерть и разложение.</td></tr>
+</table>
+
+<h3>Ground AoE (TerrainClick)</h3>
+<p>Для заклинаний с наземным целеуказанием (Гроза, Залп) используется механизм: C# кастует заклинание через <code>ExecuteLua</code>, ждёт 100мс, затем вызывает <code>CastTerrainClick(x, y, z)</code> на координаты таргета.</p>
+
+<!-- ============================================================ -->
+<h2 id="buffs">5. Раздел Баффы</h2>
+
+<h3 id="buffs-radio">Радио-группы</h3>
+<p>Радио-группы -- это взаимоисключающие выборы: при включении одного варианта остальные сбрасываются. Реализованы через обработчики <code>Checked</code>/<code>Unchecked</code> на <code>ToggleButton</code>.</p>
+
+<table>
+<tr><th>Группа</th><th>Класс</th><th>Варианты</th><th>Дефолт</th></tr>
+<tr><td>Печать (Seal)</td><td>Paladin Ret/Prot</td><td>SoV (Мщения), SoC (Повиновения)</td><td>SoV</td></tr>
+<tr><td>Печать (Seal)</td><td>Paladin Holy</td><td>SoW (Мудрости), SoL (Света)</td><td>SoW</td></tr>
+<tr><td>Правосудие</td><td>Paladin (все)</td><td>JoW (Мудрости), JoL (Света)</td><td>JoW</td></tr>
+<tr><td>Благословение</td><td>Paladin</td><td>BoM (Могущества), BoK (Королей), BoW (Мудрости), BoS (Неприкосновенности*)</td><td>BoM (прот: BoS)</td></tr>
+<tr><td>Аура</td><td>Paladin</td><td>AuRet, AuDev, AuCru, AuFrost, AuFire, AuShadow, AuConc (7 шт)</td><td>прот: AuDev, хпал: AuConc, рет: AuRet</td></tr>
+<tr><td>Крик</td><td>Warrior</td><td>Battle (Боевой), Commanding (Командирский)</td><td>прот: Commanding, иначе: Battle</td></tr>
+<tr><td>Стойка</td><td>Warrior</td><td>Battle, Defensive, Berserker</td><td>прот: Defensive, фури: Berserker, армс: Battle</td></tr>
+<tr><td>Власть</td><td>Death Knight</td><td>Blood, Frost, Unholy</td><td>По спеку</td></tr>
+<tr><td>Форма</td><td>Druid Feral</td><td>Cat (Кошка), Bear (Медведь)</td><td>Cat</td></tr>
+<tr><td>Проклятие</td><td>Warlock</td><td>CoA (Агонии), CoD (Рока), CoE (Стихий)</td><td>CoA</td></tr>
+<tr><td>Пет</td><td>Warlock</td><td>Felguard, Felhunter, Imp, Voidwalker, Succubus</td><td>(нет)</td></tr>
+<tr><td>Оружие МН</td><td>Shaman</td><td>WF (Неистовство ветра), FT (Язык пламени), EL (Жизнь земли)</td><td>энха: WF, иначе: FT</td></tr>
+<tr><td>Оружие ОН</td><td>Shaman</td><td>WF, FT, EL</td><td>энха: FT</td></tr>
+<tr><td>Тотем Земли</td><td>Shaman</td><td>Stoneskin, SoE (Сила земли), Tremor</td><td>SoE</td></tr>
+<tr><td>Тотем Огня</td><td>Shaman</td><td>Flametongue, FrostRes</td><td>Flametongue</td></tr>
+<tr><td>Тотем Воды</td><td>Shaman</td><td>ManaSpring, HealStream, Cleansing, FireRes</td><td>ManaSpring</td></tr>
+<tr><td>Тотем Воздуха</td><td>Shaman</td><td>WrathOfAir, Windfury, NatureRes</td><td>энха: Windfury, иначе: WrathOfAir</td></tr>
+</table>
+<p>* BoS (Неприкосновенность) доступно только для Prot Paladin.</p>
+
+<h3 id="buffs-classbuffs">ClassBuffs -- баффы по классам</h3>
+
+<table>
+<tr><th>Класс</th><th>Бафф / Ключ</th><th>По умолч.</th></tr>
+<tr><td class="c-priest">Priest</td><td>Молитва стойкости, Молитва духа, Молитва защиты от темной магии, Объятия вампира, Внутренний огонь</td><td>все ON</td></tr>
+<tr><td class="c-priest">Priest</td><td>Защита от страха</td><td class="default-off">OFF</td></tr>
+<tr><td class="c-druid">Druid</td><td>Дар дикой природы</td><td class="default-on">ON</td></tr>
+<tr><td class="c-druid">Druid</td><td>Шипы</td><td class="default-off">OFF</td></tr>
+<tr><td class="c-mage">Mage</td><td>Чародейская гениальность, Раскаленный доспех</td><td class="default-on">ON</td></tr>
+<tr><td class="c-mage">Mage</td><td>Ледяной доспех, Магический доспех</td><td class="default-off">OFF</td></tr>
+<tr><td class="c-warlock">Warlock</td><td>Доспех Скверны</td><td class="default-on">ON</td></tr>
+<tr><td class="c-warlock">Warlock</td><td>WB_SPELLSTONE (Камень чар)</td><td class="default-on">ON</td></tr>
+<tr><td class="c-shaman">Shaman</td><td>Щит молний</td><td class="default-on">ON</td></tr>
+<tr><td class="c-shaman">Shaman</td><td>Водный щит</td><td class="default-off">OFF</td></tr>
+<tr><td class="c-hunter">Hunter</td><td>Дух дракондора, WB_HUNTER_PET (авто-призыв пета)</td><td class="default-on">ON</td></tr>
+<tr><td class="c-hunter">Hunter</td><td>Дух гадюки, Дух ястреба</td><td class="default-off">OFF</td></tr>
+<tr><td class="c-paladin">Paladin</td><td>Праведное неистовство (танк)</td><td class="default-on">ON</td></tr>
+<tr><td class="c-dk">Death Knight</td><td>WB_DK_PET (авто-призыв гуля), WB_BONE_SHIELD (Костяной щит), Зимний горн</td><td>все ON</td></tr>
+<tr><td class="c-rogue">Rogue</td><td>(пусто)</td><td>--</td></tr>
+</table>
+
+<div class="note">
+Шаманские щиты (Щит молний / Водный щит) -- <strong>радио</strong> внутри баффов: включение одного выключает другой.
+</div>
+
+<h3 id="buffs-script">Генерация Lua скрипта (BuildBuffScript)</h3>
+
+<p>Метод <code>BuildBuffScript()</code> в BotEngine генерирует однострочный Lua-скрипт (многострочный триггерит taint WeakAuras). Порядок проверок:</p>
+<ol>
+<li><strong>Аура паладина</strong> -- <code>HasB('player', 'Аура ...')</code></li>
+<li><strong>Печать паладина</strong> -- с AoE свапом (SoV &lt;-&gt; SoC при 2+ врагах)</li>
+<li><strong>Благословение паладина</strong> -- на себя, затем на пати/рейд. Великое с реагентом "Знак королей"</li>
+<li><strong>Крик воина</strong> -- <code>HasB('player', 'Боевой крик')</code></li>
+<li><strong>Стойка воина</strong> -- <code>GetShapeshiftForm()</code></li>
+<li><strong>Власть ДК</strong> -- <code>GetShapeshiftForm()</code></li>
+<li><strong>Форма друида</strong> -- <code>GetShapeshiftForm()</code></li>
+<li><strong>Тотемы шамана</strong> -- <code>SetMultiCastSpell(slot, spellId)</code> для Зова Духов</li>
+<li><strong>Аспект охотника</strong> -- авто-переключение дракондор/гадюка по мане (вне боя: &lt;100%, в бою: &lt;30%/&gt;80%)</li>
+<li><strong>Камень чар</strong> (варлок) -- проверка чары на оружии, создание + применение</li>
+<li><strong>Пет варлока</strong> -- авто-призыв вне боя, dismiss + resummon при смене</li>
+<li><strong>Пет охотника</strong> -- авто-призыв/воскрешение пета</li>
+<li><strong>ДК: гуль + Костяной щит</strong></li>
+<li><strong>Оружие шамана</strong> (МН + ОН) -- <code>GetWeaponEnchantInfo()</code>, отдельная обработка OH через <code>PickupInventoryItem(17)</code></li>
+<li><strong>Self-баффы</strong> -- простая проверка <code>HasB('player', name)</code></li>
+<li><strong>Рейд-баффы</strong> -- проверка себя + всех в пати/рейде, с реагентами и fallback на одиночные</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="follow">6. Раздел Следование</h2>
+
+<p>Метод <code>BuildFollowSubmenu()</code> содержит:</p>
+
+<table>
+<tr><th>Элемент</th><th>Тип</th><th>Диапазон</th><th>Дефолт</th><th>Описание</th></tr>
+<tr><td>Цель следования</td><td>Button</td><td>--</td><td>--</td><td>Устанавливает текущий таргет как цель follow</td></tr>
+<tr><td>Дистанция</td><td>Slider</td><td>0-20</td><td>8</td><td>Расстояние следования за целью (ярды)</td></tr>
+</table>
+
+<p><code>BuildTargetSubmenu()</code> содержит дополнительные настройки:</p>
+<table>
+<tr><th>Элемент</th><th>Тип</th><th>Дефолт</th><th>Описание</th></tr>
+<tr><td>Автоповорот к таргету</td><td>CheckBox</td><td>ON</td><td>Автоматически поворачиваться лицом к цели</td></tr>
+<tr><td>Автовыбор таргета</td><td>CheckBox</td><td>ON</td><td>Автоматически выбирать ближайшую враждебную цель</td></tr>
+<tr><td>Забегание за спину</td><td>CheckBox</td><td>ON для мили DPS</td><td>MoveBehind: мили ДПС забегают за спину таргета</td></tr>
+<tr><td>Уклонение от AoE (лужи)</td><td>CheckBox</td><td>ON</td><td>Автоматический отбег из DynObject'ов (AoE лужи)</td></tr>
+<tr><td>Макс. дальность</td><td>Slider</td><td>30 (10-45)</td><td>Максимальная дистанция автовыбора таргета</td></tr>
+</table>
+
+<div class="note">MoveBehind по дефолту ON для: Rogue, Arms/Fury Warrior, Ret Paladin, Feral Druid, Enhancement Shaman, Frost/Unholy DK. OFF для танков, кастеров, хилеров.</div>
+
+<!-- ============================================================ -->
+<h2 id="rotation-engine">7. Ротации -- как работает</h2>
+
+<h3 id="tick-flow">Цикл BotEngine (Tick)</h3>
+
+<p>BotEngine содержит таймер с интервалом ~150мс. Каждый тик:</p>
+
+<div class="flow">
+    <div class="flow-step">AntiAFK (каждые ~30с)</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">ObjectManager.Update()</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">AoE Avoidance (DynObjects)</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">Buff check (каждый N-й тик)</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">Follow movement (CTM)</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">Smart Taunt (ObjectManager)</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">Combat Positioning</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">Ground AoE</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">FaceTarget</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">ExecuteLua(rotation)</div>
+</div>
+
+<h3>Сборка скрипта ротации</h3>
+<p>Перед выполнением ротации собирается строка Lua-кода:</p>
+<pre>
+<span class="cm">// Формула:</span>
+string script = enemyCountLua + SpellFlagsLua + GetRotationScript(player);
+
+<span class="cm">// enemyCountLua:</span>
+WB_NCE=5 WB_AEMIN=3    <span class="cm">-- количество врагов + порог AoE</span>
+
+<span class="cm">// SpellFlagsLua (из OverlayWindow.GetSpellFlagsLua()):</span>
+WB_S={VT=true,DP=true,...,CoA=true,SoV=true,...}
+
+<span class="cm">// GetRotationScript -- либо fullScript, либо AoE multidot скрипт</span>
+</pre>
+
+<h3 id="helpers">Lua хелперы (AllRotations.Helpers)</h3>
+
+<p>Определяются один раз в начале каждого скрипта ротации:</p>
+
+<table>
+<tr><th>Хелпер</th><th>Сигнатура</th><th>Описание</th></tr>
+<tr><td><code>SN(id)</code></td><td>SN(spellId) &rarr; string</td><td>Кеширующий GetSpellInfo(id). Возвращает локализованное название спелла.</td></tr>
+<tr><td><code>Cast(id)</code></td><td>Cast(spellId)</td><td>CastSpellByName(SN(id)) -- каст через spell ID</td></tr>
+<tr><td><code>IR(id)</code></td><td>IR(spellId) &rarr; bool</td><td>IsReady: проверка КД спелла (cooldown == 0)</td></tr>
+<tr><td><code>HB(id)</code></td><td>HB(spellId) &rarr; bool</td><td>HasBuff: есть ли бафф на игроке (по имени из SN)</td></tr>
+<tr><td><code>HD(u,id)</code></td><td>HD(unit, spellId) &rarr; bool</td><td>HasDebuff: есть ли дебафф на юните (по имени из SN)</td></tr>
+<tr><td><code>NR(u,id,cid)</code></td><td>NR(unit,spellId,castId) &rarr; bool</td><td>NeedRefresh: true если дебафф отсутствует или скоро кончится (precast refresh window)</td></tr>
+<tr><td><code>BS(id)</code></td><td>BS(spellId) &rarr; number</td><td>BuffStacks: количество стаков бафа по spell ID</td></tr>
+<tr><td><code>IU(id)</code></td><td>IU(spellId) &rarr; bool</td><td>IsUsable: спелл доступен + не на КД</td></tr>
+<tr><td><code>MP()</code></td><td>MP() &rarr; number</td><td>Мана игрока (0..1)</td></tr>
+<tr><td><code>THP()</code></td><td>THP() &rarr; number</td><td>HP таргета (0..1)</td></tr>
+<tr><td><code>PHP()</code></td><td>PHP() &rarr; number</td><td>HP игрока (0..1)</td></tr>
+<tr><td><code>CP()</code></td><td>CP() &rarr; number</td><td>Combo Points</td></tr>
+<tr><td><code>CDLeft(name)</code></td><td>CDLeft(spellName) &rarr; sec</td><td>Оставшееся время КД</td></tr>
+<tr><td><code>CastOn(u,id)</code></td><td>CastOn(unit, spellId)</td><td>RunMacroText('/cast [@unit] spell') -- каст на конкретного юнита</td></tr>
+<tr><td><code>TryTaunt(id)</code></td><td>TryTaunt(spellId) &rarr; bool</td><td>Автотаунт с логикой МТ/ОТ (см. раздел 10)</td></tr>
+<tr><td><code>TryDefCD(...)</code></td><td>TryDefCD(id,check,...) &rarr; bool</td><td>Каскадные деф. КД по порогу HP (WB_S.DefHP)</td></tr>
+<tr><td><code>TryRes(id)</code></td><td>TryRes(spellId) &rarr; bool</td><td>Авторес мёртвых в пати/рейде (с 60с кулдауном на GUID)</td></tr>
+<tr><td><code>IsTankUnit(u)</code></td><td>IsTankUnit(unit) &rarr; bool</td><td>Определяет танка по бафам: Frost Presence, Righteous Fury, Bear Form</td></tr>
+</table>
+
+<h3>Обёртка скриптов</h3>
+<pre>
+<span class="cm">-- DPS скрипт оборачивается в:</span>
+<span class="kw">local function</span> <span class="fn">WB_Run</span>()
+    <span class="cm">-- Helpers (SN, Cast, IR, HB, HD, NR, BS, MP, THP, PHP, CP...)</span>
+    <span class="cm">-- MainTank определение (WB_MT)</span>
+    <span class="cm">-- TryTaunt, TryDefCD, TryRes...</span>
+    <span class="cm">-- PreChecksDPS:</span>
+    <span class="kw">if</span> IsMounted() <span class="kw">then return end</span>
+    <span class="kw">if</span> UnitIsDeadOrGhost(<span class="str">'player'</span>) <span class="kw">then return end</span>
+    <span class="cm">-- Break-CC проверка</span>
+    <span class="kw">if</span> UnitCastingInfo / UnitChannelInfo <span class="kw">then return end</span>
+    <span class="kw">if</span> <span class="kw">not</span> UnitAffectingCombat(<span class="str">'target'</span>) <span class="kw">then return end</span>
+    <span class="cm">-- ... проверки таргета ...</span>
+    RunMacroText(<span class="str">'/startattack'</span>) <span class="cm">-- каждую секунду</span>
+    <span class="cm">-- РОТАЦИЯ КЛАССА</span>
+<span class="kw">end</span>
+<span class="kw">local</span> ok,err=<span class="fn">pcall</span>(WB_Run)
+<span class="kw">if not</span> ok <span class="kw">then</span> WB_ERR=err <span class="fn">print</span>(<span class="str">'WB_ERR: '</span>..tostring(err)) <span class="kw">end</span>
+</pre>
+
+<!-- ============================================================ -->
+<h2 id="class-rotations">8. Ротации -- каждый класс</h2>
+
+<p>Все ротации определяют спек через <code>GetTalentTabInfo(1/2/3)</code> -- вкладка с наибольшим числом талантов определяет активный спек.</p>
+
+<!-- WARRIOR -->
+<h3 id="rot-warrior" class="c-warrior">Воин (Warrior)</h3>
+
+<div class="spec-block">
+<h4>Arms (t1 >= t2 и t1 >= t3)</h4>
+<span class="tag tag-dps">DPS</span>
+<ol>
+<li>Безрассудство <span class="spell-id">(1719)</span> -- бурст</li>
+<li>Казнь <span class="spell-id">(5308)</span> при HP таргета &lt; 20%</li>
+<li>Кровопускание <span class="spell-id">(772)</span> если нет дебаффа</li>
+<li>Смертельный удар <span class="spell-id">(12294)</span></li>
+<li>Превосходство <span class="spell-id">(7384)</span></li>
+<li>Мощный удар <span class="spell-id">(1464)</span> при проке Bloodsurge <span class="spell-id">(46916)</span></li>
+<li>Рассекающий удар <span class="spell-id">(845)</span></li>
+<li>Героический удар <span class="spell-id">(47449)</span> -- филлер</li>
+</ol>
+</div>
+
+<div class="spec-block">
+<h4>Fury (t2 >= t1 и t2 >= t3)</h4>
+<span class="tag tag-dps">DPS</span>
+<ol>
+<li>Безрассудство <span class="spell-id">(1719)</span></li>
+<li>Казнь <span class="spell-id">(5308)</span> при &lt; 20%</li>
+<li>Кровожадность <span class="spell-id">(23881)</span></li>
+<li>Вихрь <span class="spell-id">(1680)</span></li>
+<li>Мощный удар <span class="spell-id">(1464)</span> при проке</li>
+<li>Героический удар <span class="spell-id">(47449)</span></li>
+</ol>
+</div>
+
+<div class="spec-block">
+<h4>Prot (t3 >= t1 и t3 >= t2)</h4>
+<span class="tag tag-tank">TANK</span>
+<ol>
+<li>TryTaunt <span class="spell-id">(355)</span></li>
+<li>TryDefCD: Shield Wall <span class="spell-id">(871)</span> &rarr; Last Stand <span class="spell-id">(12975)</span> &rarr; Shield Block <span class="spell-id">(2565)</span></li>
+<li>AoE угроза: Thunder Clap <span class="spell-id">(6343)</span> при 2+ врагах</li>
+<li>Удар героя <span class="spell-id">(47449)</span> при ярости &gt; 50</li>
+<li>Кровавая ярость <span class="spell-id">(2687)</span> при ярости &lt; 30 (если включена)</li>
+<li>Мощный удар щитом <span class="spell-id">(23922)</span></li>
+<li>Реванш <span class="spell-id">(6572)</span> (IsUsableSpell)</li>
+<li>Удар грома <span class="spell-id">(6343)</span></li>
+<li>Ударная волна <span class="spell-id">(46968)</span></li>
+<li>Сокрушение <span class="spell-id">(20243)</span></li>
+</ol>
+</div>
+
+<!-- PALADIN -->
+<h3 id="rot-paladin" class="c-paladin">Паладин (Paladin)</h3>
+
+<div class="spec-block">
+<h4>Ret (t3 >= t1 и t3 >= t2)</h4>
+<span class="tag tag-dps">DPS</span>
+<p>Правосудие выбирается через WB_S: JoL=true &rarr; <span class="spell-id">20271</span> (света), иначе <span class="spell-id">53408</span> (мудрости).</p>
+<ol>
+<li>Lay on Hands на себя при HP &lt; 20% <span class="spell-id">(633)</span></li>
+<li>Divine Shield при HP &lt; 15% <span class="spell-id">(642)</span></li>
+<li>Art of War прок + Flash of Light на себя при HP &lt; 50%</li>
+<li>Divine Plea при мане &lt; 10% <span class="spell-id">(54428)</span></li>
+<li>Avenging Wrath при 3+ стаках Holy Vengeance <span class="spell-id">(31884)</span></li>
+<li>Hammer of Wrath при HP &lt; 20% <span class="spell-id">(24275)</span></li>
+<li>Правосудие</li>
+<li>Divine Storm <span class="spell-id">(53385)</span></li>
+<li>Crusader Strike <span class="spell-id">(35395)</span></li>
+<li>Consecration при 2+ врагах <span class="spell-id">(26573)</span></li>
+<li>Exorcism с Art of War проком <span class="spell-id">(879)</span></li>
+<li>Sacred Shield <span class="spell-id">(53601)</span></li>
+</ol>
+</div>
+
+<div class="spec-block">
+<h4>Prot (t2 >= t1 и t2 >= t3)</h4>
+<span class="tag tag-tank">TANK</span>
+<ol>
+<li>TryTaunt: Hand of Reckoning <span class="spell-id">(62124)</span></li>
+<li>Righteous Defense <span class="spell-id">(31789)</span> -- на союзника &lt; 80% HP</li>
+<li>TryDefCD: Divine Protection <span class="spell-id">(498)</span> &rarr; Holy Shield <span class="spell-id">(20925)</span></li>
+<li>Hand of Protection на союзника &lt; 20% <span class="spell-id">(1022)</span></li>
+<li>AoE Consecration при 2+ врагах</li>
+<li>Divine Plea + Holy Shield + Sacred Shield -- поддержка баффов</li>
+<li>Avenger's Shield <span class="spell-id">(31935)</span> &rarr; Hammer of the Righteous <span class="spell-id">(53595)</span> &rarr; Shield of Righteousness <span class="spell-id">(53600)</span> &rarr; Judgement &rarr; Cons &rarr; Holy Wrath <span class="spell-id">(2812)</span></li>
+</ol>
+</div>
+
+<div class="spec-block">
+<h4>Holy (t1 >= t2, t1 >= t3)</h4>
+<span class="tag tag-healer">HEALER</span>
+<p>Использует систему HealerFindTarget: умный выбор цели (танки приоритетнее, predicted HP, urgency). Хилит dispel ПОСЛЕ хила.</p>
+<ol>
+<li>Авторес вне боя <span class="spell-id">(7328)</span></li>
+<li>Mana potion при &lt; 20%</li>
+<li>Правосудие в бою (для маны)</li>
+<li>Beacon of Light на фокус или первого танка <span class="spell-id">(53563)</span></li>
+<li>Sacred Shield на танков <span class="spell-id">(53601)</span></li>
+<li>Divine Plea + Avenging Wrath при мане &lt; 70%</li>
+<li>При urgency >= 2: Divine Favor + Lay on Hands</li>
+<li>Holy Shock (инстант) <span class="spell-id">(20473)</span></li>
+<li>Flash of Light при urgency <span class="spell-id">(19750)</span></li>
+<li>Holy Light (основной) <span class="spell-id">(635)</span></li>
+<li>Dispel (Magic/Disease/Poison) <span class="spell-id">(4987)</span></li>
+<li>Hand of Freedom снятие рутов <span class="spell-id">(1044)</span></li>
+<li>Hand of Salvation сброс угрозы <span class="spell-id">(1038)</span></li>
+</ol>
+</div>
+
+<!-- HUNTER -->
+<h3 id="rot-hunter" class="c-hunter">Охотник (Hunter)</h3>
+<div class="spec-block">
+<p>Общее для всех спеков: управление петом (passive вне боя, attack в бою, Mend Pet при HP &lt; 75%), автовыслеживание по типу существа, Aspect of Viper при мане &lt; 20%, Feign Death при топ-угрозе, Disengage если враг в мили, Misdirection на танка каждые 30с.</p>
+<h4>BM (t1 >= t2 и t1 >= t3)</h4>
+<p>Bestial Wrath &rarr; Beast Within &rarr; Serpent Sting &rarr; Aimed Shot &rarr; Arcane Shot &rarr; Steady Shot</p>
+<h4>MM (t2 >= t1 и t2 >= t3)</h4>
+<p>Dragonhawk Aspect &rarr; MultiShot (AoE) &rarr; Rapid Fire &rarr; Kill Command &rarr; Tranq Shot (enrage) &rarr; Serpent Sting &rarr; Chimera Shot (только с SS) &rarr; Silencing Shot &rarr; Aimed Shot &rarr; Explosive Trap (трапер) &rarr; Readiness &rarr; Steady Shot</p>
+<h4>Survival (t3 >= t1 и t3 >= t2)</h4>
+<p>Explosive Shot &rarr; Black Arrow &rarr; Serpent Sting &rarr; Aimed Shot &rarr; Arcane Shot &rarr; Steady Shot</p>
+</div>
+
+<!-- ROGUE -->
+<h3 id="rot-rogue" class="c-rogue">Разбойник (Rogue)</h3>
+<div class="spec-block">
+<h4>Assassination</h4>
+<p>Envenom (4+ CP) &rarr; Rupture (4+ CP, если нет) &rarr; Hunger for Blood &rarr; Mutilate</p>
+<h4>Combat</h4>
+<p>Slice and Dice (1+ CP) &rarr; Rupture (5 CP) &rarr; Eviscerate (5 CP) &rarr; Killing Spree &rarr; Sinister Strike</p>
+<h4>Subtlety</h4>
+<p>Eviscerate (5 CP) &rarr; Rupture (5 CP) &rarr; Hemorrhage (если нет) &rarr; Backstab</p>
+</div>
+
+<!-- PRIEST -->
+<h3 id="rot-priest" class="c-priest">Жрец (Priest)</h3>
+<div class="spec-block">
+<h4>Shadow</h4>
+<span class="tag tag-dps">DPS</span>
+<p>Shadowform &rarr; Dispersion (мана &lt; 15%) &rarr; VT (NR precast) &rarr; DP (NR) &rarr; SWP (NR) &rarr; Mind Blast &rarr; Shadowfiend (мана &lt; 50%) &rarr; Mind Flay. Защита от двойного каста: таймер 2с (WB_VT, WB_DP, WB_SWP).</p>
+<h4>Disc</h4>
+<span class="tag tag-healer">HEALER</span>
+<p>Pain Suppression (urgency>=2) &rarr; PW:Shield &rarr; Prayer of Mending &rarr; Inner Focus + Penance &rarr; Flash Heal (urgency) &rarr; Renew (needHoT) &rarr; Flash Heal &rarr; Dispel (Magic/Disease)</p>
+<h4>Holy</h4>
+<span class="tag tag-healer">HEALER</span>
+<p>Guardian Spirit (urgency>=2) &rarr; Circle of Healing (2+ раненых) &rarr; Prayer of Mending &rarr; Renew (needHoT) &rarr; Flash Heal (urgency) &rarr; Inner Focus + Greater Heal (&lt; 60%) &rarr; Flash &rarr; Binding Heal &rarr; Dispel</p>
+</div>
+
+<!-- DK -->
+<h3 id="rot-dk" class="c-dk">Рыцарь смерти (Death Knight)</h3>
+<div class="spec-block">
+<p>Общее: управление гулем (defensive в бою, passive вне боя, Claw автокаст). Болезни: Frost Fever <span class="spell-id">(55095)</span> через Icy Touch <span class="spell-id">(45477)</span>, Blood Plague <span class="spell-id">(55078)</span> через Plague Strike <span class="spell-id">(45462)</span>.</p>
+<h4>Blood (Tank)</h4>
+<span class="tag tag-tank">TANK</span>
+<p>TryTaunt: Dark Command <span class="spell-id">(56222)</span> &rarr; TryDefCD: Icebound Fort <span class="spell-id">(48792)</span> + Vampiric Blood <span class="spell-id">(55233)</span> + Bone Shield <span class="spell-id">(49222)</span> &rarr; AoE DnD при 2+ &rarr; IT/PS (болезни) &rarr; Pestilence &rarr; Death Strike &rarr; Heart Strike &rarr; Blood Strike &rarr; Rune Strike</p>
+<h4>Frost</h4>
+<span class="tag tag-dps">DPS</span>
+<p>IT/PS &rarr; Pestilence (обновление при &lt; 3с) &rarr; Unbreakable Armor &rarr; Howling Blast (Rime прок) &rarr; Obliterate &rarr; Blood Strike &rarr; Frost Strike &rarr; Blood Tap &rarr; Empower Runic Weapon &rarr; Horn of Winter</p>
+<h4>Unholy</h4>
+<span class="tag tag-dps">DPS</span>
+<p>IT/PS &rarr; Pestilence (AoE) &rarr; Death Coil (RP &gt; 80) &rarr; Gargoyle &rarr; Unholy Blight &rarr; Scourge Strike &rarr; Blood Tap &rarr; Blood Strike &rarr; DnD (AoE) &rarr; Empower Runic Weapon &rarr; Death Coil (дамп RP)</p>
+</div>
+
+<!-- SHAMAN -->
+<h3 id="rot-shaman" class="c-shaman">Шаман (Shaman)</h3>
+<div class="spec-block">
+<p>Общее: Зов Духов в бою (CallSpirits), Возвращение тотемов вне боя/когда тотемы далеко.</p>
+<h4>Elemental</h4>
+<p>Heroism (только босс) &rarr; Flame Shock &rarr; Lava Burst &rarr; Thunderstorm &rarr; Chain Lightning &rarr; Lightning Bolt</p>
+<h4>Enhancement</h4>
+<p>Lightning Shield &rarr; Maelstrom 5 (CL AoE / LB сингл) &rarr; Heroism (босс) &rarr; Fire Elemental &rarr; Shamanistic Rage &rarr; Feral Spirit &rarr; Stormstrike &rarr; Flame Shock &rarr; Earth Shock &rarr; Magma Totem (если нет Fire Elemental) &rarr; Fire Nova &rarr; Lava Lash</p>
+<h4>Resto</h4>
+<span class="tag tag-healer">HEALER</span>
+<p>Heroism (босс) &rarr; Mana Tide (&lt; 30%) &rarr; Earth Shield на танке &rarr; Riptide (проактивно) &rarr; Tidal Force + NS + HW (urgency>=2) &rarr; Riptide &rarr; Chain Heal (2+ раненых, приоритет цели с Riptide) &rarr; NS (&lt; 30%) &rarr; Lesser HW (urgency) &rarr; HW (&lt; 60%) &rarr; LHW &rarr; Dispel (Curse/Disease/Poison)</p>
+</div>
+
+<!-- MAGE -->
+<h3 id="rot-mage" class="c-mage">Маг (Mage)</h3>
+<div class="spec-block">
+<h4>Arcane</h4>
+<p>Arcane Power &rarr; Mirror Image &rarr; Barrage (Missile Barrage прок) &rarr; Evocation (мана &lt; 35%) &rarr; Arcane Blast</p>
+<h4>Fire</h4>
+<p>Mirror Image &rarr; Combustion &rarr; Living Bomb (если нет) &rarr; Pyroblast (Hot Streak прок) &rarr; Scorch (если нет) &rarr; Fireball</p>
+<h4>Frost</h4>
+<p>Mirror Image &rarr; Deep Freeze &rarr; Ice Lance (Fingers of Frost прок) &rarr; Frostfire Bolt (Brain Freeze прок) &rarr; Frostbolt</p>
+</div>
+
+<!-- WARLOCK -->
+<h3 id="rot-warlock" class="c-warlock">Чернокнижник (Warlock)</h3>
+<div class="spec-block">
+<h4>Affliction</h4>
+<p>Life Tap (мана &lt; 15%) &rarr; Haunt &rarr; UA (NR) &rarr; Corruption (NR) &rarr; Curse (CoA/CoE по выбору, NR) &rarr; Immolate (NR) &rarr; Dark Fury &rarr; LT Glyph &rarr; Life Tap (&lt; 30%) &rarr; Shadow Bolt</p>
+<h4>Demonology (NPCBots-inspired)</h4>
+<p>Выживание: прерыв Hellfire &lt; 25%, Death Coil self-heal &lt; 35%, Healthstone &lt; 60%, Shadow Ward &lt; 70%. Мана: Dark Pact, LT Glyph, Life Tap. Угроза: Soulshatter. Бурст: Meta + Demonic Empowerment + Immolation Aura (мета, мили). AoE: Seed of Corruption (при NCE >= AEMIN). Проклятие. Доты: Corruption (NR), Immolate (NR). Проки: Soul Fire (Decimation), Incinerate (Molten Core). Drain Soul (&lt; 25% HP, &lt; 10 осколков). Shadow Bolt.</p>
+<h4>Destruction</h4>
+<p>Life Tap (&lt; 15%) &rarr; Immolate &rarr; Chaos Bolt &rarr; Conflagrate &rarr; Corruption &rarr; Curse &rarr; LT Glyph &rarr; Life Tap &rarr; Incinerate</p>
+</div>
+
+<!-- DRUID -->
+<h3 id="rot-druid" class="c-druid">Друид (Druid)</h3>
+<div class="spec-block">
+<p>Общее: Rebirth (боевой рес) с защитой 120с на GUID.</p>
+<h4>Balance</h4>
+<p>Moonkin Form &rarr; Innervate (&lt; 30%) &rarr; Starfall &rarr; Treants &rarr; Faerie Fire &rarr; Insect Swarm &rarr; Moonfire &rarr; Eclipse tracking: Solar (Starfire) / Lunar (Wrath)</p>
+<h4>Feral Cat (form==3)</h4>
+<p>Tiger's Fury (энергия &lt; 40, не в Берсерке) &rarr; Berserk (TF на КД, Roar &gt; 5с) &rarr; Savage Roar (&lt; 5с) &rarr; Rip (5 CP, &lt; 4с) &rarr; Ferocious Bite (5 CP, Roar &gt; 10с и Rip &gt; 10с) &rarr; Swipe AoE &rarr; Faerie Fire (зверь) &rarr; Mangle &rarr; Rake &rarr; Shred &rarr; Claw (fallback)</p>
+<h4>Feral Bear (form==1)</h4>
+<span class="tag tag-tank">TANK</span>
+<p>TryTaunt: Growl <span class="spell-id">(6795)</span> &rarr; TryDefCD: Survival Instincts + Frenzied Regen + Barkskin &rarr; Swipe (2+ AoE) &rarr; Maul (rage &gt; 15) &rarr; Faerie Fire &rarr; Mangle &rarr; Lacerate &rarr; Swipe</p>
+<h4>Resto</h4>
+<span class="tag tag-healer">HEALER</span>
+<p>Tree of Life &rarr; Innervate (себя &lt; 20% / хилера &lt; 20%) &rarr; Проактивный Rejuv на танка &rarr; NS + Nourish (urgency>=2) &rarr; Swiftmend (urgency, требует HoT) &rarr; Wild Growth (2+ раненых) &rarr; Lifebloom на фокусе (3 стака) &rarr; Rejuv &rarr; Wild Growth &rarr; Regrowth (urgency/&lt;70%) &rarr; Nourish &rarr; Dispel (Curse/Poison). Проактивно: Rejuv на всех в рейде, Regrowth на танков без HoT.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="breakcc">9. Break-CC</h2>
+
+<p>Система автоматического снятия контроля. Проверяется перед каждой ротацией (в PreChecksDPS и PreChecksHealer). Работает только в бою.</p>
+
+<h3>Отслеживаемые CC по категориям</h3>
+
+<table>
+<tr><th>Категория</th><th>Spell ID</th><th>Способности</th></tr>
+<tr><td>Fear (страх)</td><td><span class="spell-id">8122, 10888, 10890, 10892, 48125</span></td><td>Ментальный крик (прист)</td></tr>
+<tr><td></td><td><span class="spell-id">5782, 6213, 6215</span></td><td>Страх (варлок)</td></tr>
+<tr><td></td><td><span class="spell-id">5484, 17928</span></td><td>Вой ужаса (варлок)</td></tr>
+<tr><td></td><td><span class="spell-id">6789, 17925, 17926, 27223, 47859, 47860</span></td><td>Лик смерти (варлок)</td></tr>
+<tr><td></td><td><span class="spell-id">5246</span></td><td>Устрашающий крик (воин)</td></tr>
+<tr><td>Stun (оглушение)</td><td><span class="spell-id">853, 5588, 5589, 10308</span></td><td>Молот правосудия (пал)</td></tr>
+<tr><td></td><td><span class="spell-id">408, 8643, 1833</span></td><td>Удар по почкам, Подлый трюк (рога)</td></tr>
+<tr><td></td><td><span class="spell-id">46968, 12809</span></td><td>Ударная волна, Сотрясение (воин)</td></tr>
+<tr><td></td><td><span class="spell-id">44572, 49203, 30283</span></td><td>Глубокая заморозка (маг), Леденящий холод (ДК), Неистовство Тьмы (варлок)</td></tr>
+<tr><td>Root (корни)</td><td><span class="spell-id">339, 1062, 5195, 5196, 9852, 9853, 26989, 53308</span></td><td>Гнев деревьев (друид)</td></tr>
+<tr><td></td><td><span class="spell-id">122, 865, 6131, 10230, 27088, 42917</span></td><td>Кольцо льда (маг)</td></tr>
+<tr><td></td><td><span class="spell-id">45524</span></td><td>Оковы льда (ДК)</td></tr>
+<tr><td>Polymorph</td><td><span class="spell-id">118, 12824, 12825, 28271, 28272, 61305</span></td><td>Превращение (маг)</td></tr>
+<tr><td></td><td><span class="spell-id">51514, 20066, 2094, 6770, 1776, 710</span></td><td>Порча (шаман), Покаяние (пал), Ослепление/Ошеломление/Выбивание (рога), Изгнание (варлок)</td></tr>
+<tr><td></td><td><span class="spell-id">9484, 9485, 10955</span></td><td>Оковы нежити (прист)</td></tr>
+<tr><td>Sleep</td><td><span class="spell-id">19386, 24132, 24133, 27068, 49011, 49012</span></td><td>Укус виверны (хант)</td></tr>
+<tr><td>Horror</td><td><span class="spell-id">64044</span></td><td>Психический ужас (прист)</td></tr>
+<tr><td>Boss CC</td><td><span class="spell-id">66012, 69057, 72293, 68981, 69200, 70337, 71289</span></td><td>Синдрагоса, Ребрад, ЛК, Леди Смертный Шепот</td></tr>
+</table>
+
+<h3>Порядок снятия CC</h3>
+<ol>
+<li><strong>Расовые</strong>: Human (Every Man for Himself <span class="spell-id">59752</span>), Scourge (Will of the Forsaken <span class="spell-id">7744</span>), Gnome (Escape Artist <span class="spell-id">20589</span>)</li>
+<li><strong>Классовые</strong>: Warrior (Berserker Rage <span class="spell-id">18499</span>), DK (Icebound Fortitude <span class="spell-id">48792</span>), Paladin (Hand of Freedom <span class="spell-id">1044</span>), Mage (Blink <span class="spell-id">1953</span>), Rogue (Cloak of Shadows <span class="spell-id">31224</span>), Druid (<span class="spell-id">49039</span>)</li>
+<li><strong>PvP тринкет</strong>: слоты 13 и 14 (<code>UseInventoryItem</code>)</li>
+</ol>
+
+<div class="warn">Расовые способности могут не работать на WoWCircle -- UnitRace возвращает нестандартные значения.</div>
+
+<!-- ============================================================ -->
+<h2 id="maintank">10. MainTank определение</h2>
+
+<p>Определяется через <code>GetRaidRosterInfo</code> с кешем 5 секунд (глобальные переменные <code>WB_MT</code>, <code>WB_MT_T</code>).</p>
+
+<pre>
+<span class="cm">-- Кеш: обновляем каждые 5с</span>
+<span class="kw">if not</span> WB_MT <span class="kw">or not</span> WB_MT_T <span class="kw">or</span> GetTime()-WB_MT_T><span class="num">5</span> <span class="kw">then</span>
+    WB_MT=<span class="kw">nil</span> WB_MT_T=GetTime()
+    <span class="kw">local</span> nr=GetNumRaidMembers()
+    <span class="kw">if</span> nr><span class="num">0</span> <span class="kw">then</span>
+        <span class="kw">for</span> i=<span class="num">1</span>,nr <span class="kw">do</span>
+            <span class="kw">local</span> n,_,_,_,_,_,_,_,_,role=GetRaidRosterInfo(i)
+            <span class="kw">if</span> role==<span class="str">'MAINTANK'</span> <span class="kw">then</span> WB_MT=n <span class="kw">break end</span>
+        <span class="kw">end</span>
+    <span class="kw">end</span>
+<span class="kw">end</span>
+</pre>
+
+<h3>Логика TryTaunt</h3>
+<table>
+<tr><th>Роль</th><th>Условие</th><th>Поведение</th></tr>
+<tr><td><strong>МТ</strong> (WB_MT == myName)</td><td>Таргет бьёт НЕ меня</td><td>Таунтить (тянуть всё на себя)</td></tr>
+<tr><td><strong>ОТ</strong> (не МТ, AutoTaunt ON)</td><td>Моб бьёт НЕ МТ и НЕ меня</td><td>Таунтить (тянуть аддов с хилеров/ДД)</td></tr>
+<tr><td><strong>Нет МТ / не рейд</strong></td><td>Таргет бьёт НЕ меня</td><td>Таунтить (старая логика)</td></tr>
+</table>
+
+<h3>IsTankUnit определение</h3>
+<p>Проверяет баффы юнита: Frost Presence <span class="spell-id">(48263)</span>, Righteous Fury <span class="spell-id">(25780)</span>, Bear Form <span class="spell-id">(5487/9634)</span>.</p>
+
+<h3>Smart Taunt (C#)</h3>
+<p>Дополнительно BotEngine.TrySmartTaunt() сканирует ObjectManager каждые ~750мс, ищет мобов бьющих союзников (не нас), переключает таргет и кастует таунт через Lua.</p>
+
+<!-- ============================================================ -->
+<h2 id="settings">11. Настройки</h2>
+
+<h3>Файл настроек</h3>
+<p>Путь: <code>{exe_dir}/settings_{CharName}.json</code> (или <code>settings.json</code> если имя неизвестно). Формат: JSON, pretty-printed.</p>
+
+<h3>Что сохраняется</h3>
+<table>
+<tr><th>Категория</th><th>Ключи</th></tr>
+<tr><td>Позиция окна</td><td><code>pos_x</code>, <code>pos_y</code></td></tr>
+<tr><td>Радио-выборы</td><td><code>curse</code>, <code>pet</code>, <code>seal</code>, <code>blessing</code>, <code>judgement</code>, <code>aura</code>, <code>shout</code>, <code>stance</code>, <code>presence</code>, <code>feralForm</code>, <code>totemEarth</code>, <code>totemFire</code>, <code>totemWater</code>, <code>totemAir</code></td></tr>
+<tr><td>Основные тоглы</td><td><code>aoe</code>, <code>buffs</code></td></tr>
+<tr><td>Спелл-тоглы</td><td><code>spell_{Key}</code> (напр. <code>spell_VT</code>, <code>spell_Meta</code>)</td></tr>
+<tr><td>Бафф-тоглы</td><td><code>buff_{SpellName}</code> (напр. <code>buff_Молитва стойкости</code>)</td></tr>
+<tr><td>Слайдеры</td><td><code>slider_dispMana</code>, <code>slider_sfMana</code>, <code>slider_maxDots</code>, <code>slider_mindSear</code>, <code>slider_aoeMin</code>, <code>slider_dist</code>, <code>slider_maxRange</code>, <code>slider_defHP</code></td></tr>
+<tr><td>Чекбоксы</td><td><code>chk_autoFace</code>, <code>chk_autoTarget</code>, <code>chk_moveBehind</code>, <code>chk_aoeAvoid</code>, <code>chk_multiDot</code>, <code>chk_mindSear</code>, <code>chk_defAll</code></td></tr>
+<tr><td>AoE тоглы</td><td><code>aoe_SoC</code></td></tr>
+</table>
+
+<h3>Поток загрузки/сохранения</h3>
+<ol>
+<li><strong>SetPlayerClass()</strong> вызывается при определении класса/спека</li>
+<li>Загружает <code>settings_{charName}.json</code> через <code>LoadSettings()</code></li>
+<li>Очищает все тоглы (<code>_spellToggles.Clear()</code>, <code>_buffToggles.Clear()</code>)</li>
+<li>Устанавливает дефолты радио-выборов по классу/спеку из сохранённых или хардкод</li>
+<li>Pre-create тоглы из <code>SpecSpells</code>, <code>SpecBursts</code>, <code>ClassBuffs</code> с сохранёнными значениями</li>
+<li>При любом изменении (клик, перетаскивание) -- <code>SaveSettings()</code> сериализует всё в JSON</li>
+</ol>
+
+<div class="note">
+Если UI-элемент ещё не создан (подменю не открывалось), значение берётся из <code>_saved</code> словаря -- предыдущее сохранённое значение не теряется при перезаписи.
+</div>
+
+<hr style="margin-top: 40px; border-color: #2a2a3a;">
+<p style="color: #555; font-size: 12px; margin-top: 16px; text-align: center;">
+WowBot Documentation | Generated 2026-04-09 | WoW 3.3.5a WoTLK (WoWCircle)
+</p>
+
+</main>
+</body>
+</html>

@@ -7,25 +7,54 @@ namespace WowBot.Core.Game;
 /// </summary>
 public class BuffManager
 {
-    // === Настройки (из UI) ===
-    public string PlayerClass { get; set; } = "";
-    public string SelectedSeal { get; set; } = "";
-    public string SelectedBlessing { get; set; } = "BoM";
-    public string SelectedAura { get; set; } = "AuRet";
-    public string SelectedShout { get; set; } = "";
-    public string SelectedStance { get; set; } = "";
-    public string SelectedPresence { get; set; } = "";
-    public string SelectedFeralForm { get; set; } = "";
-    public string SelectedPet { get; set; } = "";
-    public string SelectedTotemEarth { get; set; } = "";
-    public string SelectedTotemFire { get; set; } = "";
-    public string SelectedTotemWater { get; set; } = "";
-    public string SelectedTotemAir { get; set; } = "";
-    public string SelectedWeaponMH { get; set; } = "";
-    public string SelectedWeaponOH { get; set; } = "";
-    public bool AoeEnabled { get; set; }
-    public bool AoeSealSwap { get; set; }
-    public List<string> EnabledBuffs { get; set; } = new();
+    // === Настройки (из UI) — через свойства с инвалидацией кэша ===
+    private string _playerClass = "";
+    private string _selectedSeal = "";
+    private string _selectedBlessing = "BoM";
+    private string _selectedAura = "AuRet";
+    private string _selectedShout = "";
+    private string _selectedStance = "";
+    private string _selectedPresence = "";
+    private string _selectedFeralForm = "";
+    private string _selectedPet = "";
+    private string _selectedTotemEarth = "";
+    private string _selectedTotemFire = "";
+    private string _selectedTotemWater = "";
+    private string _selectedTotemAir = "";
+    private string _selectedWeaponMH = "";
+    private string _selectedWeaponOH = "";
+    private bool _aoeEnabled;
+    private bool _aoeSealSwap;
+    private List<string> _enabledBuffs = new();
+
+    public string PlayerClass { get => _playerClass; set { if (_playerClass != value) { _playerClass = value; InvalidateCache(); } } }
+    public string SelectedSeal { get => _selectedSeal; set { if (_selectedSeal != value) { _selectedSeal = value; InvalidateCache(); } } }
+    public string SelectedBlessing { get => _selectedBlessing; set { if (_selectedBlessing != value) { _selectedBlessing = value; InvalidateCache(); } } }
+    public string SelectedAura { get => _selectedAura; set { if (_selectedAura != value) { _selectedAura = value; InvalidateCache(); } } }
+    public string SelectedShout { get => _selectedShout; set { if (_selectedShout != value) { _selectedShout = value; InvalidateCache(); } } }
+    public string SelectedStance { get => _selectedStance; set { if (_selectedStance != value) { _selectedStance = value; InvalidateCache(); } } }
+    public string SelectedPresence { get => _selectedPresence; set { if (_selectedPresence != value) { _selectedPresence = value; InvalidateCache(); } } }
+    public string SelectedFeralForm { get => _selectedFeralForm; set { if (_selectedFeralForm != value) { _selectedFeralForm = value; InvalidateCache(); } } }
+    public string SelectedPet { get => _selectedPet; set { if (_selectedPet != value) { _selectedPet = value; InvalidateCache(); } } }
+    public string SelectedTotemEarth { get => _selectedTotemEarth; set { if (_selectedTotemEarth != value) { _selectedTotemEarth = value; InvalidateCache(); } } }
+    public string SelectedTotemFire { get => _selectedTotemFire; set { if (_selectedTotemFire != value) { _selectedTotemFire = value; InvalidateCache(); } } }
+    public string SelectedTotemWater { get => _selectedTotemWater; set { if (_selectedTotemWater != value) { _selectedTotemWater = value; InvalidateCache(); } } }
+    public string SelectedTotemAir { get => _selectedTotemAir; set { if (_selectedTotemAir != value) { _selectedTotemAir = value; InvalidateCache(); } } }
+    public string SelectedWeaponMH { get => _selectedWeaponMH; set { if (_selectedWeaponMH != value) { _selectedWeaponMH = value; InvalidateCache(); } } }
+    public string SelectedWeaponOH { get => _selectedWeaponOH; set { if (_selectedWeaponOH != value) { _selectedWeaponOH = value; InvalidateCache(); } } }
+    public bool AoeEnabled { get => _aoeEnabled; set { if (_aoeEnabled != value) { _aoeEnabled = value; InvalidateCache(); } } }
+    public bool AoeSealSwap { get => _aoeSealSwap; set { if (_aoeSealSwap != value) { _aoeSealSwap = value; InvalidateCache(); } } }
+    public List<string> EnabledBuffs { get => _enabledBuffs; set { _enabledBuffs = value; InvalidateCache(); } }
+
+    // === Кэш скриптов ===
+    private string? _cachedClassBuffScript;
+    private string? _cachedFullBuffScript;
+
+    public void InvalidateCache()
+    {
+        _cachedClassBuffScript = null;
+        _cachedFullBuffScript = null;
+    }
 
     // === Статические данные ===
     private static readonly HashSet<string> RaidBuffs = new()
@@ -55,6 +84,7 @@ public class BuffManager
     /// <summary>Быстрая проверка только классовых баффов (стойка/форма/власть/аура/печать) — каждые 0.5 сек</summary>
     public string BuildClassBuffScript()
     {
+        if (_cachedClassBuffScript != null) return _cachedClassBuffScript;
         var sb = new System.Text.StringBuilder();
         sb.Append("local function WB_CB() ");
         sb.Append("if IsMounted() then return end ");
@@ -160,14 +190,16 @@ public class BuffManager
             hasAnything = true;
         }
 
-        if (!hasAnything) return "";
+        if (!hasAnything) { _cachedClassBuffScript = ""; return ""; }
         sb.Append("end WB_CB()");
-        return sb.ToString();
+        _cachedClassBuffScript = sb.ToString();
+        return _cachedClassBuffScript;
     }
 
     /// <summary>Полная проверка всех баффов — каждые ~3 сек</summary>
     public string BuildBuffScript()
     {
+        if (_cachedFullBuffScript != null) return _cachedFullBuffScript;
         if (EnabledBuffs.Count == 0 && string.IsNullOrEmpty(SelectedSeal) && string.IsNullOrEmpty(SelectedBlessing) && string.IsNullOrEmpty(SelectedAura) && string.IsNullOrEmpty(SelectedShout) && string.IsNullOrEmpty(SelectedStance) && string.IsNullOrEmpty(SelectedPresence) && string.IsNullOrEmpty(SelectedFeralForm) && string.IsNullOrEmpty(SelectedTotemEarth) && string.IsNullOrEmpty(SelectedTotemFire) && string.IsNullOrEmpty(SelectedTotemWater) && string.IsNullOrEmpty(SelectedTotemAir)) return "";
 
         var selfBuffs = new List<string>();
@@ -443,6 +475,7 @@ public class BuffManager
         }
 
         sb.Append("end WB_Buff()");
-        return sb.ToString();
+        _cachedFullBuffScript = sb.ToString();
+        return _cachedFullBuffScript;
     }
 }

@@ -15,6 +15,9 @@ public class CombatHelper
     // Таунт кулдаун (тики)
     private int _smartTauntTick;
 
+    // Кэш friendly GUIDs (переиспользуется между вызовами)
+    private readonly HashSet<ulong> _friendlyGuids = new();
+
     // AoE Avoidance
     private int _aoeTick;
     private DateTime _aoeFleeUntil = DateTime.MinValue;
@@ -36,6 +39,15 @@ public class CombatHelper
         _ctm = ctm;
     }
 
+    private HashSet<ulong> RefreshFriendlyGuids()
+    {
+        _friendlyGuids.Clear();
+        _friendlyGuids.Add(_objectManager.LocalPlayerGuid);
+        foreach (var p in _objectManager.Players)
+            _friendlyGuids.Add(p.Guid);
+        return _friendlyGuids;
+    }
+
     /// <summary>Считает живых мобов рядом с игроком</summary>
     public int CountNearbyEnemies(WowPlayer player, float range = 30f)
     {
@@ -53,10 +65,7 @@ public class CombatHelper
     public int CountNearbyCombatEnemies(WowPlayer player, float range = 10f)
     {
         int count = 0;
-        var friendlyGuids = new HashSet<ulong>();
-        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
-        foreach (var p in _objectManager.Players)
-            friendlyGuids.Add(p.Guid);
+        var friendlyGuids = RefreshFriendlyGuids();
 
         foreach (var unit in _objectManager.Units)
         {
@@ -74,10 +83,7 @@ public class CombatHelper
     public int CountEnemiesNearTarget(WowUnit target, float range = 10f)
     {
         int count = 0;
-        var friendlyGuids = new HashSet<ulong>();
-        friendlyGuids.Add(_objectManager.LocalPlayerGuid);
-        foreach (var p in _objectManager.Players)
-            friendlyGuids.Add(p.Guid);
+        var friendlyGuids = RefreshFriendlyGuids();
         foreach (var unit in _objectManager.Units)
         {
             if (!unit.IsAlive) continue;

@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WowBot Hivemind — Документация мультибоксинга</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0a0a0f;
+    color: #e8e6e3;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.7;
+    display: flex;
+}
+::selection { background: #c8aa6e33; }
+a { color: #c8aa6e; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Sidebar */
+.sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 280px;
+    height: 100vh;
+    background: #0e0e14;
+    border-right: 1px solid #1e1e2a;
+    overflow-y: auto;
+    padding: 24px 16px;
+    z-index: 100;
+}
+.sidebar h2 {
+    color: #c8aa6e;
+    font-size: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #c8aa6e33;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.sidebar ul { list-style: none; }
+.sidebar li { margin-bottom: 4px; }
+.sidebar li a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #b0ada8;
+    transition: all .15s;
+}
+.sidebar li a:hover {
+    background: #1a1a25;
+    color: #c8aa6e;
+    text-decoration: none;
+}
+.sidebar li.sub { padding-left: 16px; }
+.sidebar li.sub a { font-size: 12px; color: #807e7a; }
+.sidebar li.sub a:hover { color: #c8aa6e; }
+
+/* Main */
+.main {
+    margin-left: 280px;
+    padding: 40px 60px 80px;
+    max-width: 1000px;
+    width: 100%;
+}
+h1 {
+    color: #c8aa6e;
+    font-size: 32px;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+.subtitle {
+    color: #807e7a;
+    font-size: 15px;
+    margin-bottom: 40px;
+}
+h2 {
+    color: #c8aa6e;
+    font-size: 22px;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #c8aa6e22;
+}
+h3 {
+    color: #d4c6a0;
+    font-size: 17px;
+    margin-top: 28px;
+    margin-bottom: 10px;
+}
+h4 {
+    color: #b8a97e;
+    font-size: 15px;
+    margin-top: 20px;
+    margin-bottom: 8px;
+}
+p { margin-bottom: 12px; }
+
+/* Cards */
+.card {
+    background: #12121a;
+    border: 1px solid #1e1e2a;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+.card-accent {
+    border-left: 3px solid #c8aa6e;
+}
+.card-warn {
+    border-left: 3px solid #e0a040;
+    background: #16150f;
+}
+.card-info {
+    border-left: 3px solid #5588cc;
+    background: #0f1218;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+th {
+    background: #16161f;
+    color: #c8aa6e;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #c8aa6e33;
+}
+td {
+    padding: 8px 14px;
+    border-bottom: 1px solid #1a1a24;
+    vertical-align: top;
+}
+tr:hover td { background: #14141e; }
+
+/* Code */
+code {
+    background: #1a1a24;
+    color: #d4c6a0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+pre {
+    background: #0e0e16;
+    border: 1px solid #1e1e2a;
+    border-radius: 6px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    color: #c8c4bf;
+}
+pre .comment { color: #5a6a5a; }
+pre .keyword { color: #c8aa6e; }
+pre .string { color: #8fbc8f; }
+pre .number { color: #d4a070; }
+
+/* Flow diagrams */
+.flow {
+    background: #0e0e16;
+    border: 1px solid #1e1e2a;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 16px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+    color: #b0ada8;
+}
+.flow .hl { color: #c8aa6e; font-weight: bold; }
+.flow .val { color: #8fbc8f; }
+.flow .dim { color: #555; }
+
+/* Tags */
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+}
+.tag-master { background: #2a1a0a; color: #e0a040; border: 1px solid #e0a04033; }
+.tag-slave { background: #0a1a2a; color: #5588cc; border: 1px solid #5588cc33; }
+.tag-both { background: #1a1a0a; color: #88aa44; border: 1px solid #88aa4433; }
+.tag-ack { background: #1a0a1a; color: #aa66aa; border: 1px solid #aa66aa33; }
+
+ul, ol { margin-bottom: 12px; padding-left: 24px; }
+li { margin-bottom: 4px; }
+.sep { border: none; border-top: 1px solid #1e1e2a; margin: 32px 0; }
+</style>
+</head>
+<body>
+
+<!-- ==================== SIDEBAR ==================== -->
+<nav class="sidebar">
+    <h2>Hivemind</h2>
+    <ul>
+        <li><a href="#overview">Обзор</a></li>
+        <li><a href="#protocol">Протокол связи</a></li>
+        <li class="sub"><a href="#protocol-format">Формат сообщений</a></li>
+        <li class="sub"><a href="#protocol-send">SendCommand</a></li>
+        <li class="sub"><a href="#protocol-listener">Lua Listener</a></li>
+        <li><a href="#ack">ACK система</a></li>
+        <li class="sub"><a href="#ack-flow">Поток ACK</a></li>
+        <li class="sub"><a href="#ack-status">AckStatus</a></li>
+        <li><a href="#registration">Регистрация слейвов</a></li>
+        <li><a href="#slave-modes">Режимы слейвов</a></li>
+        <li class="sub"><a href="#mode-idle">Idle</a></li>
+        <li class="sub"><a href="#mode-following">Following</a></li>
+        <li class="sub"><a href="#mode-attacking">Attacking</a></li>
+        <li class="sub"><a href="#mode-auto">Auto</a></li>
+        <li class="sub"><a href="#mode-goto">GoingToPoint</a></li>
+        <li><a href="#auto-detail">Авто-режим подробно</a></li>
+        <li><a href="#commands">Команды мастера</a></li>
+        <li class="sub"><a href="#cmd-follow">Follow</a></li>
+        <li class="sub"><a href="#cmd-attack">Attack</a></li>
+        <li class="sub"><a href="#cmd-stop">Stop</a></li>
+        <li class="sub"><a href="#cmd-auto">Auto</a></li>
+        <li class="sub"><a href="#cmd-scatter">Scatter</a></li>
+        <li class="sub"><a href="#cmd-stack">Stack / StackMA</a></li>
+        <li class="sub"><a href="#cmd-goto">Goto</a></li>
+        <li class="sub"><a href="#cmd-interact">Interact / Gossip</a></li>
+        <li class="sub"><a href="#cmd-service">Сервисные</a></li>
+        <li><a href="#per-slave">Per-slave команды</a></li>
+        <li><a href="#slave-controller">SlaveController</a></li>
+        <li class="sub"><a href="#sc-follow-logic">Follow логика</a></li>
+        <li class="sub"><a href="#sc-guid">Поиск GUID</a></li>
+        <li class="sub"><a href="#sc-cmdsource">CommandSource / FollowTarget</a></li>
+        <li><a href="#mt-ot">MainTank / OffTank</a></li>
+        <li><a href="#ctm-watch">Ctrl+ПКМ навигация</a></li>
+        <li><a href="#nav-selection">Выбор слейвов для навигации</a></li>
+    </ul>
+</nav>
+
+<!-- ==================== MAIN ==================== -->
+<div class="main">
+
+<h1>Hivemind System</h1>
+<p class="subtitle">Мультибоксинг WowBot через аддон-сообщения WoW 3.3.5a</p>
+
+<!-- ==================== 1. ОБЗОР ==================== -->
+<h2 id="overview">1. Обзор</h2>
+
+<div class="card card-accent">
+<p><strong>Hivemind</strong> — система мультибоксинга, позволяющая одному игроку (мастеру) управлять несколькими ботами (слейвами) через внутриигровые аддон-сообщения. Не требует внешних программ или модификации клиента.</p>
+</div>
+
+<h3>Принцип работы</h3>
+<p>WoW 3.3.5a предоставляет API <code>SendAddonMessage(prefix, msg, channel)</code>, позволяющий аддонам обмениваться произвольными текстовыми сообщениями по каналу <code>"PARTY"</code> (группа/рейд). Hivemind использует канал с префиксом <code>WBHIVE</code>.</p>
+
+<div class="flow">
+<span class="hl">МАСТЕР</span> (1 окно WoW)           <span class="hl">СЛЕЙВЫ</span> (N окон WoW)
+     |                                    |
+     |-- SendAddonMessage("WBHIVE",     --|-- Lua listener ловит
+     |     "Attack:Lovelion#5",          --|    CHAT_MSG_ADDON
+     |     "PARTY")                      --|
+     |                                    |-- парсит CMD:arg#seq
+     |                                    |-- ExecuteSlaveCommand()
+     |                                    |-- SendAddonMessage("WBHIVE",
+     |   <span class="val">&lt;-- ACK:5~Virtuella</span>              |     "ACK:5~Virtuella", "PARTY")
+     |                                    |
+</div>
+
+<h3>Роли</h3>
+<table>
+<tr><th>Роль</th><th>Enum</th><th>Описание</th></tr>
+<tr><td><span class="tag tag-master">MASTER</span></td><td><code>Role.Master</code></td><td>Отправляет команды, видит список слейвов, ловит ACK, Ctrl+ПКМ навигация</td></tr>
+<tr><td><span class="tag tag-slave">SLAVE</span></td><td><code>Role.Slave</code></td><td>Слушает команды, выполняет их, шлёт Register/ACK</td></tr>
+<tr><td><span class="tag tag-both">NONE</span></td><td><code>Role.None</code></td><td>Hivemind выключен, обычный бот</td></tr>
+</table>
+
+<h3>Ключевые классы</h3>
+<table>
+<tr><th>Класс</th><th>Файл</th><th>Роль</th></tr>
+<tr><td><code>Hivemind</code></td><td>Hivemind.cs</td><td>Протокол, команды, ACK, слейв-логика, мастер-команды</td></tr>
+<tr><td><code>SlaveController</code></td><td>SlaveController.cs</td><td>Движение слейва: follow, goto, поиск GUID мастера</td></tr>
+<tr><td><code>BotEngine</code></td><td>BotEngine.cs</td><td>Главный тик (150мс): вызывает Hivemind + SlaveController</td></tr>
+</table>
+
+<div class="card card-info">
+<p><strong>WB_SLAVE</strong> — при включении слейва устанавливается глобальная Lua-переменная <code>WB_SLAVE=1</code>. Она блокирует авто-героизм у слейвов (только по команде мастера через <code>CastHeroism</code>).</p>
+</div>
+
+<!-- ==================== 2. ПРОТОКОЛ ==================== -->
+<h2 id="protocol">2. Протокол связи</h2>
+
+<h3 id="protocol-format">Формат сообщений</h3>
+<div class="card">
+<p>Все сообщения передаются через <code>SendAddonMessage</code> с префиксом <code>WBHIVE</code> по каналу <code>PARTY</code>.</p>
+</div>
+
+<h4>Формат основного сообщения</h4>
+<pre>CMD:arg#seq</pre>
+
+<table>
+<tr><th>Часть</th><th>Описание</th><th>Пример</th></tr>
+<tr><td><code>CMD</code></td><td>Имя команды (enum Command)</td><td><code>Attack</code>, <code>Follow</code>, <code>Stop</code></td></tr>
+<tr><td><code>arg</code></td><td>Аргумент (имя мастера, координаты, и т.д.)</td><td><code>Lovelion</code>, <code>123.5;456.7;100.0</code></td></tr>
+<tr><td><code>#seq</code></td><td>Sequence number для ACK (надёжная доставка)</td><td><code>#5</code></td></tr>
+</table>
+
+<h4>Адресация (per-slave)</h4>
+<pre>CMD:arg~targetList#seq</pre>
+<p>Если команда адресована конкретным слейвам, к аргументу добавляется <code>~имя1,имя2</code>. Слейв проверяет своё имя в списке и игнорирует сообщение если его нет.</p>
+
+<h4>Специальные форматы</h4>
+<table>
+<tr><th>Тип</th><th>Формат</th><th>Пример</th></tr>
+<tr><td>Register</td><td><code>Register:имя;класс</code></td><td><code>Register:Virtuella;PALADIN</code></td></tr>
+<tr><td>ACK</td><td><code>ACK:seq~имяСлейва</code></td><td><code>ACK:5~Virtuella</code></td></tr>
+<tr><td>SetBuff</td><td><code>SetBuff:тип=ключ</code></td><td><code>SetBuff:blessing=BoM</code></td></tr>
+<tr><td>Goto</td><td><code>Goto:X;Y;Z</code></td><td><code>Goto:123.5;456.7;100.0</code></td></tr>
+</table>
+
+<h3 id="protocol-send">SendCommand (мастер)</h3>
+<p>Метод <code>SendCommand(Command cmd, string arg)</code> — основной способ отправки команд.</p>
+
+<div class="flow">
+<span class="hl">SendCommand(Attack, "Lovelion")</span>
+  |
+  +-- 1. Определить получателей
+  |     <span class="dim">Есть Selected слейвы?</span>
+  |       <span class="val">ДА</span> -> targets = "Virtuella,Zabudi"
+  |       <span class="val">НЕТ</span> -> Есть IgnoreGlobal слейвы?
+  |              <span class="val">ДА</span> -> targets = все кроме IgnoreGlobal
+  |              <span class="val">НЕТ</span> -> targets = "" (все получат)
+  |
+  +-- 2. Сформировать сообщение
+  |     _cmdSeq++
+  |     fullArg = targets ? "Lovelion~Virtuella,Zabudi" : "Lovelion"
+  |     msg = "Attack:Lovelion~Virtuella,Zabudi#5"
+  |
+  +-- 3. Отправить через Lua
+  |     <span class="val">SendAddonMessage('WBHIVE','Attack:Lovelion~Virt...#5','PARTY')</span>
+  |
+  +-- 4. Начать ACK tracking (если нужен)
+  |     _pendingSeq = 5
+  |     _pendingAcks = { "Virtuella", "Zabudi" }
+  |     slave.AckStatus = "pending"
+  |
+  +-- 5. Обновить ActiveCommand для UI
+        slave.ActiveCommand = Attack
+</div>
+
+<h3 id="protocol-listener">Lua Listener (слейв)</h3>
+<p>При включении Hivemind устанавливается Lua-фрейм, слушающий событие <code>CHAT_MSG_ADDON</code>:</p>
+
+<pre>
+<span class="comment">-- Устанавливается один раз (GetSlaveListenerScript)</span>
+WB_HIVE_FRAME = CreateFrame('Frame')
+WB_HIVE_FRAME:RegisterEvent('CHAT_MSG_ADDON')
+WB_HIVE_FRAME:SetScript('OnEvent', function(self, event, prefix, msg, channel, sender)
+    <span class="keyword">if</span> prefix ~= 'WBHIVE' <span class="keyword">then return end</span>
+    <span class="keyword">if</span> sender == UnitName('player') <span class="keyword">then return end</span>  <span class="comment">-- свои сообщения игнорируем</span>
+    local cmd, arg = strsplit(':', msg, 2)
+    <span class="keyword">if</span> cmd == 'ACK' <span class="keyword">then</span>
+        WB_HIVE_ACK = arg          <span class="comment">-- "5~Virtuella"</span>
+        WB_HIVE_ACK_TIME = GetTime()
+    <span class="keyword">elseif</span> cmd == 'Register' <span class="keyword">then</span>
+        WB_HIVE_REG = arg          <span class="comment">-- "Virtuella;PALADIN"</span>
+        WB_HIVE_REG_SENDER = sender
+        WB_HIVE_REG_TIME = GetTime()
+    <span class="keyword">else</span>
+        WB_HIVE_CMD = cmd          <span class="comment">-- "Attack"</span>
+        WB_HIVE_ARG = arg          <span class="comment">-- "Lovelion#5"</span>
+        WB_HIVE_SENDER = sender
+        WB_HIVE_TIME = GetTime()
+    <span class="keyword">end</span>
+end)
+</pre>
+
+<p>C# читает переменные каждые 3 тика (450мс) через <code>GetSlaveReadScript()</code>:</p>
+<pre>WB_R = WB_HIVE_CMD..'|'..WB_HIVE_ARG..'|'..WB_HIVE_SENDER..'|'..WB_HIVE_TIME</pre>
+<p>Результат парсится в <code>ParseSlaveResponse()</code> → кортеж <code>(Command?, arg, sender, time)</code>.</p>
+
+<div class="card card-warn">
+<p><strong>Защита от чужих мастеров:</strong> Если у слейва уже есть <code>MasterName</code>, он игнорирует команды от других отправителей (проверка <code>sender != MasterName</code>).</p>
+</div>
+
+<!-- ==================== 3. ACK ==================== -->
+<h2 id="ack">3. ACK система</h2>
+
+<p>Обеспечивает гарантированную доставку команд. WoW аддон-сообщения могут теряться при нагрузке на сервер.</p>
+
+<h3 id="ack-flow">Поток ACK</h3>
+
+<div class="flow">
+<span class="hl">МАСТЕР</span>                              <span class="hl">СЛЕЙВ</span>
+  |                                    |
+  |-- Send "Attack:Lovelion#5"       --|
+  |   _pendingSeq=5                    |-- ExecuteSlaveCommand()
+  |   _pendingAcks={"Virt","Zab"}      |   _slaveLastExecSeq = 5
+  |   _retryCount=0                    |-- SendAck(5)
+  |   AckStatus="pending"              |   <span class="val">"ACK:5~Virtuella"</span>
+  |                                    |
+  |   <span class="val">&lt;-- "ACK:5~Virtuella"</span>             |
+  |   ReceiveAck(5, "Virtuella")       |
+  |   _pendingAcks={"Zab"}            |
+  |   Virtuella.AckStatus="ok"         |
+  |                                    |
+  <span class="dim">|--- 500мс без ACK от "Zab" ---</span>     |
+  |   TickAck() → retry #1            |
+  |   Re-send "Attack:Lovelion#5"    --|
+  |                                    |-- seq==_slaveLastExecSeq
+  |                                    |   <span class="comment">Уже выполнено! Re-send ACK</span>
+  |   <span class="val">&lt;-- "ACK:5~Zab"</span>                  |
+  |   ReceiveAck(5, "Zab")            |
+  |   _pendingAcks={}  <span class="val">DONE!</span>          |
+  |                                    |
+</div>
+
+<h3>Параметры</h3>
+<table>
+<tr><th>Параметр</th><th>Значение</th><th>Описание</th></tr>
+<tr><td><code>MaxRetries</code></td><td>3</td><td>Максимум повторных отправок</td></tr>
+<tr><td><code>RetryIntervalMs</code></td><td>500</td><td>Интервал между retry (мс)</td></tr>
+<tr><td><code>_slaveLastExecSeq</code></td><td>int</td><td>Последний выполненный seq на слейве</td></tr>
+</table>
+
+<h3>Дедупликация на слейве</h3>
+<p>Слейв хранит <code>_slaveLastExecSeq</code>. При получении команды:</p>
+<ul>
+    <li><code>seq &lt; _slaveLastExecSeq</code> — устаревшая, игнорировать</li>
+    <li><code>seq == _slaveLastExecSeq</code> — уже выполнена, повторно отправить ACK</li>
+    <li><code>seq &gt; _slaveLastExecSeq</code> — новая, выполнить + отправить ACK</li>
+</ul>
+
+<h3 id="ack-status">AckStatus (per-slave)</h3>
+<table>
+<tr><th>Значение</th><th>Описание</th></tr>
+<tr><td><code>""</code></td><td>Нет активного ожидания</td></tr>
+<tr><td><code>"pending"</code></td><td>Команда отправлена, ждём ACK</td></tr>
+<tr><td><code>"ok"</code></td><td>ACK получен</td></tr>
+<tr><td><code>"timeout"</code></td><td>3 retry исчерпаны, ACK не получен</td></tr>
+</table>
+
+<h3>Команды без ACK</h3>
+<p>Служебные команды не требуют подтверждения:</p>
+<code>SetBuff</code>, <code>Wipe</code>, <code>Interact</code>, <code>GossipSelect</code>, <code>GossipAccept</code>, <code>AutoToggleFollow</code>, <code>AutoToggleAttack</code>, <code>Ping</code>
+
+<!-- ==================== 4. РЕГИСТРАЦИЯ ==================== -->
+<h2 id="registration">4. Регистрация слейвов</h2>
+
+<div class="flow">
+<span class="hl">СЛЕЙВ</span>                              <span class="hl">МАСТЕР</span>
+  |                                    |
+  |-- Каждые ~10 сек:                 |
+  |   SendRegister("PALADIN")          |
+  |   <span class="val">"Register:Virtuella;PALADIN"</span>    --|
+  |                                    |-- GetRegisterReadScript()
+  |                                    |   WB_HIVE_REG = "Virtuella;PALADIN"
+  |                                    |-- RegisterSlave("Virtuella","PALADIN")
+  |                                    |   ConnectedSlaves.Add(SlaveInfo)
+  |                                    |   OnSlavesChanged?.Invoke()
+  |                                    |
+</div>
+
+<h3>SlaveInfo</h3>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>Name</code></td><td>string</td><td>Имя персонажа слейва</td></tr>
+<tr><td><code>ClassName</code></td><td>string</td><td>Класс ("PALADIN", "SHAMAN" и т.д.)</td></tr>
+<tr><td><code>Selected</code></td><td>bool</td><td>Выбран для адресных команд (ЛКМ в UI)</td></tr>
+<tr><td><code>IgnoreGlobal</code></td><td>bool</td><td>Игнорирует общие (неадресные) команды</td></tr>
+<tr><td><code>LastSeen</code></td><td>double</td><td>Unix timestamp последнего Register</td></tr>
+<tr><td><code>ActiveCommand</code></td><td>Command?</td><td>Последняя полученная команда (для UI)</td></tr>
+<tr><td><code>FollowTargetName</code></td><td>string</td><td>За кем бежит (пусто = мастер)</td></tr>
+<tr><td><code>AutoFollowPaused</code></td><td>bool</td><td>Авто: follow на паузе</td></tr>
+<tr><td><code>AutoAttackPaused</code></td><td>bool</td><td>Авто: атака на паузе</td></tr>
+<tr><td><code>AckStatus</code></td><td>string</td><td>"", "pending", "ok", "timeout"</td></tr>
+</table>
+
+<div class="card card-info">
+<p><strong>Heartbeat:</strong> Слейв шлёт Register каждые ~10 секунд (66 тиков * 150мс). Если слейв уже зарегистрирован, мастер только обновляет <code>LastSeen</code> без перерисовки UI.</p>
+</div>
+
+<!-- ==================== 5. РЕЖИМЫ СЛЕЙВОВ ==================== -->
+<h2 id="slave-modes">5. Режимы слейвов (SlaveMode)</h2>
+
+<table>
+<tr><th>Режим</th><th>Описание</th><th>Follow</th><th>Ротация</th><th>Бафы</th></tr>
+<tr><td><code>Idle</code></td><td>Ожидание (после Stop или при старте)</td><td>Нет</td><td>Если есть таргет*</td><td>Нет</td></tr>
+<tr><td><code>Following</code></td><td>Бежит за мастером</td><td>Да (CTM)</td><td>Да (instants на бегу, full стоя)</td><td>Да</td></tr>
+<tr><td><code>Attacking</code></td><td>Бьёт таргет мастера</td><td>Нет</td><td>Да + approach</td><td>Да</td></tr>
+<tr><td><code>Auto</code></td><td>Follow + авто-ассист</td><td>Вне боя</td><td>В бою</td><td>Да</td></tr>
+<tr><td><code>GoingToPoint</code></td><td>Бежит к Ctrl+ПКМ точке</td><td>К точке</td><td>Да (instants на бегу)</td><td>Да</td></tr>
+</table>
+<p>* В Idle бьёт только если <code>ForceIdle == false</code> и <code>_rotationEnabled == true</code>.</p>
+
+<h3 id="mode-idle">Idle</h3>
+<div class="card">
+<p>Начальное состояние. Слейв стоит на месте. Если <code>ForceIdle=true</code> (после Stop) — полностью молчит. Если <code>ForceIdle=false</code> и ротация включена — бьёт текущий таргет (если жив, в бою, не игрок).</p>
+</div>
+<pre>
+case SlaveMode.Idle:
+    if (ForceIdle || !_rotationEnabled) break;
+    // Бьём таргет если есть (face + rotation)
+    var idleTarget = _objectManager.GetTarget();
+    if (target alive && inCombat && !isPlayer)
+        FaceInstant(player, target);
+        ExecuteLua(fullScript);
+</pre>
+
+<h3 id="mode-following">Following</h3>
+<div class="card">
+<p>Слейв бежит за мастером через <code>SlaveController.Tick()</code> (CTM или NavMesh). Пока бежит — кастует только instants. Когда добежал (стоит) — полная ротация + поворот к таргету.</p>
+</div>
+
+<div class="flow">
+<span class="hl">Following tick (150мс)</span>
+  |
+  +-- SlaveCtrl.Tick()  <span class="comment">// движение к мастеру</span>
+  |
+  +-- player стоит?
+  |     <span class="val">НЕТ (бежит)</span>:
+  |       Есть враг-таргет? -> Lua: instants only
+  |     <span class="val">ДА (добежал)</span>:
+  |       Есть враг-таргет?
+  |         -> TryGroundAoE()
+  |         -> FaceInstant()
+  |         -> Lua: полная ротация
+</div>
+
+<h3 id="mode-attacking">Attacking</h3>
+<div class="card">
+<p>Слейв атакует таргет. Подбегает через Lua <code>MoveForwardStart()/MoveForwardStop()</code>. Поддерживает MoveBehind (заход за спину) и RangedPos (позиционирование ранж).</p>
+</div>
+
+<div class="flow">
+<span class="hl">Attacking tick (SlaveAttackTick)</span>
+  |
+  +-- AoE Avoidance (выбежать из лужи?)
+  |
+  +-- Есть таргет? Жив? В бою?
+  |     <span class="val">НЕТ</span> -> остановить approach, return
+  |
+  +-- Игрок кастует? -> return
+  |
+  +-- MoveBehind / RangedPos (если включено)
+  |
+  +-- FaceInstant (поворот к таргету)
+  |
+  +-- TryGroundAoE (Гроза / Семя порчи)
+  |
+  +-- Approach через Lua:
+  |     if not CheckInteractDistance('target', distId)
+  |       then MoveForwardStart()
+  |       else MoveForwardStop()
+  |
+  +-- ExecuteLua(approachLua + enemyCountLua + spellFlags + fullScript)
+</div>
+
+<p>Параметр <code>distId</code>: <code>3</code> для мили (ближний бой), <code>1</code> для ранж (кастеры).</p>
+
+<h3 id="mode-auto">Auto</h3>
+<div class="card">
+<p>Гибридный режим: вне боя — follow за мастером, в бою — атака таргета мастера (авто-ассист каждые ~1 сек). Подробности в разделе <a href="#auto-detail">Авто-режим подробно</a>.</p>
+</div>
+
+<h3 id="mode-goto">GoingToPoint</h3>
+<div class="card">
+<p>Слейв бежит к заданной точке (Ctrl+ПКМ мастера). Логика 1:1 как Following, но вместо мастера — координаты. Используется <code>SlaveCtrl.CmdGotoPoint()</code> с поддержкой NavMesh.</p>
+</div>
+
+<!-- ==================== 6. АВТО-РЕЖИМ ==================== -->
+<h2 id="auto-detail">6. Авто-режим подробно</h2>
+
+<h3>Тоглы авто-режима</h3>
+<table>
+<tr><th>Тогл</th><th>Команда</th><th>Эффект</th></tr>
+<tr><td><code>AutoPauseFollow</code></td><td><code>AutoToggleFollow</code></td><td>Пауза follow: слейв стоит на месте, но бьёт</td></tr>
+<tr><td><code>AutoPauseAttack</code></td><td><code>AutoToggleAttack</code></td><td>Пауза атаки: слейв бежит за мастером, но не бьёт + ClearTarget()</td></tr>
+</table>
+
+<h3>SlaveAutoTick</h3>
+<p>Вызывается из <code>BotEngine.Tick()</code> только когда <code>AutoPauseAttack == false</code>. Каждые ~1 сек (7 тиков) делает <code>AssistUnit(masterName)</code> для получения таргета мастера.</p>
+
+<pre>
+public void SlaveAutoTick()
+{
+    if (Mode != SlaveMode.Auto || string.IsNullOrEmpty(MasterName)) return;
+    _autoAssistTick++;
+    if (_autoAssistTick < 7) return;  <span class="comment">// ~1 сек (7 * 150мс)</span>
+    _autoAssistTick = 0;
+
+    <span class="comment">// AssistUnit берёт CommandSourceName (мастер), не FollowTarget</span>
+    string assistName = _botEngine?.SlaveCtrl.CommandSourceName ?? MasterName;
+    _hook.ExecuteLua($"ClearTarget() AssistUnit('{assistName}')");
+}
+</pre>
+
+<h3>Логика Auto тика в BotEngine</h3>
+
+<div class="flow">
+<span class="hl">Auto tick (BotEngine)</span>
+  |
+  +-- BossEngine активен? -> тактика управляет
+  |
+  +-- SlaveAutoTick() <span class="comment">// ассист каждые ~1с</span>
+  |
+  +-- Есть таргет? (жив, в бою, не игрок, AutoPauseAttack=false)
+  |     <span class="val">ДА (В БОЮ)</span>:
+  |       HivemindFollowing? -> false, SlaveCtrl.CmdStop()
+  |       -> SlaveAttackTick() <span class="comment">// подбег + ротация</span>
+  |
+  |     <span class="val">НЕТ (ВНЕ БОЯ)</span>:
+  |       AutoPauseFollow? -> пропуск
+  |       !HivemindFollowing? -> CmdFollow(masterName)
+  |       -> SlaveCtrl.Tick() <span class="comment">// follow за мастером</span>
+</div>
+
+<div class="card card-warn">
+<p><strong>Важно:</strong> При переключении из боя в follow (и обратно) система корректно останавливает/запускает CTM движение через <code>SlaveCtrl.CmdStop()</code> / <code>SlaveCtrl.CmdFollow()</code>.</p>
+</div>
+
+<!-- ==================== 7. КОМАНДЫ МАСТЕРА ==================== -->
+<h2 id="commands">7. Команды мастера</h2>
+
+<h3 id="cmd-follow">Follow</h3>
+<div class="card">
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Follow</code></td></tr>
+<tr><td>Аргумент</td><td>Имя мастера (например, "Lovelion")</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+<tr><td>Метод мастера</td><td><code>CmdFollow()</code></td></tr>
+</table>
+<p><strong>Что делает слейв:</strong></p>
+<ol>
+    <li>Устанавливает <code>MasterName = arg</code></li>
+    <li>Переключает <code>Mode = Following</code></li>
+    <li><code>SlaveCtrl.CmdFollow(masterName)</code> — начинает CTM к мастеру</li>
+    <li><code>HivemindFollowing = true</code></li>
+    <li>Авто-включает ротацию и бафы через <code>OnAutoToggle</code></li>
+    <li><strong>НЕ трогает таргет</strong> — продолжает бить текущую цель</li>
+</ol>
+</div>
+
+<h3 id="cmd-attack">Attack</h3>
+<div class="card">
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Attack</code></td></tr>
+<tr><td>Аргумент</td><td>Имя мастера</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+<tr><td>Метод мастера</td><td><code>CmdAttack()</code></td></tr>
+</table>
+<p><strong>Что делает слейв:</strong></p>
+<ol>
+    <li>Устанавливает <code>MasterName</code></li>
+    <li><code>Mode = Attacking</code></li>
+    <li><code>HivemindFollowing = false</code></li>
+    <li><code>SlaveCtrl.CmdStop()</code> — остановить follow</li>
+    <li>Lua: <code>AssistUnit('мастер') StartAttack()</code> — берёт таргет мастера</li>
+    <li>Авто-включает ротацию и бафы</li>
+</ol>
+</div>
+
+<h3 id="cmd-stop">Stop</h3>
+<div class="card">
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Stop</code></td></tr>
+<tr><td>Аргумент</td><td>нет</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+<tr><td>Метод мастера</td><td><code>CmdStop()</code></td></tr>
+</table>
+<p><strong>Что делает слейв:</strong></p>
+<ol>
+    <li><code>Mode = Idle</code>, <code>ForceIdle = true</code></li>
+    <li><code>BotEngine.ForceStop()</code> — выключает ротацию, follow, бафы</li>
+    <li><code>SlaveCtrl.CmdStop()</code> — CTM на свою позицию (мгновенная остановка)</li>
+    <li>Lua: <code>ClearTarget()</code></li>
+    <li>Авто-выключает ротацию и бафы через <code>OnAutoToggle("rotation", false)</code></li>
+</ol>
+</div>
+
+<h3 id="cmd-auto">Auto</h3>
+<div class="card">
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Auto</code></td></tr>
+<tr><td>Аргумент</td><td>Имя мастера</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+<tr><td>Метод мастера</td><td><code>CmdAuto()</code></td></tr>
+</table>
+<p><strong>Что делает слейв:</strong></p>
+<ol>
+    <li><code>Mode = Auto</code></li>
+    <li><code>AutoPauseFollow = false</code>, <code>AutoPauseAttack = false</code></li>
+    <li><code>SlaveCtrl.CmdFollow(masterName)</code> — follow мастера</li>
+    <li><code>HivemindFollowing = true</code></li>
+    <li>Авто-включает ротацию и бафы</li>
+    <li>Далее BotEngine автоматически переключает follow/attack по наличию таргета</li>
+</ol>
+</div>
+
+<h3 id="cmd-scatter">Scatter</h3>
+<div class="card">
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Scatter</code></td></tr>
+<tr><td>Аргумент</td><td>Дистанция в метрах (по умолчанию 12)</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+<tr><td>Методы мастера</td><td><code>CmdScatter(meters)</code>, <code>CmdSmartScatter()</code></td></tr>
+</table>
+<p><strong>Что делает слейв:</strong></p>
+<ol>
+    <li>Вычисляет уникальный угол: <code>hash(имяСлейва) → baseAngle + facing * 0.3</code></li>
+    <li>Рассчитывает точку: <code>X + dist*cos(angle)</code>, <code>Y + dist*sin(angle)</code></li>
+    <li><code>CTM.MoveTo(targetX, targetY, Z)</code></li>
+    <li><strong>НЕ меняет Mode</strong> — продолжает текущий режим (атака/авто)</li>
+</ol>
+<p>Каждый слейв бежит в свою сторону благодаря уникальному хэшу имени.</p>
+</div>
+
+<h3 id="cmd-stack">Stack / StackMA</h3>
+<div class="card">
+<h4>Stack</h4>
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Stack</code></td></tr>
+<tr><td>Аргумент</td><td>Имя мастера</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+</table>
+<p>Обрабатывается идентично <code>Follow</code>: слейвы бегут к мастеру.</p>
+
+<h4>StackMA</h4>
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.StackMA</code></td></tr>
+<tr><td>Аргумент</td><td>нет</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+</table>
+<p><strong>Что делает слейв:</strong> Ищет MAINASSIST в рейде через Lua <code>GetRaidRosterInfo</code> и бежит к нему через <code>FollowUnit()</code>.</p>
+<pre>
+WB_MA=''
+for i=1,40 do
+    local n,_,_,_,_,_,_,_,_,role = GetRaidRosterInfo(i)
+    if role=='MAINASSIST' then WB_MA=n break end
+end
+if WB_MA~='' then FollowUnit(WB_MA) end
+</pre>
+</div>
+
+<h3 id="cmd-goto">Goto</h3>
+<div class="card">
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Goto</code></td></tr>
+<tr><td>Аргумент</td><td><code>X;Y;Z</code> (InvariantCulture, F1)</td></tr>
+<tr><td>ACK</td><td>Да</td></tr>
+<tr><td>Метод мастера</td><td><code>CmdGoto(x, y, z)</code></td></tr>
+</table>
+<p><strong>Что делает слейв:</strong></p>
+<ol>
+    <li>Парсит координаты из <code>arg.Split(';')</code></li>
+    <li><code>Mode = GoingToPoint</code></li>
+    <li><code>HivemindFollowing = false</code></li>
+    <li><code>SlaveCtrl.CmdStop()</code> — сброс follow</li>
+    <li><code>SlaveCtrl.CmdGotoPoint(x, y, z)</code> — навмеш или CTM</li>
+    <li>Авто-включает ротацию и бафы</li>
+</ol>
+</div>
+
+<h3 id="cmd-interact">Interact / Gossip</h3>
+<div class="card">
+<h4>Interact</h4>
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.Interact</code></td></tr>
+<tr><td>Аргумент</td><td>Имя мастера</td></tr>
+<tr><td>ACK</td><td>Нет</td></tr>
+</table>
+<p>Слейв: <code>AssistUnit(master) InteractUnit('target')</code> — берёт таргет мастера и взаимодействует с NPC.</p>
+<p>Мастер тоже выполняет <code>InteractUnit('target')</code> (чтобы видеть gossip опции).</p>
+
+<h4>GossipSelect</h4>
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.GossipSelect</code></td></tr>
+<tr><td>Аргумент</td><td>Номер пункта меню (int)</td></tr>
+<tr><td>ACK</td><td>Нет</td></tr>
+</table>
+<p>Слейв: Если GossipFrame закрыт — переоткрывает (<code>InteractUnit('target')</code>). Ждёт 500мс. Затем <code>SelectGossipOption(idx)</code>.</p>
+
+<h4>GossipAccept</h4>
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Enum</td><td><code>Command.GossipAccept</code></td></tr>
+<tr><td>Аргумент</td><td>нет</td></tr>
+<tr><td>ACK</td><td>Нет</td></tr>
+</table>
+<p>Слейв: Запускает async Task, пытается кликнуть <code>StaticPopup1Button1:Click()</code> до 6 раз с интервалом 500мс (ожидание появления popup).</p>
+
+<h4>GetMasterGossipOptions (мастер)</h4>
+<p>Мастер читает gossip-опции через Lua: <code>GetGossipOptions()</code> (до 20 пунктов). На время чтения <code>GossipReading=true</code> — hivemind polling приостанавливается (чтобы не перезаписать <code>WB_R</code>).</p>
+</div>
+
+<h3 id="cmd-service">Сервисные команды</h3>
+<div class="card">
+
+<h4>SetBuff</h4>
+<p>Формат: <code>SetBuff:тип=ключ</code> (например <code>blessing=BoM</code>, <code>aura=AuRet</code>). НЕ отменяет текущую команду слейва. Вызывает <code>OnBuffChanged</code> в UI.</p>
+
+<h4>Wipe</h4>
+<p>Переключает <code>WipeMode</code>: хилеры перестают хилить (используется для контролируемых вайпов).</p>
+
+<h4>RefreshGuid</h4>
+<p>Аргумент — имя игрока. Слейв сбрасывает кэшированный GUID и ищет заново через <code>SlaveCtrl.SetFollowTarget(name)</code>. Меняет ТОЛЬКО follow target, НЕ command source.</p>
+
+<h4>CastHeroism</h4>
+<p>Адресуется первому шаману среди слейвов. Слейв кастует spell ID 32182 (Героизм) через <code>GetSpellInfo(32182)</code>.</p>
+
+<h4>AutoToggleFollow / AutoToggleAttack</h4>
+<p>Работают только в Auto режиме. Переключают <code>AutoPauseFollow</code> / <code>AutoPauseAttack</code>. При паузе follow — <code>SlaveCtrl.CmdStop()</code>. При паузе атаки — <code>ClearTarget()</code>.</p>
+
+<h4>Ping</h4>
+<p>Слейв отвечает <code>Pong:имя</code> через addon message.</p>
+</div>
+
+<!-- ==================== 8. PER-SLAVE ==================== -->
+<h2 id="per-slave">8. Per-slave команды</h2>
+
+<h3>Механизм адресации</h3>
+<p>Есть два способа отправить команду конкретному слейву:</p>
+
+<h4>1. Через Selected (основной)</h4>
+<p>В UI мастер выбирает слейвов (checkbox). <code>SendCommand()</code> автоматически добавляет <code>~имя1,имя2</code> к аргументу. Слейв парсит <code>arg.Split('~', 2)</code> и проверяет <code>targetList.Contains(myName)</code>.</p>
+
+<h4>2. Через SendCommandToSlave (прямая адресация)</h4>
+<pre>
+public void SendCommandToSlave(string slaveName, Command cmd)
+{
+    string fullArg = $"{arg}~{slaveName}";
+    string msg = $"{cmd}:{fullArg}";
+    SendAddonMessage('WBHIVE', msg, 'PARTY');
+}
+</pre>
+<p>Используется для: per-slave Follow/Attack/Stop, RefreshGuid, SetBuff.</p>
+
+<h4>3. IgnoreGlobal</h4>
+<p>Если у слейва <code>IgnoreGlobal=true</code>, общие (неадресные) команды автоматически адресуются только слейвам без этого флага. Это позволяет, например, оставить одного слейва на месте, пока остальные бегут.</p>
+
+<!-- ==================== 9. SLAVE CONTROLLER ==================== -->
+<h2 id="slave-controller">9. SlaveController</h2>
+
+<p>Управляет движением слейва. Вызывается из <code>BotEngine.Tick()</code> каждые 150мс.</p>
+
+<h3>Состояния</h3>
+<table>
+<tr><th>State</th><th>Описание</th></tr>
+<tr><td><code>Idle</code></td><td>Не двигается</td></tr>
+<tr><td><code>Following</code></td><td>Бежит за мастером (CTM или NavMesh)</td></tr>
+<tr><td><code>GoingToPoint</code></td><td>Бежит к заданным координатам</td></tr>
+<tr><td><code>Stopped</code></td><td>Остановлен (через 3 сек -> Idle)</td></tr>
+<tr><td><code>Attacking</code></td><td>(определён но не используется в Tick)</td></tr>
+</table>
+
+<h3 id="sc-follow-logic">Follow логика (TickFollowing)</h3>
+
+<div class="flow">
+<span class="hl">TickFollowing (150мс)</span>
+  |
+  +-- FindMaster() -> GUID -> WowUnit
+  |
+  +-- dist = player.DistanceTo(master)
+  |
+  +-- dist <= FollowDistance?
+  |     <span class="val">ДА</span> -> CTM.Stop(), NavEngine.Stop()
+  |           _isFollowMoving = false  <span class="comment">"arrived"</span>
+  |
+  |     <span class="val">НЕТ</span>:
+  |       Вычислить goalX/goalY:
+  |         Точка на FollowDistance от мастера, в сторону игрока
+  |         <span class="dim">goal = master.pos + normalize(player - master) * followDist</span>
+  |
+  |       NavMesh подключён?
+  |         <span class="val">ДА</span> -> NavEngine.NavigateTo(goal)
+  |               Мастер сдвинулся < 5м? -> NavEngine.Tick() (не пересчитывать)
+  |               Мастер сдвинулся >= 5м -> Новый путь
+  |               NavMesh fail? -> Fallback CTM
+  |
+  |         <span class="val">НЕТ</span> -> CTM.MoveTo(goal)
+  |               Мастер сдвинулся < 3м и CTM активен? -> пропустить
+</div>
+
+<h3>CmdStop (мгновенная остановка)</h3>
+<pre>
+public void CmdStop()
+{
+    // CTM на свою позицию — мгновенная остановка (CTM перебивает CTM)
+    var player = _objectManager.LocalPlayer;
+    _ctm.MoveTo(player.X, player.Y, player.Z, 0.5f);
+    // Lua: остановить все движения
+    _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()");
+    CurrentState = State.Stopped;
+    _stopTimer = 20;  // 3 сек → Idle
+}
+</pre>
+
+<h3 id="sc-guid">Поиск GUID мастера</h3>
+<p>Метод <code>FindMasterGuid(name)</code> ищет GUID юнита в 3 этапа:</p>
+
+<div class="flow">
+<span class="hl">FindMasterGuid("Lovelion")</span>
+  |
+  +-- 1. <span class="val">Lua party search</span>
+  |     for i=1,4 do
+  |       if UnitName('party'..i) == 'Lovelion'
+  |         then WB_R = UnitGUID('party'..i)
+  |     Парсит hex GUID (0x...)
+  |
+  +-- 2. <span class="val">ObjectManager Units</span> (NPC по имени)
+  |     Перебирает все Units, ищет по имени
+  |     Берёт ближайшего (по dist)
+  |
+  +-- 3. <span class="val">TargetUnit fallback</span>
+  |     Сохраняет текущий таргет
+  |     TargetUnit('Lovelion')
+  |     Берёт GUID нового таргета
+  |     Восстанавливает предыдущий таргет
+</div>
+
+<h3 id="sc-cmdsource">CommandSource vs FollowTarget</h3>
+<div class="card card-accent">
+<p>Разделены два понятия:</p>
+<table>
+<tr><th>Свойство</th><th>Назначение</th><th>Когда меняется</th></tr>
+<tr><td><code>CommandSourceName</code></td><td>Кто командует (для AssistUnit)</td><td>Первая команда (Follow/Attack/Auto)</td></tr>
+<tr><td><code>FollowTargetName</code></td><td>За кем бежать</td><td>RefreshGuid, SetFollowTarget</td></tr>
+</table>
+<p>Это позволяет слейву бежать за одним персонажем (танком), но ассистить другого (мастера). Пример: <code>RefreshGuid:Танк</code> — слейв бежит за танком, но <code>SlaveAutoTick</code> делает <code>AssistUnit(CommandSourceName)</code> — берёт таргет мастера.</p>
+</div>
+
+<!-- ==================== 10. MT/OT ==================== -->
+<h2 id="mt-ot">10. MainTank / OffTank</h2>
+
+<p>Определение ролей происходит в Lua-скрипте ротаций (<code>AllRotations.cs</code>), а не в Hivemind. Однако это напрямую влияет на поведение слейвов-танков.</p>
+
+<h3>Определение WB_MT (кэш 5 сек)</h3>
+<pre>
+<span class="comment">-- Выполняется в начале каждого скрипта ротации</span>
+<span class="keyword">if</span> not WB_MT or not WB_MT_T or GetTime()-WB_MT_T>5 <span class="keyword">then</span>
+    WB_MT = nil
+    WB_MT_T = GetTime()
+    local nr = GetNumRaidMembers()
+    <span class="keyword">if</span> nr > 0 <span class="keyword">then</span>
+        <span class="keyword">for</span> i=1,nr <span class="keyword">do</span>
+            local n,_,_,_,_,_,_,_,_,role = GetRaidRosterInfo(i)
+            <span class="keyword">if</span> role == 'MAINTANK' <span class="keyword">then</span> WB_MT = n; <span class="keyword">break end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+
+local myName = UnitName('player')
+local isMT = (WB_MT and WB_MT == myName)
+local isOT = (not isMT and (WB_S and WB_S.AutoTaunt ~= false))
+</pre>
+
+<h3>TryTaunt — разное поведение для MT и OT</h3>
+
+<table>
+<tr><th>Роль</th><th>Условие</th><th>Логика таунта</th></tr>
+<tr><td><span class="tag tag-master">MT</span> (isMT)</td><td><code>WB_MT == myName</code></td><td>Тянуть ВСЕ что бьёт не меня (<code>targettarget ~= myName</code>)</td></tr>
+<tr><td><span class="tag tag-slave">OT</span> (isOT)</td><td><code>!isMT && AutoTaunt != false</code></td><td>Тянуть ТОЛЬКО аддов: моб бьёт НЕ мейнтанка и НЕ меня (<code>targettarget ~= myName and ~= WB_MT</code>)</td></tr>
+<tr><td><span class="tag tag-both">Нет МТ</span></td><td>Не рейд / нет MAINTANK</td><td>Старая логика: тянуть всё что бьёт не меня</td></tr>
+</table>
+
+<pre>
+<span class="keyword">local function</span> TryTaunt(tauntId)
+    <span class="keyword">if</span> not WB_S or WB_S.AutoTaunt==false <span class="keyword">then return</span> false <span class="keyword">end</span>
+    <span class="keyword">if</span> not IR(tauntId) <span class="keyword">then return</span> false <span class="keyword">end</span>       <span class="comment">-- не готов</span>
+    <span class="keyword">if</span> not UnitAffectingCombat('target') <span class="keyword">then return</span> false <span class="keyword">end</span>
+
+    local tv = UnitName('targettarget')
+    <span class="keyword">if</span> not tv <span class="keyword">then return</span> false <span class="keyword">end</span>
+
+    <span class="keyword">if</span> isMT <span class="keyword">then</span>
+        <span class="keyword">if</span> tv ~= myName <span class="keyword">then</span> Cast(tauntId) <span class="keyword">return</span> true <span class="keyword">end</span>
+    <span class="keyword">elseif</span> isOT and WB_MT <span class="keyword">then</span>
+        <span class="keyword">if</span> tv ~= myName and tv ~= WB_MT <span class="keyword">then</span> Cast(tauntId) <span class="keyword">return</span> true <span class="keyword">end</span>
+    <span class="keyword">else</span>
+        <span class="keyword">if</span> tv ~= myName <span class="keyword">then</span> Cast(tauntId) <span class="keyword">return</span> true <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    <span class="keyword">return</span> false
+<span class="keyword">end</span>
+</pre>
+
+<h3>Spell ID таунтов по классам</h3>
+<table>
+<tr><th>Класс</th><th>Спек</th><th>Spell ID</th><th>Навание</th></tr>
+<tr><td>Warrior</td><td>Prot</td><td>355</td><td>Taunt</td></tr>
+<tr><td>Paladin</td><td>Prot</td><td>62124</td><td>Hand of Reckoning</td></tr>
+<tr><td>Death Knight</td><td>Blood</td><td>56222</td><td>Dark Command</td></tr>
+<tr><td>Druid</td><td>Feral (Bear)</td><td>6795</td><td>Growl</td></tr>
+</table>
+
+<!-- ==================== CTM WATCH ==================== -->
+<h2 id="ctm-watch">11. Ctrl+ПКМ навигация</h2>
+
+<p>Мастер может отправить слейвов в точку зажав Ctrl и кликнув ПКМ по земле. Реализовано через быстрый поток (5мс), следящий за CTM памятью.</p>
+
+<h3>Как работает</h3>
+
+<div class="flow">
+<span class="hl">CtmWatch Thread (5мс цикл)</span>
+  |
+  +-- Ctrl зажат?
+  |     <span class="val">НЕТ</span> -> обновить baseline (lastCtmX/Y/Z)
+  |
+  |     <span class="val">ДА</span> -> CTM action == MoveTo?
+  |           <span class="val">НЕТ</span> -> пропуск
+  |           <span class="val">ДА</span> -> Координаты сдвинулись > 1м?
+  |                 <span class="val">НЕТ</span> -> пропуск
+  |                 <span class="val">ДА</span>:
+  |                   1. CTM мастера на свою позицию
+  |                      <span class="comment">(отменить движение мастера)</span>
+  |                   2. _gotoFired = true
+  |                      _gotoX/Y/Z = координаты клика
+  |
+  <span class="dim">--- следующий тик BotEngine (150мс) ---</span>
+  |
+  +-- MasterTick():
+        if _gotoFired:
+          _gotoFired = false
+          CmdGoto(_gotoX, _gotoY, _gotoZ)
+</pre>
+</div>
+
+<div class="card card-info">
+<p><strong>Антиход мастера:</strong> При Ctrl+ПКМ мастер НЕ бежит к точке — его CTM перебивается на свою же позицию (<code>_ctm.MoveTo(cachedPlayerX, cachedPlayerY, cachedPlayerZ, 0.5f)</code>). Бегут только слейвы.</p>
+</div>
+
+<h3>StartCtmWatch / StopCtmWatch</h3>
+<p><code>StartCtmWatch()</code> запускается автоматически при <code>CurrentRole = Master</code>. Останавливается при смене роли. Поток фоновый (<code>IsBackground = true</code>).</p>
+
+<!-- ==================== NAV SELECTION ==================== -->
+<h2 id="nav-selection">12. Выбор слейвов для навигации</h2>
+
+<div class="card">
+<p>Мастер может выбрать конкретных слейвов для Ctrl+ПКМ навигации через dropdown/контекстное меню.</p>
+</div>
+
+<table>
+<tr><th>Коллекция</th><th>Тип</th><th>Описание</th></tr>
+<tr><td><code>NavSelectedSlaves</code></td><td>HashSet&lt;string&gt;</td><td>Слейвы выбранные для следующего Goto</td></tr>
+<tr><td><code>NavPinnedSlaves</code></td><td>HashSet&lt;string&gt;</td><td>Закреплённые — не снимаются после Goto</td></tr>
+</table>
+
+<h3>Поведение</h3>
+<ul>
+    <li>Если <code>NavSelectedSlaves</code> не пусто — Goto идёт только выбранным</li>
+    <li>После Goto незакреплённые автоматически снимаются: <code>NavSelectedSlaves.RemoveWhere(n => !NavPinnedSlaves.Contains(n))</code></li>
+    <li>Закреплённые остаются и получат следующий Goto тоже</li>
+    <li>Если <code>NavSelectedSlaves</code> пусто — используется <code>SendCommand(Goto)</code> для всех</li>
+</ul>
+
+<hr class="sep">
+
+<h2>Сводная таблица всех команд</h2>
+
+<table>
+<tr><th>Command</th><th>ACK</th><th>Аргумент</th><th>Результат на слейве</th></tr>
+<tr><td><code>Follow</code></td><td>Да</td><td>имя мастера</td><td>Follow + ротация + бафы</td></tr>
+<tr><td><code>Attack</code></td><td>Да</td><td>имя мастера</td><td>AssistUnit + атака, без follow</td></tr>
+<tr><td><code>Stop</code></td><td>Да</td><td>-</td><td>Полный стоп + ClearTarget</td></tr>
+<tr><td><code>Auto</code></td><td>Да</td><td>имя мастера</td><td>Follow + авто-ассист (~1с)</td></tr>
+<tr><td><code>AutoToggleFollow</code></td><td>Нет</td><td>-</td><td>Пауза/возобновление follow в Auto</td></tr>
+<tr><td><code>AutoToggleAttack</code></td><td>Нет</td><td>-</td><td>Пауза/возобновление атаки в Auto</td></tr>
+<tr><td><code>Scatter</code></td><td>Да</td><td>дистанция (м)</td><td>Бежит в уникальном направлении</td></tr>
+<tr><td><code>Stack</code></td><td>Да</td><td>имя мастера</td><td>= Follow</td></tr>
+<tr><td><code>StackMA</code></td><td>Да</td><td>-</td><td>Бежит к MAINASSIST рейда</td></tr>
+<tr><td><code>Goto</code></td><td>Да</td><td>X;Y;Z</td><td>Бежит к точке (NavMesh/CTM)</td></tr>
+<tr><td><code>Interact</code></td><td>Нет</td><td>имя мастера</td><td>AssistUnit + InteractUnit('target')</td></tr>
+<tr><td><code>GossipSelect</code></td><td>Нет</td><td>индекс</td><td>SelectGossipOption(idx)</td></tr>
+<tr><td><code>GossipAccept</code></td><td>Нет</td><td>-</td><td>Кликает popup кнопку (async)</td></tr>
+<tr><td><code>SetBuff</code></td><td>Нет</td><td>тип=ключ</td><td>Меняет бафф в UI</td></tr>
+<tr><td><code>Wipe</code></td><td>Нет</td><td>-</td><td>Тогл WipeMode (хилы стоп)</td></tr>
+<tr><td><code>RefreshGuid</code></td><td>Нет</td><td>имя</td><td>Сброс + поиск GUID follow target</td></tr>
+<tr><td><code>CastHeroism</code></td><td>Нет</td><td>-</td><td>Каст spell 32182 (шаман)</td></tr>
+<tr><td><code>Ping</code></td><td>Нет</td><td>-</td><td>Ответ Pong</td></tr>
+<tr><td><code>Register</code></td><td>-</td><td>имя;класс</td><td>Мастер добавляет в ConnectedSlaves</td></tr>
+</table>
+
+<hr class="sep">
+<p style="text-align:center;color:#555;font-size:12px;margin-top:40px;">WowBot Hivemind Documentation | Generated 2026-04-09</p>
+
+</div>
+</body>
+</html>

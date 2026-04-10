@@ -6,6 +6,7 @@ namespace WowBot.Core.Game.Entities;
 public class WowObject : IWowObject
 {
     protected readonly MemoryReader Memory;
+    protected readonly uint DescriptorBase;
 
     public uint BaseAddress { get; }
     public ulong Guid { get; }
@@ -17,9 +18,8 @@ public class WowObject : IWowObject
         BaseAddress = baseAddress;
         Guid = memory.ReadUInt64(baseAddress + Offsets.ObjectGuid);
         Type = (WowObjectType)memory.ReadInt32(baseAddress + Offsets.ObjectType);
+        DescriptorBase = memory.ReadUInt32(baseAddress + Offsets.ObjectDescriptors);
     }
-
-    protected uint DescriptorBase => Memory.ReadUInt32(BaseAddress + Offsets.ObjectDescriptors);
 
     protected int ReadDescriptorInt(uint index) =>
         Memory.ReadInt32(DescriptorBase + index * 4);

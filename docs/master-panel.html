@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WowBot Master Panel — Требования и спецификация</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text2: #8b949e;
+  --accent: #c8aa6e;
+  --accent2: #e8c840;
+  --green: #3fb950;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --orange: #d29922;
+  --purple: #bc8cff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 32px; }
+.doc-header { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 40px; }
+.doc-header h1 { font-size: 32px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+.doc-header .subtitle { font-size: 16px; color: var(--text2); }
+.doc-header .meta { display: flex; gap: 24px; margin-top: 12px; font-size: 13px; color: var(--text2); }
+.doc-header .meta span { display: flex; align-items: center; gap: 6px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-live { background: #0d2818; color: var(--green); border: 1px solid #1b4332; }
+.badge-issue { background: #3d1f00; color: var(--orange); border: 1px solid #5c3a00; }
+.badge-critical { background: #3d0c0c; color: var(--red); border: 1px solid #5c1a1a; }
+.badge-minor { background: #0d2040; color: var(--blue); border: 1px solid #1a3a5c; }
+.toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-bottom: 40px; }
+.toc h3 { font-size: 14px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.toc ol { padding-left: 20px; }
+.toc li { margin: 6px 0; }
+.toc a { color: var(--blue); text-decoration: none; font-size: 14px; }
+.toc a:hover { text-decoration: underline; }
+h2 { font-size: 24px; color: var(--accent); margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+h2:first-of-type { margin-top: 0; }
+h3 { font-size: 18px; color: var(--text); margin: 28px 0 12px; display: flex; align-items: center; gap: 8px; }
+h4 { font-size: 15px; color: var(--accent2); margin: 20px 0 8px; }
+p { margin: 8px 0; font-size: 15px; color: var(--text2); }
+strong { color: var(--text); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 12px 0; }
+.cmd-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 20px 0; overflow: hidden; }
+.cmd-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.cmd-icon { width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+.cmd-header h3 { margin: 0; font-size: 18px; }
+.cmd-header .cmd-name { font-size: 12px; color: var(--text2); font-family: monospace; }
+.cmd-body { padding: 20px; }
+.cmd-body section { margin-bottom: 20px; }
+.cmd-body section:last-child { margin-bottom: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 12px 0; }
+th { text-align: left; padding: 10px 12px; background: var(--surface2); color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+td code { background: var(--surface2); color: var(--accent2); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+ul, ol { padding-left: 20px; margin: 8px 0; }
+li { margin: 4px 0; font-size: 14px; color: var(--text2); }
+li strong { color: var(--text); }
+pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; color: var(--text2); overflow-x: auto; margin: 12px 0; line-height: 1.5; }
+code { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; }
+.hl-kw { color: var(--purple); }
+.hl-str { color: #a5d6ff; }
+.hl-fn { color: #d2a8ff; }
+.hl-cm { color: #484f58; }
+.flow { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 12px 0; font-family: 'Cascadia Code', monospace; font-size: 13px; line-height: 1.7; color: var(--text2); white-space: pre; overflow-x: auto; }
+.flow .step { color: var(--accent); font-weight: 600; }
+.flow .arrow { color: var(--text2); }
+.flow .note { color: #484f58; font-style: italic; }
+.state-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin: 16px 0; }
+.state-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; }
+.state-box { display: inline-flex; align-items: center; justify-content: center; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; min-width: 100px; text-align: center; }
+.state-idle { background: #1c2128; color: var(--text2); border: 1px solid var(--border); }
+.state-follow { background: #0d2818; color: var(--green); border: 1px solid #1b4332; }
+.state-attack { background: #3d0c0c; color: var(--red); border: 1px solid #5c1a1a; }
+.state-auto { background: #1a1528; color: var(--purple); border: 1px solid #332a4d; }
+.state-goto { background: #1a1a00; color: var(--orange); border: 1px solid #3d3a00; }
+.arrow-right { color: var(--text2); font-size: 18px; }
+.issue { background: var(--surface); border-left: 3px solid var(--orange); border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 12px 0; }
+.issue.critical { border-left-color: var(--red); }
+.issue.info { border-left-color: var(--blue); }
+.issue h4 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.issue p { margin: 4px 0; font-size: 13px; }
+.issue code { font-size: 12px; }
+.timeline { position: relative; padding-left: 24px; margin: 16px 0; }
+.timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--border); }
+.timeline-item { position: relative; padding: 8px 0 8px 16px; font-size: 13px; color: var(--text2); }
+.timeline-item::before { content: ''; position: absolute; left: -20px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+.timeline-item strong { color: var(--text); }
+.timeline-item code { font-size: 12px; }
+hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+.sticky-nav { position: fixed; top: 0; left: 0; right: 0; background: rgba(13, 17, 23, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); z-index: 100; padding: 8px 32px; display: flex; align-items: center; gap: 24px; font-size: 13px; }
+.sticky-nav a { color: var(--text2); text-decoration: none; }
+.sticky-nav a:hover { color: var(--accent); }
+.sticky-nav .logo { color: var(--accent); font-weight: 700; font-size: 14px; }
+body { padding-top: 44px; }
+</style>
+</head>
+<body>
+
+<nav class="sticky-nav">
+  <span class="logo">WowBot</span>
+  <a href="#overview">Обзор</a>
+  <a href="#commands">Команды</a>
+  <a href="#flow">Поток данных</a>
+  <a href="#ack">ACK система</a>
+  <a href="#states">Состояния</a>
+  <a href="#hotkeys">Хоткеи</a>
+  <a href="#issues">Проблемы</a>
+</nav>
+
+<div class="container">
+
+<!-- Шапка -->
+<div class="doc-header">
+  <h1>Master Panel &mdash; Требования и спецификация</h1>
+  <p class="subtitle">Система управления Hivemind для мультибоксинга WoW 3.3.5a</p>
+  <div class="meta">
+    <span><strong>Версия:</strong> 2.0 (после рефактора)</span>
+    <span><strong>Обновлено:</strong> 2026-04-10</span>
+    <span><strong>Исходники:</strong> MasterPanel.xaml.cs, BotEngine.cs, Hivemind.cs</span>
+    <span><span class="badge badge-live">Live</span></span>
+  </div>
+</div>
+
+<!-- Содержание -->
+<div class="toc">
+  <h3>Содержание</h3>
+  <ol>
+    <li><a href="#overview">Обзор продукта и бизнес-требования</a></li>
+    <li><a href="#commands">Спецификация команд (4 основные)</a></li>
+    <li><a href="#flow">Поток данных: Кнопка &rarr; Исполнение на слейве</a></li>
+    <li><a href="#ack">ACK система &mdash; Гарантированная доставка</a></li>
+    <li><a href="#states">Машина состояний: Режимы слейва</a></li>
+    <li><a href="#hotkeys">Система горячих клавиш</a></li>
+    <li><a href="#ui">UI раскладка и панель слейвов</a></li>
+    <li><a href="#issues">Найденные проблемы и пробелы</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- 1. ОБЗОР -->
+<!-- ============================================================ -->
+<h2 id="overview">1. Обзор продукта</h2>
+
+<h3>Бизнес-требования</h3>
+<div class="card">
+  <table>
+    <tr><th style="width:220px">Требование</th><th>Описание</th><th style="width:80px">Статус</th></tr>
+    <tr>
+      <td><strong>БТ-1: Групповое управление</strong></td>
+      <td>Мастер управляет 1+ слейвами в пати/рейде WoW. Один клик &mdash; все слейвы исполняют.</td>
+      <td><span class="badge badge-live">Готово</span></td>
+    </tr>
+    <tr>
+      <td><strong>БТ-2: Следование</strong></td>
+      <td>Слейвы физически бегут за мастером, держат дистанцию 8м. Возобновляют после боя.</td>
+      <td><span class="badge badge-live">Готово</span></td>
+    </tr>
+    <tr>
+      <td><strong>БТ-3: Ассист и атака</strong></td>
+      <td>По команде слейвы берут таргет мастера и выполняют полную боевую ротацию.</td>
+      <td><span class="badge badge-live">Готово</span></td>
+    </tr>
+    <tr>
+      <td><strong>БТ-4: Авто режим</strong></td>
+      <td>Гибрид: следование вне боя, авто-ассист при входе в бой. Бесшовные переходы.</td>
+      <td><span class="badge badge-live">Готово</span></td>
+    </tr>
+    <tr>
+      <td><strong>БТ-5: Экстренная остановка</strong></td>
+      <td>Мгновенный стоп: остановка движения, сброс таргета, переход в idle. Должно работать всегда.</td>
+      <td><span class="badge badge-issue">Проблема</span></td>
+    </tr>
+    <tr>
+      <td><strong>БТ-6: Надёжная доставка</strong></td>
+      <td>Команды должны доставляться и подтверждаться. Повтор при неудаче. Статус по каждому слейву.</td>
+      <td><span class="badge badge-live">Готово</span></td>
+    </tr>
+    <tr>
+      <td><strong>БТ-7: Горячие клавиши</strong></td>
+      <td>Назначение F1-F12 / 0-9 / A-Z как глобальных хоткеев для Атаки, Ко мне, Стоп. Работают без фокуса.</td>
+      <td><span class="badge badge-live">Готово</span></td>
+    </tr>
+  </table>
+</div>
+
+<h3>Технические требования</h3>
+<div class="card">
+  <table>
+    <tr><th style="width:220px">Требование</th><th>Реализация</th></tr>
+    <tr>
+      <td><strong>ТТ-1: Неактивируемое окно</strong></td>
+      <td>WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW &mdash; клик по панели НЕ крадёт фокус у WoW</td>
+    </tr>
+    <tr>
+      <td><strong>ТТ-2: Дочернее окно WoW</strong></td>
+      <td><code>SetParent(masterPanelHwnd, wowHwnd)</code> &mdash; панель привязана к окну WoW</td>
+    </tr>
+    <tr>
+      <td><strong>ТТ-3: Канал связи</strong></td>
+      <td>SendAddonMessage('WBHIVE', ..., 'PARTY') &mdash; встроенный аддон-канал WoW</td>
+    </tr>
+    <tr>
+      <td><strong>ТТ-4: Частота тиков</strong></td>
+      <td>Таймер BotEngine: <strong>150мс</strong>. Обработка команд каждый тик.</td>
+    </tr>
+    <tr>
+      <td><strong>ТТ-5: Единый ProcessCommand</strong></td>
+      <td>И UI, и Hivemind команды проходят через <code>BotEngine.ProcessCommand()</code></td>
+    </tr>
+    <tr>
+      <td><strong>ТТ-6: ACK протокол</strong></td>
+      <td>Sequence numbers, повтор 500мс, макс. 3 попытки, статус по каждому слейву</td>
+    </tr>
+  </table>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 2. КОМАНДЫ -->
+<!-- ============================================================ -->
+<h2 id="commands">2. Спецификация команд</h2>
+
+<p>Четыре основные команды формируют главный контрольный цикл. У каждой есть UI-кнопка, опциональный хоткей и путь через Hivemind broadcast.</p>
+
+<!-- КО МНЕ -->
+<div class="cmd-card">
+  <div class="cmd-header">
+    <div class="cmd-icon" style="background:#0d2818; color:#3fb950;">&#x1F3C3;</div>
+    <div>
+      <h3 style="margin:0;">Ко мне (Follow)</h3>
+      <span class="cmd-name">BotCommandType.Follow &mdash; "follow"</span>
+    </div>
+  </div>
+  <div class="cmd-body">
+    <section>
+      <h4>Бизнес-смысл</h4>
+      <p>Все слейвы физически бегут к мастеру и следуют за ним, держа дистанцию ~8м. Ротация и баффы включаются автоматически &mdash; слейвы готовы к бою на ходу.</p>
+    </section>
+
+    <section>
+      <h4>Точки вызова</h4>
+      <table>
+        <tr><th>Источник</th><th>Путь в коде</th></tr>
+        <tr><td>UI кнопка</td><td><code>BtnFollow_Click()</code> &rarr; <code>SendCommand("follow")</code></td></tr>
+        <tr><td>Хоткей</td><td><code>WM_HOTKEY (HK_FOLLOW=2)</code> &rarr; <code>SendCommand("follow")</code></td></tr>
+        <tr><td>Hivemind (слейв)</td><td><code>CHAT_MSG_ADDON</code> &rarr; парсинг <code>Command.Follow</code></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Изменение состояния (слейв)</h4>
+      <table>
+        <tr><th>Переменная</th><th>До</th><th>После</th></tr>
+        <tr><td><code>Hivemind.Mode</code></td><td>любой</td><td><code>SlaveMode.Following</code></td></tr>
+        <tr><td><code>Hivemind.MasterName</code></td><td>-</td><td>имя персонажа мастера</td></tr>
+        <tr><td><code>HivemindFollowing</code></td><td>false</td><td><strong>true</strong></td></tr>
+        <tr><td><code>_rotationEnabled</code></td><td>false</td><td><strong>true</strong> (авто)</td></tr>
+        <tr><td><code>BuffsEnabled</code></td><td>false</td><td><strong>true</strong> (авто)</td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Логика движения</h4>
+      <ul>
+        <li><strong>Целевая точка:</strong> позиция мастера + 8м смещение в направлении слейва</li>
+        <li><strong>Порог обновления:</strong> пересчёт CTM если мастер сдвинулся &gt;3м</li>
+        <li><strong>Навигация:</strong> NavEngine (навмеш) если подключён, иначе прямой CTM</li>
+        <li><strong>Условие остановки:</strong> расстояние до мастера &le; 8м</li>
+        <li><strong>Реализация:</strong> <code>SlaveController.TickFollowing()</code> &rarr; <code>CTM.MoveTo()</code></li>
+      </ul>
+    </section>
+
+    <section>
+      <h4>Соло режим</h4>
+      <p>Без Hivemind: просто ставит <code>_followEnabled = true</code> и запускает <code>FollowViaCTM()</code> с кружением на 8м вокруг таргета.</p>
+    </section>
+  </div>
+</div>
+
+<!-- БЕЙТЕ ТАРГЕТ -->
+<div class="cmd-card">
+  <div class="cmd-header">
+    <div class="cmd-icon" style="background:#3d0c0c; color:#f85149;">&#x2694;</div>
+    <div>
+      <h3 style="margin:0;">Бейте таргет (Attack)</h3>
+      <span class="cmd-name">BotCommandType.Attack &mdash; "attack"</span>
+    </div>
+  </div>
+  <div class="cmd-body">
+    <section>
+      <h4>Бизнес-смысл</h4>
+      <p>Слейвы берут таргет мастера через ассист и бьют полной ротацией. Следование останавливается &mdash; чистый боевой режим. Для фокус-файра по приоритетной цели.</p>
+    </section>
+
+    <section>
+      <h4>Точки вызова</h4>
+      <table>
+        <tr><th>Источник</th><th>Путь в коде</th></tr>
+        <tr><td>UI кнопка</td><td><code>BtnAttack_Click()</code> &rarr; <code>SendCommand("attack")</code></td></tr>
+        <tr><td>Хоткей</td><td><code>WM_HOTKEY (HK_ATTACK=1)</code> &rarr; <code>SendCommand("attack")</code></td></tr>
+        <tr><td>Hivemind (слейв)</td><td><code>CHAT_MSG_ADDON</code> &rarr; парсинг <code>Command.Attack</code></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Изменение состояния (слейв)</h4>
+      <table>
+        <tr><th>Переменная</th><th>До</th><th>После</th></tr>
+        <tr><td><code>Hivemind.Mode</code></td><td>любой</td><td><code>SlaveMode.Attacking</code></td></tr>
+        <tr><td><code>HivemindFollowing</code></td><td>true</td><td><strong>false</strong> (follow ВЫКЛ)</td></tr>
+        <tr><td><code>_rotationEnabled</code></td><td>-</td><td><strong>true</strong></td></tr>
+        <tr><td><code>BuffsEnabled</code></td><td>-</td><td><strong>true</strong></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Последовательность исполнения</h4>
+      <ol>
+        <li><code>SlaveCtrl.CmdStop()</code> &mdash; остановка текущего движения</li>
+        <li><code>ExecuteLua("AssistUnit('мастер') StartAttack()")</code> &mdash; взять таргет мастера, начать автоатаку</li>
+        <li>Каждый тик (150мс): <code>SlaveAttackTick()</code> &rarr; <code>CombatExecutor.ExecuteCombatTick()</code></li>
+        <li>CombatExecutor: позиционирование (MoveBehind/RangedPos), Ground AoE, SmartTaunt, Lua ротация</li>
+        <li>Скрипт подхода: <code>if not CheckInteractDistance('target', 3) then MoveForwardStart()...</code> (мили)</li>
+      </ol>
+    </section>
+
+    <section>
+      <h4>Ключевые Lua операции</h4>
+      <pre><span class="hl-cm">-- Сразу при получении команды</span>
+<span class="hl-fn">AssistUnit</span>(<span class="hl-str">'Lovelion'</span>)     <span class="hl-cm">-- Взять таргет мастера</span>
+<span class="hl-fn">StartAttack</span>()               <span class="hl-cm">-- Начать автоатаку</span>
+
+<span class="hl-cm">-- Каждый тик (скрипт ротации)</span>
+enemyCountLua + spellFlagsLua + rotationScript  <span class="hl-cm">-- ~500мс Lua</span></pre>
+    </section>
+  </div>
+</div>
+
+<!-- АВТО -->
+<div class="cmd-card">
+  <div class="cmd-header">
+    <div class="cmd-icon" style="background:#1a1528; color:#bc8cff;">&#x1F504;</div>
+    <div>
+      <h3 style="margin:0;">Авто</h3>
+      <span class="cmd-name">BotCommandType.Auto &mdash; "auto"</span>
+    </div>
+  </div>
+  <div class="cmd-body">
+    <section>
+      <h4>Бизнес-смысл</h4>
+      <p>Режим "настроил и забыл". Слейвы следуют за мастером вне боя, автоматически ассистят при входе в бой, бесшовно возвращаются к следованию после боя. Два под-тогла позволяют независимо паузить follow или attack.</p>
+    </section>
+
+    <section>
+      <h4>Точки вызова</h4>
+      <table>
+        <tr><th>Источник</th><th>Путь в коде</th></tr>
+        <tr><td>UI кнопка</td><td><code>BtnAuto_Click()</code> &rarr; <code>SendCommand("auto")</code></td></tr>
+        <tr><td>Hivemind (слейв)</td><td><code>CHAT_MSG_ADDON</code> &rarr; парсинг <code>Command.Auto</code></td></tr>
+      </table>
+      <p style="margin-top:8px;"><strong>Важно:</strong> У Авто НЕТ хоткея. Только Атака, Ко мне и Стоп имеют хоткеи.</p>
+    </section>
+
+    <section>
+      <h4>Изменение состояния (слейв)</h4>
+      <table>
+        <tr><th>Переменная</th><th>До</th><th>После</th></tr>
+        <tr><td><code>Hivemind.Mode</code></td><td>любой</td><td><code>SlaveMode.Auto</code></td></tr>
+        <tr><td><code>AutoPauseFollow</code></td><td>-</td><td><strong>false</strong> (сброс)</td></tr>
+        <tr><td><code>AutoPauseAttack</code></td><td>-</td><td><strong>false</strong> (сброс)</td></tr>
+        <tr><td><code>HivemindFollowing</code></td><td>-</td><td><strong>true</strong> (начать follow)</td></tr>
+        <tr><td><code>_rotationEnabled</code></td><td>-</td><td><strong>true</strong></td></tr>
+        <tr><td><code>BuffsEnabled</code></td><td>-</td><td><strong>true</strong></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Логика тика Авто (SlaveAutoModeTick)</h4>
+      <div class="flow"><span class="step">Каждые 150мс:</span>
+<span class="arrow"> 1.</span> <span class="hl-fn">SlaveAutoTick()</span> раз в ~1 сек: <span class="hl-fn">AssistUnit</span>('мастер')  <span class="note">// взять таргет мастера</span>
+
+<span class="arrow"> 2.</span> <span class="hl-kw">Оценка:</span> hasAutoTarget = таргет жив И в бою И !AutoPauseAttack
+
+<span class="arrow"> 3a.</span> <span class="hl-kw">hasAutoTarget = true</span>  &rarr;  В БОЮ
+     - Остановить follow если активен: <span class="hl-fn">SlaveCtrl.CmdStop()</span>
+     - Бой: <span class="hl-fn">SlaveAttackTick()</span> &rarr; <span class="hl-fn">CombatExecutor.ExecuteCombatTick()</span>
+
+<span class="arrow"> 3b.</span> <span class="hl-kw">hasAutoTarget = false</span>  &rarr;  ВНЕ БОЯ
+     - Возобновить follow: <span class="hl-fn">SlaveCtrl.CmdFollow(мастер)</span>
+     - Движение: <span class="hl-fn">SlaveCtrl.Tick()</span> &rarr; CTM к мастеру</div>
+    </section>
+
+    <section>
+      <h4>Под-тоглы</h4>
+      <table>
+        <tr><th>Тогл</th><th>Команда</th><th>Эффект</th></tr>
+        <tr>
+          <td><strong>Пауза Follow</strong></td>
+          <td><code>AutoToggleFollow</code></td>
+          <td>Переключает <code>AutoPauseFollow</code>. Если на паузе: не двигается вне боя. Если снята: CTM к мастеру.</td>
+        </tr>
+        <tr>
+          <td><strong>Пауза Attack</strong></td>
+          <td><code>AutoToggleAttack</code></td>
+          <td>Переключает <code>AutoPauseAttack</code>. Если на паузе: <code>ClearTarget()</code>, не бьёт. Если снята: авто-ассист.</td>
+        </tr>
+      </table>
+    </section>
+  </div>
+</div>
+
+<!-- СТОП -->
+<div class="cmd-card">
+  <div class="cmd-header">
+    <div class="cmd-icon" style="background:#1c2128; color:#8b949e;">&#x23F9;</div>
+    <div>
+      <h3 style="margin:0;">Стоп</h3>
+      <span class="cmd-name">BotCommandType.Stop &mdash; "stop"</span>
+    </div>
+  </div>
+  <div class="cmd-body">
+    <section>
+      <h4>Бизнес-смысл</h4>
+      <p>Экстренный тормоз. Вся активность прекращается: движение стоп, таргет сброшен, слейв в Idle. Используется для предотвращения вайпов, случайных пулов, перегруппировки.</p>
+    </section>
+
+    <section>
+      <h4>Точки вызова</h4>
+      <table>
+        <tr><th>Источник</th><th>Путь в коде</th></tr>
+        <tr><td>UI кнопка</td><td><code>BtnStop_Click()</code> &rarr; <code>SendCommand("stop")</code></td></tr>
+        <tr><td>Хоткей</td><td><code>WM_HOTKEY (HK_STOP=3)</code> &rarr; <code>SendCommand("stop")</code></td></tr>
+        <tr><td>Hivemind (слейв)</td><td><code>CHAT_MSG_ADDON</code> &rarr; парсинг <code>Command.Stop</code></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Изменение состояния (слейв)</h4>
+      <table>
+        <tr><th>Переменная</th><th>До</th><th>После</th></tr>
+        <tr><td><code>Hivemind.Mode</code></td><td>любой</td><td><code>SlaveMode.Idle</code></td></tr>
+        <tr><td><code>Hivemind.ForceIdle</code></td><td>false</td><td><strong>true</strong> (блок боя)</td></tr>
+        <tr><td><code>HivemindFollowing</code></td><td>true</td><td><strong>false</strong></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h4>Последовательность исполнения (слейв)</h4>
+      <ol>
+        <li><code>Hivemind.Mode = Idle</code>, <code>ForceIdle = true</code></li>
+        <li><code>SlaveCtrl.CmdStop()</code>:
+          <ul>
+            <li>CTM в свою позицию (мгновенный стоп через CTM-override)</li>
+            <li>Lua: <code>MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()</code></li>
+            <li>Состояние &rarr; Stopped &rarr; Idle (через 3 сек / 20 тиков)</li>
+          </ul>
+        </li>
+        <li><code>ExecuteLua("ClearTarget()")</code> &mdash; сброс таргета</li>
+      </ol>
+    </section>
+
+    <section>
+      <h4>Соло режим</h4>
+      <p>Ставит <code>_followEnabled = false</code> и вызывает <code>StopFollowMovement()</code> (CTM.Stop). Пытается <code>StopTimer()</code> если больше ничего не активно.</p>
+    </section>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 3. ПОТОК ДАННЫХ -->
+<!-- ============================================================ -->
+<h2 id="flow">3. Поток данных: Кнопка &rarr; Исполнение на слейве</h2>
+
+<h3>Полный пайплайн команды</h3>
+<div class="flow"><span class="step">[UI кнопка / Хоткей]</span>
+  <span class="arrow">&darr;</span>
+<span class="step">MasterPanel.SendCommand("attack")</span>
+  <span class="arrow">&darr;</span>  OnCommand?.Invoke("attack")
+<span class="step">MainWindow.OnMasterCommand("attack")</span>
+  <span class="arrow">&darr;</span>
+<span class="hl-kw">ЕСЛИ Hivemind активен:</span>
+  <span class="arrow">&darr;</span>  Hivemind.SendCommand(Command.Attack, "имяМастера")
+  <span class="arrow">&darr;</span>  seq++, msg = "Attack:имяМастера#1"
+  <span class="arrow">&darr;</span>  Трекинг ACK: _pendingAcks = {"слейв1", "слейв2"}
+  <span class="arrow">&darr;</span>  Lua: <span class="hl-fn">SendAddonMessage</span>(<span class="hl-str">'WBHIVE'</span>, <span class="hl-str">'Attack:имяМастера#1'</span>, <span class="hl-str">'PARTY'</span>)
+  <span class="arrow">&darr;</span>  <span class="note">--- аддон-канал WoW ---</span>
+  <span class="arrow">&darr;</span>  [Слейв] событие CHAT_MSG_ADDON
+  <span class="arrow">&darr;</span>  WB_HIVE_CMD = "Attack", WB_HIVE_ARG = "имяМастера#1"
+  <span class="arrow">&darr;</span>  [Тик слейва] ParseSlaveResponse()
+  <span class="arrow">&darr;</span>  ExecuteSlaveCommand(Attack, "имяМастера#1")
+  <span class="arrow">&darr;</span>  Парсинг seq=1, проверка > _slaveLastExecSeq
+  <span class="arrow">&darr;</span>  SendAck(1): <span class="hl-fn">SendAddonMessage</span>(<span class="hl-str">'WBHIVE'</span>, <span class="hl-str">'ACK:1~имяСлейва'</span>, <span class="hl-str">'PARTY'</span>)
+  <span class="arrow">&darr;</span>
+<span class="step">BotEngine.ProcessCommand(BotCommand { Type=Attack })</span>
+  <span class="arrow">&darr;</span>  switch(cmd.Type) &rarr; case Attack:
+  <span class="arrow">&darr;</span>  Hivemind.Mode = Attacking
+  <span class="arrow">&darr;</span>  SlaveCtrl.CmdStop()
+  <span class="arrow">&darr;</span>  ExecuteLua("AssistUnit('мастер') StartAttack()")
+  <span class="arrow">&darr;</span>  _rotationEnabled = true, BuffsEnabled = true
+  <span class="arrow">&darr;</span>  EnsureRunning()
+  <span class="arrow">&darr;</span>
+<span class="step">[Каждые 150мс] BotEngine.Tick()</span>
+  <span class="arrow">&darr;</span>  SlaveAttackTick() &rarr; CombatExecutor.ExecuteCombatTick()
+  <span class="arrow">&darr;</span>  Позиционирование + Lua ротация &rarr; <span class="hl-fn">_hook.ExecuteLua(rotationScript, 500)</span></div>
+
+<h3>Архитектура очередей</h3>
+<div class="card">
+  <p>Две очереди команд дренятся каждый тик в <code>ProcessPendingCommands()</code>:</p>
+  <table>
+    <tr><th>Очередь</th><th>Источник</th><th>Наполняется</th></tr>
+    <tr>
+      <td><code>UserCommands</code></td>
+      <td>UI кнопки, хоткеи</td>
+      <td><code>UserCommandSource.EnqueueCommand()</code></td>
+    </tr>
+    <tr>
+      <td><code>HivemindCommands</code></td>
+      <td>Аддон-сообщения от мастера</td>
+      <td><code>HivemindCommandSource.EnqueueCommand()</code> через <code>ExecuteSlaveCommand()</code></td>
+    </tr>
+  </table>
+  <p style="margin-top:12px;">Обе очереди &rarr; один <code>ProcessCommand()</code>. Без приоритетов. Порядок FIFO.</p>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 4. ACK СИСТЕМА -->
+<!-- ============================================================ -->
+<h2 id="ack">4. ACK система &mdash; Гарантированная доставка</h2>
+
+<h3>Обзор протокола</h3>
+<div class="card">
+  <table>
+    <tr><th style="width:180px">Параметр</th><th>Значение</th></tr>
+    <tr><td>Интервал повтора</td><td><strong>500мс</strong></td></tr>
+    <tr><td>Макс. попыток</td><td><strong>3</strong> (общий таймаут: 1.5 сек)</td></tr>
+    <tr><td>Формат сообщения</td><td><code>{Команда}:{аргумент}#{seq}</code> &mdash; напр. <code>Follow:Lovelion#42</code></td></tr>
+    <tr><td>Формат ACK</td><td><code>ACK:{seq}~{имяСлейва}</code> &mdash; напр. <code>ACK:42~Virtuella</code></td></tr>
+    <tr><td>Транспорт</td><td><code>SendAddonMessage('WBHIVE', msg, 'PARTY')</code></td></tr>
+    <tr><td>Защита от дублей</td><td>Слейв хранит <code>_slaveLastExecSeq</code>. Дубль &rarr; повторный ACK, без повторного исполнения.</td></tr>
+  </table>
+</div>
+
+<h3>Таймлайн: Успешная доставка</h3>
+<div class="timeline">
+  <div class="timeline-item">
+    <strong>T+0мс</strong> &mdash; Мастер: <code>seq++</code>, отправка <code>"Attack:master#1"</code> через аддон-канал. Трекинг <code>_pendingAcks = {"Virtuella"}</code>
+  </div>
+  <div class="timeline-item">
+    <strong>T+~50мс</strong> &mdash; Слейв: событие <code>CHAT_MSG_ADDON</code>. <code>WB_HIVE_CMD = "Attack"</code>
+  </div>
+  <div class="timeline-item">
+    <strong>T+~200мс</strong> &mdash; Тик слейва: <code>ParseSlaveResponse()</code> читает команду. <code>ExecuteSlaveCommand(Attack, "master#1")</code>
+  </div>
+  <div class="timeline-item">
+    <strong>T+~250мс</strong> &mdash; Слейв: seq=1 > lastExec=0. Исполнение команды. <code>SendAck(1)</code>: <code>"ACK:1~Virtuella"</code>
+  </div>
+  <div class="timeline-item">
+    <strong>T+~350мс</strong> &mdash; Мастер: <code>ReceiveAck(1, "Virtuella")</code>. Удаление из pending. <code>AckStatus = "ok"</code> (зелёный в UI)
+  </div>
+</div>
+
+<h3>Таймлайн: Повтор и таймаут</h3>
+<div class="timeline">
+  <div class="timeline-item">
+    <strong>T+0мс</strong> &mdash; Мастер отправляет. ACK не получен.
+  </div>
+  <div class="timeline-item">
+    <strong>T+500мс</strong> &mdash; <code>TickAck()</code>: повтор #1. Повторная отправка.
+  </div>
+  <div class="timeline-item">
+    <strong>T+1000мс</strong> &mdash; <code>TickAck()</code>: повтор #2. Повторная отправка.
+  </div>
+  <div class="timeline-item">
+    <strong>T+1500мс</strong> &mdash; <code>TickAck()</code>: повтор #3 (макс). Сдаёмся. <code>AckStatus = "timeout"</code> (красный в UI)
+  </div>
+</div>
+
+<h3>Команды без ACK (fire-and-forget)</h3>
+<div class="card">
+  <p>Эти команды отправляются один раз без повтора. UI может показать "выполнено", но слейв мог не получить:</p>
+  <ul>
+    <li><code>SetBuff</code>, <code>Wipe</code>, <code>Interact</code>, <code>GossipSelect</code>, <code>GossipAccept</code></li>
+    <li><code>AutoToggleFollow</code>, <code>AutoToggleAttack</code>, <code>Ping</code></li>
+  </ul>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 5. МАШИНА СОСТОЯНИЙ -->
+<!-- ============================================================ -->
+<h2 id="states">5. Машина состояний слейва</h2>
+
+<div class="state-diagram">
+  <div class="state-row">
+    <div class="state-box state-idle">IDLE</div>
+    <span class="arrow-right">&mdash; Ко мне &rarr;</span>
+    <div class="state-box state-follow">FOLLOWING</div>
+  </div>
+  <div class="state-row">
+    <div class="state-box state-idle">IDLE</div>
+    <span class="arrow-right">&mdash; Бейте таргет &rarr;</span>
+    <div class="state-box state-attack">ATTACKING</div>
+  </div>
+  <div class="state-row">
+    <div class="state-box state-idle">IDLE</div>
+    <span class="arrow-right">&mdash; Авто &rarr;</span>
+    <div class="state-box state-auto">AUTO</div>
+  </div>
+  <div class="state-row">
+    <div class="state-box state-idle">IDLE</div>
+    <span class="arrow-right">&mdash; В точку (Ctrl+ПКМ) &rarr;</span>
+    <div class="state-box state-goto">К ТОЧКЕ</div>
+  </div>
+  <hr style="margin:16px 0; border-color: var(--border);">
+  <div class="state-row">
+    <div class="state-box state-follow">ЛЮБОЕ</div>
+    <span class="arrow-right">&mdash; Стоп &rarr;</span>
+    <div class="state-box state-idle">IDLE (ForceIdle)</div>
+  </div>
+</div>
+
+<h3>Описание состояний</h3>
+<table>
+  <tr><th>Состояние</th><th>Поведение</th><th>Ротация</th><th>Баффы</th><th>Движение</th></tr>
+  <tr>
+    <td><strong>Idle</strong></td>
+    <td>Нет активности. ForceIdle блокирует бой.</td>
+    <td>Выкл*</td>
+    <td>Выкл*</td>
+    <td>Нет</td>
+  </tr>
+  <tr>
+    <td><strong>Following</strong></td>
+    <td>CTM к мастеру, дистанция 8м.</td>
+    <td>Вкл</td>
+    <td>Вкл</td>
+    <td>CTM / NavEngine</td>
+  </tr>
+  <tr>
+    <td><strong>Attacking</strong></td>
+    <td>Ассист мастера, полная ротация.</td>
+    <td>Вкл</td>
+    <td>Вкл</td>
+    <td>Подход к цели</td>
+  </tr>
+  <tr>
+    <td><strong>Auto</strong></td>
+    <td>Follow вне боя, авто-ассист в бою.</td>
+    <td>Вкл</td>
+    <td>Вкл</td>
+    <td>CTM / Подход</td>
+  </tr>
+  <tr>
+    <td><strong>К точке</strong></td>
+    <td>Движение к точке Ctrl+ПКМ.</td>
+    <td>Вкл</td>
+    <td>Вкл</td>
+    <td>CTM к точке</td>
+  </tr>
+</table>
+<p>* Ротация/баффы НЕ выключаются командой Стоп &mdash; см. Проблему #1.</p>
+
+<h3>Внутренние переходы режима Авто</h3>
+<div class="flow"><span class="step">Режим AUTO:</span>
+
+  ВНЕ БОЯ (нет таргета / таргет мёртв / пауза атаки)
+    <span class="arrow">&darr;</span>  HivemindFollowing = true
+    <span class="arrow">&darr;</span>  SlaveCtrl.Tick() &rarr; следование за мастером
+
+  В БОЮ (таргет жив, в бою, !AutoPauseAttack)
+    <span class="arrow">&darr;</span>  HivemindFollowing = false
+    <span class="arrow">&darr;</span>  SlaveCtrl.CmdStop() &rarr; стоп движения
+    <span class="arrow">&darr;</span>  SlaveAttackTick() &rarr; полная ротация
+
+  <span class="note">Переходы каждый тик (150мс). Бесшовно.</span>
+  <span class="note">Под-тоглы AutoPauseFollow / AutoPauseAttack переопределяют переходы.</span></div>
+
+
+<!-- ============================================================ -->
+<!-- 6. ХОТКЕИ -->
+<!-- ============================================================ -->
+<h2 id="hotkeys">6. Система горячих клавиш</h2>
+
+<div class="card">
+  <table>
+    <tr><th>Команда</th><th>ID хоткея</th><th>Доступные клавиши</th><th>По умолчанию</th></tr>
+    <tr><td>Бейте таргет</td><td><code>HK_ATTACK = 1</code></td><td>F1-F12, 0-9, A-Z</td><td>Нет</td></tr>
+    <tr><td>Ко мне</td><td><code>HK_FOLLOW = 2</code></td><td>F1-F12, 0-9, A-Z</td><td>Нет</td></tr>
+    <tr><td>Стоп</td><td><code>HK_STOP = 3</code></td><td>F1-F12, 0-9, A-Z</td><td>Нет</td></tr>
+  </table>
+</div>
+
+<h3>Техническая реализация</h3>
+<ul>
+  <li><strong>Регистрация:</strong> Win32 <code>RegisterHotKey()</code> &mdash; глобальные, работают даже когда фокус на WoW</li>
+  <li><strong>Перехват:</strong> <code>WndProc</code> ловит <code>WM_HOTKEY (0x0312)</code></li>
+  <li><strong>Назначение:</strong> Клик по кнопке в панели настроек &rarr; <code>GetAsyncKeyState()</code> опрос каждые 50мс</li>
+  <li><strong>Отмена:</strong> Нажать Escape для отмены назначения</li>
+  <li><strong>Сохранение:</strong> Через <code>GetHotkeySettings()</code> в settings.json, восстановление через <code>LoadHotkeySettings()</code></li>
+  <li><strong>Сброс:</strong> Кнопка "Сбросить" снимает регистрацию и чистит словарь</li>
+</ul>
+
+<h3>Процесс назначения</h3>
+<div class="flow"><span class="step">Юзер кликает "Нажми..." (напр., Атака)</span>
+  <span class="arrow">&darr;</span>  BtnSetHotkey_Click()
+  <span class="arrow">&darr;</span>  _waitingForHotkey = "attack"
+  <span class="arrow">&darr;</span>  Старт DispatcherTimer (опрос 50мс)
+  <span class="arrow">&darr;</span>  CaptureTimer_Tick(): проверка GetAsyncKeyState(F1..F12, 0..9, A..Z)
+  <span class="arrow">&darr;</span>  Клавиша нажата &rarr; AssignHotkey(key)
+  <span class="arrow">&darr;</span>  _hotkeys["attack"] = Key.F5
+  <span class="arrow">&darr;</span>  RegisterAll() &rarr; RegisterHotKey(handle, 1, 0, VK_F5)
+  <span class="arrow">&darr;</span>  UpdateHotkeyLabels() &rarr; UI показывает "F5" под кнопкой Атаки</div>
+
+
+<!-- ============================================================ -->
+<!-- 7. UI РАСКЛАДКА -->
+<!-- ============================================================ -->
+<h2 id="ui">7. UI раскладка и панель слейвов</h2>
+
+<h3>Структура панели (сверху вниз)</h3>
+<table>
+  <tr><th>Строка</th><th>Элемент</th><th>Описание</th></tr>
+  <tr>
+    <td>1</td>
+    <td><strong>Шапка</strong></td>
+    <td>"Master" заголовок + шестерёнка (настройки хоткеев)</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><strong>3 кнопки</strong></td>
+    <td>Атака / Ко мне / Стоп &mdash; 40px высота, равные колонки</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><strong>Кнопка Авто</strong></td>
+    <td>На всю ширину, 24px. "Follow + авто-ассист"</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><strong>Служебный ряд</strong></td>
+    <td>GUID | GUID&rarr;таргет | Вайп | AutoPve | Interact | Героизм</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><strong>Панель слейвов</strong></td>
+    <td>Динамические строки. Иконка класса, ник, цель follow, кнопки команд, замок</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td><strong>Панель Gossip</strong></td>
+    <td>Скрыта. Варианты диалога NPC при Interact</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td><strong>Stack / Scatter</strong></td>
+    <td>"К наводчику" и "Разбежаться на 12м"</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td><strong>Навигация (дропдаун)</strong></td>
+    <td>Выбор слейвов для Ctrl+ПКМ. Подсказка "Ctrl+ПКМ &rarr; все"</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td><strong>Подписи хоткеев</strong></td>
+    <td>Назначенные клавиши под 3 основными кнопками</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td><strong>Настройки хоткеев</strong></td>
+    <td>Скрыты. Открываются шестерёнкой. Назначение/сброс</td>
+  </tr>
+</table>
+
+<h3>Строка слейва</h3>
+<div class="card">
+  <p>Каждый подключённый слейв получает строку:</p>
+  <table>
+    <tr><th>Элемент</th><th>Функция</th></tr>
+    <tr><td>Кнопка таргета</td><td>"Бежать за моим таргетом" &mdash; персональный override</td></tr>
+    <tr><td>Иконка класса + Ник</td><td>Напр., иконка Паладина + "Virtuella"</td></tr>
+    <tr><td>Индикатор follow</td><td>"&rarr;М" (мастер) или "&rarr;Lovelion" (кастомная цель)</td></tr>
+    <tr><td>Иконки статуса</td><td>К точке / К наводчику / Разбег</td></tr>
+    <tr><td>Персональные команды</td><td>Атака / Ко мне / Авто / Стоп для конкретного слейва</td></tr>
+    <tr><td>Замок</td><td>IgnoreGlobal &mdash; слейв игнорирует глобальные команды</td></tr>
+    <tr><td>Индикатор ACK</td><td>Цвет фона: idle (тёмный) / pending (жёлтый) / ok (зелёный) / timeout (красный)</td></tr>
+  </table>
+</div>
+
+<h3>Визуальная обратная связь</h3>
+<div class="card">
+  <table>
+    <tr><th>Состояние</th><th>Цвет кнопки</th><th>Hex</th></tr>
+    <tr><td>Активная команда</td><td style="color:#4a6741;">Зелёная подсветка</td><td><code>#4a6741</code></td></tr>
+    <tr><td>Неактивная</td><td style="color:#8b949e;">Тёмный фон</td><td><code>#1a1a28</code></td></tr>
+    <tr><td>Вайп ВКЛ</td><td style="color:#f85149;">Красная подсветка</td><td><code>#6b2222</code></td></tr>
+    <tr><td>AutoPve ВКЛ</td><td style="color:#3fb950;">Зелёная подсветка</td><td><code>#4a6741</code></td></tr>
+    <tr><td>Слейв idle (нет команды)</td><td style="color:#f85149;">Красноватый фон</td><td><code>#3d1f1f</code></td></tr>
+    <tr><td>Слейв активен</td><td style="color:#8b949e;">Обычный фон</td><td><code>#1a1a28</code></td></tr>
+  </table>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 8. ПРОБЛЕМЫ -->
+<!-- ============================================================ -->
+<h2 id="issues">8. Найденные проблемы и пробелы</h2>
+
+<p>Аудит актуального кода выявил следующие проблемы. Отсортированы по серьёзности.</p>
+
+<!-- КРИТИЧЕСКИЕ -->
+<div class="issue critical">
+  <h4><span class="badge badge-critical">Критично</span> #1: Стоп НЕ выключает ротацию/баффы</h4>
+  <p><strong>Файл:</strong> <code>BotEngine.cs:264-281</code></p>
+  <p><strong>Проблема:</strong> Стоп ставит <code>Hivemind.Mode = Idle</code> и <code>ForceIdle = true</code>, сбрасывает таргет &mdash; но НЕ ставит <code>_rotationEnabled = false</code> и <code>BuffsEnabled = false</code>. Они были включены предыдущей командой Follow/Attack/Auto.</p>
+  <p><strong>Последствия:</strong> После Стопа слейв физически стоит, но таймер движка крутится. Если таргет каким-то образом появится (Tab, проксимити), слейв может кастануть спеллы. Нарушение БТ-5 (экстренная остановка).</p>
+  <p><strong>Фикс:</strong> Добавить <code>_rotationEnabled = false; BuffsEnabled = false;</code> в ветку Hivemind Stop (после строки 271).</p>
+</div>
+
+<div class="issue critical">
+  <h4><span class="badge badge-critical">Критично</span> #2: Атака без таргета &mdash; тихий фейл</h4>
+  <p><strong>Файл:</strong> <code>BotEngine.cs:294-303</code></p>
+  <p><strong>Проблема:</strong> <code>AssistUnit('мастер') StartAttack()</code> выполняется безусловно. Если у мастера нет таргета, <code>AssistUnit</code> ничего не делает &mdash; слейв входит в режим Attacking с null target.</p>
+  <p><strong>Последствия:</strong> Слейв в режиме Attacking, боевой цикл крутится каждый тик, жрёт Lua бюджет, но ничего не делает. Нет обратной связи. Надо вручную жать Стоп.</p>
+  <p><strong>Фикс:</strong> После AssistUnit проверить наличие таргета. Если нет &mdash; не переключать в Attacking, или авто-откат в Follow.</p>
+</div>
+
+<div class="issue critical">
+  <h4><span class="badge badge-critical">Критично</span> #3: Нет приоритета команд в очереди</h4>
+  <p><strong>Файл:</strong> <code>BotEngine.cs:200-211</code></p>
+  <p><strong>Проблема:</strong> Обе очереди (<code>UserCommands</code> и <code>HivemindCommands</code>) работают по FIFO. Команда Стоп ждёт за поставленными в очередь SetBuff/Interact.</p>
+  <p><strong>Последствия:</strong> В панической ситуации с кучей команд в очереди, Стоп может задержаться на 1+ тик (150мс+ на каждую команду перед ним). Для "экстренного тормоза" это слишком медленно.</p>
+  <p><strong>Фикс:</strong> Приоритет: Stop/Emergency прыгают в начало очереди. Или: отдельный флаг <code>_emergencyStop</code>, проверяемый до обработки очереди.</p>
+</div>
+
+<!-- СЕРЬЁЗНЫЕ -->
+<div class="issue">
+  <h4><span class="badge badge-issue">Серьёзно</span> #4: Счётчик авто-ассиста дрифтит между режимами</h4>
+  <p><strong>Файл:</strong> <code>Hivemind.cs, SlaveAutoTick()</code></p>
+  <p><strong>Проблема:</strong> <code>_autoAssistTick</code> инкрементится глобально (все тики), а не только в режиме Авто. При переключении Follow &rarr; Auto счётчик может быть на произвольном значении.</p>
+  <p><strong>Последствия:</strong> Первый авто-ассист после смены режима может сработать мгновенно или задержаться до 1 сек. Непредсказуемое время реакции.</p>
+  <p><strong>Фикс:</strong> Сброс <code>_autoAssistTick = 0</code> при входе в Авто (в ProcessCommand, case Auto).</p>
+</div>
+
+<div class="issue">
+  <h4><span class="badge badge-issue">Серьёзно</span> #5: Дисконнект мастера &mdash; слейв молча стоит</h4>
+  <p><strong>Файл:</strong> <code>SlaveController.cs, FindMaster()</code></p>
+  <p><strong>Проблема:</strong> Если мастер уходит из зоны видимости или дисконнектится, <code>FindMaster()</code> возвращает null. Движение молча останавливается. Ни ошибки, ни фоллбека.</p>
+  <p><strong>Последствия:</strong> Слейв выглядит зависшим. Юзер не понимает почему. Надо заново жать Ко мне.</p>
+  <p><strong>Фикс:</strong> Таймаут. Если мастер не найден N тиков &mdash; лог предупреждение, опционально событие "мастер потерян" в UI.</p>
+</div>
+
+<div class="issue">
+  <h4><span class="badge badge-issue">Серьёзно</span> #6: ACK подтверждает получение, а не исполнение</h4>
+  <p><strong>Файл:</strong> <code>Hivemind.cs, ExecuteSlaveCommand()</code></p>
+  <p><strong>Проблема:</strong> ACK отправляется сразу при парсинге команды, ДО запуска <code>ProcessCommand()</code>. Если ProcessCommand кинет исключение или слейв крашнется &mdash; мастер видит "ok", но команда не выполнена.</p>
+  <p><strong>Последствия:</strong> Ложное подтверждение. Юзер думает слейвы бьют, а они упали после ACK.</p>
+  <p><strong>Фикс:</strong> Отправлять ACK после завершения ProcessCommand, или добавить периодический heartbeat.</p>
+</div>
+
+<!-- МИНОРНЫЕ -->
+<div class="issue info">
+  <h4><span class="badge badge-minor">Минор</span> #7: Таймаут ACK слишком короткий (1.5 сек)</h4>
+  <p><strong>Файл:</strong> <code>Hivemind.cs, MaxRetries = 3, RetryIntervalMs = 500</code></p>
+  <p><strong>Проблема:</strong> 3 попытки &times; 500мс = 1.5 сек. На лаговых серверах или медленных ПК аддон-сообщения могут идти 200-400мс. Легитимная доставка может протаймаутить.</p>
+  <p><strong>Последствия:</strong> Ложный "timeout" в UI. Юзер повторяет команды, вызывая дубли (защита seq есть, но путает).</p>
+</div>
+
+<div class="issue info">
+  <h4><span class="badge badge-minor">Минор</span> #8: Вайп влияет только на хилов</h4>
+  <p><strong>Файл:</strong> <code>Hivemind.WipeMode</code></p>
+  <p><strong>Проблема:</strong> Название "Вайп" подразумевает остановку всех. На деле только хилы перестают хилить. ДПС продолжает бить.</p>
+  <p><strong>Последствия:</strong> Путаница. При намеренном вайпе ДПС продолжает фармить и может случайно убить босса.</p>
+</div>
+
+<div class="issue info">
+  <h4><span class="badge badge-minor">Минор</span> #9: Навигация схлопывается при обновлении слейвов</h4>
+  <p><strong>Файл:</strong> <code>MasterPanel.xaml.cs, UpdateSlaves()</code></p>
+  <p><strong>Проблема:</strong> <code>UpdateSlaves()</code> пересоздаёт весь SlavePanel. Если дропдаун навигации был раскрыт, он схлопывается &mdash; состояние <code>_navExpanded</code> не применяется к пересозданным элементам.</p>
+  <p><strong>Последствия:</strong> Юзеру надо каждый раз заново раскрывать навигацию (обновление каждые несколько секунд).</p>
+</div>
+
+<div class="issue info">
+  <h4><span class="badge badge-minor">Минор</span> #10: У Авто нет хоткея</h4>
+  <p><strong>Файл:</strong> <code>MasterPanel.xaml.cs</code> &mdash; только HK_ATTACK, HK_FOLLOW, HK_STOP</p>
+  <p><strong>Проблема:</strong> Авто &mdash; самый используемый режим, но хоткея нет. Юзеру приходится кликать по панели.</p>
+  <p><strong>Последствия:</strong> Неудобство. Авто должен быть 4-м хоткеем.</p>
+</div>
+
+<hr>
+
+<h3>Сводная матрица</h3>
+<table>
+  <tr><th>#</th><th>Проблема</th><th>Серьёзность</th><th>Компонент</th><th>Оценка</th></tr>
+  <tr>
+    <td>1</td>
+    <td>Стоп не выключает ротацию/баффы</td>
+    <td><span class="badge badge-critical">Критично</span></td>
+    <td>BotEngine</td>
+    <td>5 мин</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Атака без таргета &mdash; тихий фейл</td>
+    <td><span class="badge badge-critical">Критично</span></td>
+    <td>BotEngine</td>
+    <td>15 мин</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Нет приоритета команд в очереди</td>
+    <td><span class="badge badge-critical">Критично</span></td>
+    <td>BotEngine</td>
+    <td>30 мин</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Дрифт счётчика авто-ассиста</td>
+    <td><span class="badge badge-issue">Серьёзно</span></td>
+    <td>Hivemind</td>
+    <td>5 мин</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>Дисконнект мастера &mdash; тишина</td>
+    <td><span class="badge badge-issue">Серьёзно</span></td>
+    <td>SlaveController</td>
+    <td>20 мин</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>ACK = получение, не исполнение</td>
+    <td><span class="badge badge-issue">Серьёзно</span></td>
+    <td>Hivemind</td>
+    <td>15 мин</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>Таймаут ACK слишком короткий</td>
+    <td><span class="badge badge-minor">Минор</span></td>
+    <td>Hivemind</td>
+    <td>2 мин</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>Вайп влияет только на хилов</td>
+    <td><span class="badge badge-minor">Минор</span></td>
+    <td>Hivemind</td>
+    <td>5 мин</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td>Навигация схлопывается при обновлении</td>
+    <td><span class="badge badge-minor">Минор</span></td>
+    <td>MasterPanel</td>
+    <td>10 мин</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>У Авто нет хоткея</td>
+    <td><span class="badge badge-minor">Минор</span></td>
+    <td>MasterPanel</td>
+    <td>15 мин</td>
+  </tr>
+</table>
+
+<hr>
+
+<p style="text-align:center; color:var(--text2); font-size:13px; margin-top:32px;">
+  WowBot Master Panel &mdash; Спецификация &mdash; 2026-04-10 &mdash; Источник: кодовая база
+</p>
+
+</div>
+</body>
+</html>

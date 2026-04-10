@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WowBot Engine Documentation</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --card: #12121a;
+  --card-border: #1e1e2e;
+  --gold: #c8aa6e;
+  --gold-dim: #8a7441;
+  --gold-bright: #f0d890;
+  --text: #d4d4d8;
+  --text-dim: #8888a0;
+  --text-bright: #eeeeee;
+  --accent-blue: #4488cc;
+  --accent-red: #cc4444;
+  --accent-green: #44aa66;
+  --accent-purple: #9966cc;
+  --code-bg: #0e0e16;
+  --sidebar-w: 280px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  line-height: 1.6;
+  display: flex;
+  min-height: 100vh;
+}
+/* === SIDEBAR === */
+nav.sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--card);
+  border-right: 1px solid var(--card-border);
+  overflow-y: auto;
+  padding: 20px 0;
+  z-index: 100;
+}
+nav.sidebar::-webkit-scrollbar { width: 4px; }
+nav.sidebar::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+nav.sidebar h2 {
+  color: var(--gold);
+  font-size: 16px;
+  padding: 0 16px;
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+nav.sidebar .logo {
+  text-align: center;
+  padding: 10px 16px 20px;
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 16px;
+}
+nav.sidebar .logo span {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--gold-bright);
+  letter-spacing: 2px;
+}
+nav.sidebar .logo small {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 4px;
+}
+nav.sidebar a {
+  display: block;
+  padding: 6px 16px 6px 24px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13px;
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+}
+nav.sidebar a:hover {
+  color: var(--gold);
+  background: rgba(200,170,110,0.05);
+  border-left-color: var(--gold-dim);
+}
+nav.sidebar a.sub {
+  padding-left: 40px;
+  font-size: 12px;
+}
+nav.sidebar .sep {
+  height: 1px;
+  background: var(--card-border);
+  margin: 10px 16px;
+}
+
+/* === MAIN === */
+main {
+  margin-left: var(--sidebar-w);
+  padding: 40px 48px;
+  max-width: 1100px;
+  width: 100%;
+}
+h1 {
+  color: var(--gold-bright);
+  font-size: 32px;
+  margin-bottom: 8px;
+  border-bottom: 2px solid var(--gold-dim);
+  padding-bottom: 12px;
+}
+h1 small { font-size: 14px; color: var(--text-dim); font-weight: normal; }
+h2 {
+  color: var(--gold);
+  font-size: 22px;
+  margin: 40px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--card-border);
+}
+h3 {
+  color: var(--gold-dim);
+  font-size: 16px;
+  margin: 24px 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+h4 {
+  color: var(--text-bright);
+  font-size: 15px;
+  margin: 16px 0 8px;
+}
+p, li { margin-bottom: 8px; }
+ul, ol { margin-left: 20px; margin-bottom: 16px; }
+li { color: var(--text); }
+strong { color: var(--text-bright); }
+em { color: var(--gold-dim); font-style: normal; }
+
+/* Cards */
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 16px 0;
+}
+.card.highlight {
+  border-left: 3px solid var(--gold);
+}
+.card.warn {
+  border-left: 3px solid var(--accent-red);
+}
+.card.info {
+  border-left: 3px solid var(--accent-blue);
+}
+
+/* Code */
+code {
+  background: var(--code-bg);
+  color: var(--gold);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Fira Code', monospace;
+  font-size: 13px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  margin: 12px 0;
+  font-family: 'Consolas', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+pre .comment { color: #555577; }
+pre .keyword { color: var(--accent-purple); }
+pre .addr { color: var(--accent-blue); }
+pre .str { color: var(--accent-green); }
+pre .num { color: #cc8844; }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+th {
+  background: var(--card);
+  color: var(--gold);
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+td {
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: rgba(18,18,26,0.5); }
+tr:hover td { background: rgba(200,170,110,0.04); }
+td code { font-size: 12px; }
+
+/* Flow diagram */
+.flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0;
+}
+.flow .step {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text);
+}
+.flow .step.gold { border-color: var(--gold-dim); color: var(--gold); }
+.flow .arrow { color: var(--gold-dim); font-size: 18px; }
+
+/* Badge */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.badge.flag { background: #2a1a3a; color: #bb77ee; }
+.badge.addr { background: #1a2a3a; color: #77aaee; }
+.badge.time { background: #2a3a1a; color: #88cc55; }
+
+/* Memory layout */
+.mem-layout {
+  display: flex;
+  margin: 12px 0;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.mem-layout .block {
+  padding: 10px 14px;
+  text-align: center;
+  border-right: 1px solid var(--card-border);
+  font-size: 12px;
+}
+.mem-layout .block:last-child { border-right: none; }
+.mem-layout .block .size { color: var(--text-dim); font-size: 10px; display: block; margin-top: 2px; }
+.mem-layout .block.code { background: #1a1420; color: #bb88dd; }
+.mem-layout .block.lua { background: #14201a; color: #66cc88; flex: 2; }
+.mem-layout .block.flags { background: #201a14; color: #ccaa66; }
+.mem-layout .block.data { background: #141a20; color: #6688cc; }
+
+/* Anchor offset for fixed sidebar */
+section[id] { scroll-margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="logo">
+    <span>WowBot</span>
+    <small>Engine Documentation v1.0</small>
+    <small>WoW 3.3.5a WoWCircle</small>
+  </div>
+
+  <h2>Ядро</h2>
+  <a href="#botengine">BotEngine - Главный цикл</a>
+  <a href="#tick-flow" class="sub">Tick() - поток выполнения</a>
+  <a href="#timing" class="sub">Тайминги и константы</a>
+  <a href="#solo-mode" class="sub">Solo режим</a>
+  <a href="#slave-mode" class="sub">Slave режим (Hivemind)</a>
+  <a href="#buffs" class="sub">Система баффов</a>
+  <a href="#antiafk" class="sub">AntiAFK</a>
+  <a href="#aoe-rotation" class="sub">AoE / Ground AoE</a>
+  <a href="#smart-taunt" class="sub">SmartTaunt</a>
+
+  <div class="sep"></div>
+  <h2>EndScene Hook</h2>
+  <a href="#endscene">Обзор EndScene Hook</a>
+  <a href="#find-endscene" class="sub">FindEndScene</a>
+  <a href="#d3d9helper" class="sub">D3D9Helper (fallback)</a>
+  <a href="#install" class="sub">Install / CalculateStolenBytes</a>
+  <a href="#codecave" class="sub">BuildCodecave (ASM)</a>
+  <a href="#flag-system" class="sub">Система флагов</a>
+  <a href="#execute-lua" class="sub">ExecuteLua / WithResult</a>
+  <a href="#terrain-ctm" class="sub">TerrainClick / CTM Call</a>
+  <a href="#verification" class="sub">Верификация</a>
+
+  <div class="sep"></div>
+  <h2>Объекты</h2>
+  <a href="#objectmanager">ObjectManager</a>
+  <a href="#entities">Entities (Unit/Object/Dyn)</a>
+  <a href="#offsets">Таблица оффсетов</a>
+
+  <div class="sep"></div>
+  <h2>Навигация</h2>
+  <a href="#navigation">Navigation</a>
+  <a href="#clicktomove">ClickToMove (CTM)</a>
+  <a href="#combat-pos">CombatPositioning</a>
+  <a href="#aoe-avoid">AoE Avoidance</a>
+
+  <div class="sep"></div>
+  <h2>Утилиты</h2>
+  <a href="#luareader">LuaReader</a>
+  <a href="#logger">Logger</a>
+  <a href="#memoryreader">MemoryReader</a>
+</nav>
+
+<main>
+
+<!-- ==================== BOTENGINE ==================== -->
+<h1 id="botengine">BotEngine <small>Game/BotEngine.cs</small></h1>
+<p>Главный координатор бота. Запускает таймер на <strong>150мс</strong>, который вызывает метод <code>Tick()</code>. Отвечает за: обновление ObjectManager, follow-логику, выполнение ротаций, бафф-скрипты, AoE avoidance, smart taunt, AntiAFK и координацию Hivemind.</p>
+
+<section id="tick-flow">
+<h2>Tick() - Поток выполнения</h2>
+<p>Каждые 150мс вызывается метод <code>Tick(object? state)</code>. Вот полный порядок:</p>
+
+<div class="flow">
+  <div class="step gold">AntiAfkTick()</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step">Проверка: активен ли бот?</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step gold">ObjectManager.Update()</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step">LocalPlayer null check</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step">SetPlayerBase()</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step gold">AoE Avoidance</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step">CountNearbyEnemies</div>
+</div>
+
+<p>Далее выполнение зависит от режима:</p>
+
+<div class="card highlight">
+<h4>Приоритет выполнения</h4>
+<ol>
+  <li><strong>AntiAFK</strong> - всегда, даже если бот выключен</li>
+  <li><strong>AoE Flee</strong> - если IsAoeFleeing == true, пропускаем ВСЁ на 2 секунды</li>
+  <li><strong>AoE Avoidance (TryAoEAvoidance)</strong> - DynObject детекция, flee из лужи</li>
+  <li><strong>Hivemind Slave</strong> - если роль Slave, полностью управляется SlaveController</li>
+  <li><strong>Hivemind Master</strong> - MasterTick(), ACK чтение, Register</li>
+  <li><strong>Баффы</strong> - BuildBuffScript / BuildClassBuffScript</li>
+  <li><strong>Solo Follow</strong> - FollowViaCTM (если только follow без rotation)</li>
+  <li><strong>Solo Rotation</strong> - FaceInstant + ExecuteLua (ротация)</li>
+  <li><strong>Follow + Rotation</strong> - CTM follow + instants на бегу, полная ротация на месте</li>
+</ol>
+</div>
+
+<pre>
+<span class="keyword">private void</span> Tick(object? state)
+{
+    <span class="keyword">if</span> (_tickPaused) <span class="keyword">return</span>;
+    AntiAfkTick();  <span class="comment">// ВСЕГДА, даже если бот неактивен</span>
+
+    <span class="keyword">if</span> (!_followEnabled && !_rotationEnabled && !_buffsEnabled && !Hivemind.IsActive) <span class="keyword">return</span>;
+    <span class="keyword">if</span> (!_hook.IsHooked) <span class="keyword">return</span>;
+
+    _objectManager.Update();
+    <span class="keyword">var</span> player = _objectManager.LocalPlayer;
+    <span class="keyword">if</span> (player == null) <span class="keyword">return</span>;
+
+    <span class="comment">// AoE Avoidance: ПРИОРИТЕТ НАД ВСЕМ</span>
+    <span class="keyword">if</span> (IsAoeFleeing) <span class="keyword">return</span>;
+    <span class="keyword">if</span> (AoeAvoidEnabled && TryAoEAvoidance(player)) <span class="keyword">return</span>;
+
+    <span class="comment">// ... Hivemind, Buffs, Follow, Rotation ...</span>
+}
+</pre>
+</section>
+
+<section id="timing">
+<h2>Тайминги и константы</h2>
+<table>
+  <tr><th>Константа</th><th>Значение</th><th>Реальное время</th><th>Описание</th></tr>
+  <tr><td><code>Timer interval</code></td><td>150мс</td><td>150мс</td><td>Интервал главного таймера Tick()</td></tr>
+  <tr><td><code>_logTick</code></td><td>33 тиков</td><td>~5с</td><td>Периодический лог статуса (Tick info)</td></tr>
+  <tr><td><code>_buffCheckTick</code></td><td>20 тиков (full), 3 тика (class)</td><td>3с / 0.45с</td><td>Full баффы каждые 3с, class-баффы каждые 0.45с</td></tr>
+  <tr><td><code>_smartTauntTick</code></td><td>5 тиков</td><td>~750мс</td><td>Проверка мобов для SmartTaunt</td></tr>
+  <tr><td><code>_aoeTick</code></td><td>3 тика</td><td>~450мс</td><td>Проверка AoE DynObject</td></tr>
+  <tr><td><code>_afkTickCounter</code></td><td>200 тиков</td><td>~30с</td><td>AntiAFK (запись TickCount + Lua clear)</td></tr>
+  <tr><td><code>_hiveCheckTick</code></td><td>3 тика</td><td>~450мс</td><td>Чтение команд Hivemind</td></tr>
+  <tr><td><code>_registerTick</code></td><td>66 тиков</td><td>~10с</td><td>Slave Register (повторная регистрация у мастера)</td></tr>
+  <tr><td><code>_healerTickCount</code></td><td>3 тика</td><td>~450мс</td><td>Хилерская ротация (чаще чем DPS)</td></tr>
+  <tr><td><code>_blessingCooldown</code></td><td>40 тиков</td><td>~6с</td><td>Пауза после каста благословения</td></tr>
+  <tr><td><code>_aoeFleeUntil</code></td><td>2 секунды</td><td>2с</td><td>Grace period после flee из AoE</td></tr>
+</table>
+</section>
+
+<section id="solo-mode">
+<h2>Solo режим</h2>
+<p>Когда Hivemind НЕ активен, бот работает в соло-режиме. Три подрежима:</p>
+
+<div class="card">
+<h4>Только Follow</h4>
+<p><code>_followEnabled && !_rotationEnabled</code> -- Бот бежит за целью через <code>FollowViaCTM()</code>. Считает точку на земле в <code>_followDistance</code> от цели в сторону игрока и вызывает <code>CTM.MoveTo()</code>. Не спамит CTM если цель стоит.</p>
+</div>
+
+<div class="card">
+<h4>Только Rotation</h4>
+<p><code>!_followEnabled && _rotationEnabled</code> -- Поворот к таргету (<code>FaceInstant</code>), затем Lua ротация. Включает: SmartTaunt, MoveBehind/RangedPos, Ground AoE, автовыбор таргета (ассист танка или TargetNearestEnemy).</p>
+</div>
+
+<div class="card">
+<h4>Follow + Rotation</h4>
+<p>Комбинированный режим: если далеко -- бежим (CTM follow) + instants на ходу. Если на месте -- полная ротация + face target. При касте -- CTM.Stop().</p>
+</div>
+</section>
+
+<section id="slave-mode">
+<h2>Slave режим (Hivemind)</h2>
+<p>Когда <code>Hivemind.CurrentRole == Role.Slave</code>, BotEngine передает управление SlaveController. Режимы слейва:</p>
+<table>
+  <tr><th>Режим</th><th>Код</th><th>Поведение</th></tr>
+  <tr><td><strong>Following</strong></td><td><code>SlaveMode.Following</code></td><td>SlaveCtrl.Tick() рулит движением. На бегу -- instants. На месте -- полная ротация + face.</td></tr>
+  <tr><td><strong>GoingToPoint</strong></td><td><code>SlaveMode.GoingToPoint</code></td><td>Идентично Following, но к Ctrl+ПКМ точке.</td></tr>
+  <tr><td><strong>Attacking</strong></td><td><code>SlaveMode.Attacking</code></td><td>SlaveAttackTick(): AoE avoidance, face, approach через Lua, MoveBehind, ротация.</td></tr>
+  <tr><td><strong>Auto</strong></td><td><code>SlaveMode.Auto</code></td><td>В бою: attack. Вне боя: follow за мастером. Авто-ассист таргета мастера.</td></tr>
+  <tr><td><strong>Idle</strong></td><td><code>SlaveMode.Idle</code></td><td>Ничего не делать (ForceIdle) или бить текущий таргет если есть.</td></tr>
+</table>
+
+<div class="card info">
+<h4>Хилер-слейв -- особый случай</h4>
+<p>Хилер ВСЕГДА хилит (каждые ~450мс), независимо от SlaveMode. Follow продолжается параллельно с хилом. Единственное исключение -- WipeMode.</p>
+</div>
+</section>
+
+<section id="buffs">
+<h2>Система баффов</h2>
+<p>Два типа проверки баффов:</p>
+<ul>
+  <li><strong>BuildClassBuffScript()</strong> -- быстрая проверка каждые 0.45с (3 тика). Стойка воина, власть ДК, форма друида, аура палладина, печать палладина.</li>
+  <li><strong>BuildBuffScript()</strong> -- полная проверка каждые 3с (20 тиков). Все self-баффы, рейд-баффы (с реагентами), благословения, шаманские оружия/тотемы.</li>
+</ul>
+<p>Всё генерируется как <strong>однострочный Lua</strong> -- многострочный триггерит taint WeakAuras.</p>
+
+<div class="card">
+<h4>Рейд-баффы с реагентами</h4>
+<p>Система проверяет реагент через <code>GetItemCount()</code>. Если реагент есть -- кастует рейд-бафф. Если нет -- fallback на одиночный бафф (напр. "Молитва стойкости" &rarr; "Слово силы: Стойкость").</p>
+<table>
+  <tr><th>Рейд-бафф</th><th>Реагент</th><th>Fallback</th></tr>
+  <tr><td>Молитва стойкости</td><td>Свеча благочестия</td><td>Слово силы: Стойкость</td></tr>
+  <tr><td>Молитва духа</td><td>Свеча благочестия</td><td>Божественный дух</td></tr>
+  <tr><td>Дар дикой природы</td><td>Дикий шиполист</td><td>Знак дикой природы</td></tr>
+  <tr><td>Чародейская гениальность</td><td>Чародейский порошок</td><td>Чародейский интеллект</td></tr>
+</table>
+</div>
+</section>
+
+<section id="antiafk">
+<h2>AntiAFK</h2>
+<p>Вызывается <strong>каждый тик</strong>, но действует каждые ~30 секунд (200 тиков).</p>
+<div class="card highlight">
+<h4>Двойная защита</h4>
+<ol>
+  <li><strong>Запись в память:</strong> <code>WriteUInt32(0x00B499A4, Environment.TickCount)</code> -- LastHardwareAction (WoWCircle: сдвинут на +8 от стандарта)</li>
+  <li><strong>Lua снятие:</strong> <code>if UnitIsAFK('player') then SendChatMessage('','AFK') end</code> -- если AFK уже стоит, сбрасываем</li>
+</ol>
+<p>Невидимый для сервера: нет движения, нет анимации, нет побочных эффектов.</p>
+</div>
+</section>
+
+<section id="aoe-rotation">
+<h2>AoE / Ground AoE</h2>
+<h3>CountNearbyEnemies</h3>
+<p>Два метода подсчета врагов:</p>
+<ul>
+  <li><code>CountNearbyEnemies(player, range)</code> -- все живые юниты в радиусе</li>
+  <li><code>CountNearbyCombatEnemies(player, range)</code> -- только в бою, таргетящие союзников</li>
+  <li><code>CountEnemiesNearTarget(target, range)</code> -- враги рядом с таргетом (для AoE решений)</li>
+</ul>
+<p>Результат передается в Lua как <code>WB_NE</code>, <code>WB_NCE</code>, <code>WB_AEMIN</code>.</p>
+
+<h3>TryGroundAoE</h3>
+<p>Ground-targeted AoE (Гроза, Залп). Алгоритм:</p>
+<ol>
+  <li>Проверить: AoE включен, не кастуем, не ченнелим</li>
+  <li>Подсчитать врагов в 10м от таргета (CountEnemiesNearTarget)</li>
+  <li>Если врагов &ge; AoeMinEnemies -- каст спелла через Lua</li>
+  <li>Thread.Sleep(100) -- дать WoW время перейти в режим прицеливания</li>
+  <li><code>_hook.CastTerrainClick(target.X, target.Y, target.Z)</code> -- клик на позицию таргета</li>
+</ol>
+</section>
+
+<section id="smart-taunt">
+<h2>SmartTaunt</h2>
+<p>C#-сторона сканирует ObjectManager каждые ~750мс. Ищет мобов, которые бьют союзника (не нас).</p>
+<table>
+  <tr><th>Класс</th><th>Spell ID</th><th>Спелл</th></tr>
+  <tr><td>Warrior</td><td>355</td><td>Taunt</td></tr>
+  <tr><td>Paladin</td><td>62124</td><td>Hand of Reckoning</td></tr>
+  <tr><td>Death Knight</td><td>56222</td><td>Dark Command</td></tr>
+  <tr><td>Druid</td><td>6795</td><td>Growl</td></tr>
+</table>
+</section>
+
+<!-- ==================== ENDSCENE HOOK ==================== -->
+<h1 id="endscene">EndScene Hook <small>Game/EndSceneHook.cs</small></h1>
+<p>Ядро внедрения: перехватывает вызов <code>IDirect3DDevice9::EndScene</code> в WoW, перенаправляя его в codecave с нашим ассемблерным кодом. Codecave проверяет флаг и выполняет действия (Lua, TerrainClick, CTM) в главном потоке WoW.</p>
+
+<section id="find-endscene">
+<h2>FindEndScene</h2>
+<p>Два метода поиска адреса EndScene:</p>
+
+<h3>Способ 1: Цепочка указателей</h3>
+<div class="flow">
+  <div class="step"><code>0x00C5DF88</code><br><small>DevicePtr1</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><code>[DevicePtr1]+0x397C</code><br><small>DevicePtr2</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><code>[DevicePtr2]+0x00</code><br><small>VTable</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step gold"><code>[VTable]+0xA8</code><br><small>EndScene addr</small></div>
+</div>
+<pre>
+<span class="addr">DevicePtr1</span>  = ReadUInt32(<span class="num">0x00C5DF88</span>)
+<span class="addr">DevicePtr2</span>  = ReadUInt32(DevicePtr1 + <span class="num">0x397C</span>)
+<span class="addr">VTable</span>      = ReadUInt32(DevicePtr2)
+<span class="addr">EndScene</span>    = ReadUInt32(VTable + <span class="num">0xA8</span>)  <span class="comment">// vtable index 42 * 4 = 0xA8</span>
+</pre>
+</section>
+
+<section id="d3d9helper">
+<h2>D3D9Helper (fallback)</h2>
+<p>Если стандартная цепочка сломана (оверлеи Discord, GeForce и т.д.), используется fallback через фейковое D3D9 устройство.</p>
+
+<h3>Алгоритм</h3>
+<ol>
+  <li><strong>Создаем скрытое окно</strong> через <code>CreateWindowExA("STATIC", "WB_D3D", ...)</code></li>
+  <li><strong>Создаем D3D9:</strong> <code>Direct3DCreate9(32)</code></li>
+  <li><strong>CreateDevice:</strong> adapter=0, HAL, SOFTWARE_VERTEXPROCESSING. Минимальные параметры (1x1 backbuffer)</li>
+  <li><strong>Читаем VTable[42]</strong> -- адрес EndScene в <strong>нашем</strong> процессе</li>
+  <li><strong>Вычисляем смещение:</strong> <code>offset = EndScene_local - d3d9.dll_local</code></li>
+  <li><strong>Ищем d3d9.dll в WoW:</strong> через CreateToolhelp32Snapshot + Module32First/Next</li>
+  <li><strong>Применяем смещение:</strong> <code>EndScene_remote = d3d9.dll_remote + offset</code></li>
+</ol>
+
+<div class="card warn">
+<h4>Signature matching (крайний fallback)</h4>
+<p>Если d3d9.dll не найден по имени -- перебираем ВСЕ модули процесса WoW. Для каждого читаем <code>base+offset</code> и сравниваем первые 4 байта с нашим EndScene. Это ловит ренейменные/кастомные d3d9.</p>
+</div>
+</section>
+
+<section id="install">
+<h2>Install / CalculateStolenBytes</h2>
+<p>Установка хука: подменяем первые байты EndScene на JMP в наш codecave.</p>
+
+<h3>CalculateStolenBytes</h3>
+<p>Минимум 5 байт нужно украсть (размер JMP rel32). Но нельзя резать инструкции пополам. Мини-дизассемблер разбирает x86 инструкции:</p>
+<table>
+  <tr><th>Опкод</th><th>Длина</th><th>Пример</th></tr>
+  <tr><td><code>0x55, 0x56, 0x50-0x53</code></td><td>1</td><td>push ebp, push esi, push eax...</td></tr>
+  <tr><td><code>0x6A, 0xEB, 0x74, 0x75</code></td><td>2</td><td>push imm8, jmp short, je short, jne short</td></tr>
+  <tr><td><code>0xE8, 0xE9, 0x68, 0xB8</code></td><td>5</td><td>call rel32, jmp rel32, push imm32, mov eax,imm32</td></tr>
+  <tr><td><code>0x8B, 0x89, 0xFF, 0x33...</code></td><td>ModRM</td><td>mov, cmp, call [reg+disp], xor...</td></tr>
+  <tr><td><code>0x83</code></td><td>ModRM+1</td><td>add/sub/cmp reg, imm8</td></tr>
+  <tr><td><code>0x81</code></td><td>ModRM+4</td><td>add/sub/cmp reg, imm32</td></tr>
+</table>
+
+<h3>FixupStolenBytes</h3>
+<p>Относительные инструкции (call/jmp rel32) нужно пересчитать, т.к. codecave по другому адресу:</p>
+<pre>
+target = originalAddr + offset + 5 + oldRel
+newRel = target - (newAddr + offset + 5)
+</pre>
+
+<h3>Patch EndScene</h3>
+<pre>
+<span class="comment">// Оригинал: push ebp; mov ebp,esp; ... (>= 5 байт)</span>
+<span class="comment">// Патч:     E9 xx xx xx xx [NOP...]</span>
+jmpPatch[0] = <span class="num">0xE9</span>;                        <span class="comment">// JMP rel32</span>
+rel32 = codecaveAddr - endSceneAddr - 5;    <span class="comment">// относительный адрес</span>
+<span class="comment">// Остаток заполняем NOP (0x90)</span>
+</pre>
+</section>
+
+<section id="codecave">
+<h2>BuildCodecave (ASM)</h2>
+<h3>Memory Layout</h3>
+<div class="mem-layout">
+  <div class="block code">Codecave<span class="size">512 байт</span></div>
+  <div class="block lua">Lua Buffer<span class="size">32768 байт (32KB)</span></div>
+  <div class="block flags">Flag (4B) + Strings<span class="size">~24 байт</span></div>
+  <div class="block data">TerrainClick (24B) + CTM (32B)<span class="size">~56 байт</span></div>
+</div>
+
+<p>Полный размер аллокации: <code>512 + 32768 + 192 = 33472 байт</code></p>
+
+<table>
+  <tr><th>Смещение</th><th>Размер</th><th>Содержимое</th></tr>
+  <tr><td><code>+0</code></td><td>512B</td><td>x86 asm codecave</td></tr>
+  <tr><td><code>+512</code></td><td>32768B</td><td>Lua string buffer (скрипты до 32KB)</td></tr>
+  <tr><td><code>+33280</code></td><td>4B</td><td>Flag (uint32)</td></tr>
+  <tr><td><code>+33284</code></td><td>8B</td><td>"bot\0" (идентификатор)</td></tr>
+  <tr><td><code>+33292</code></td><td>8B</td><td>"WB_R\0" (имя переменной результата)</td></tr>
+  <tr><td><code>+33300</code></td><td>4B</td><td>Return pointer (результат lua_tolstring)</td></tr>
+  <tr><td><code>+33304</code></td><td>24B</td><td>TerrainClick struct: GUID(8)+XYZ(12)+btn(4)</td></tr>
+  <tr><td><code>+33328</code></td><td>32B</td><td>CTM struct: type(4)+GUID(8)+XYZ(12)+prec(4)+playerBase(4)</td></tr>
+</table>
+
+<h3>ASM логика codecave</h3>
+<pre>
+<span class="keyword">pushad</span>                      <span class="comment">; сохраняем все регистры</span>
+<span class="keyword">pushfd</span>                      <span class="comment">; сохраняем флаги</span>
+
+<span class="keyword">mov</span> eax, [_flagAddr]         <span class="comment">; читаем флаг</span>
+<span class="keyword">cmp</span> eax, 1                  <span class="comment">; flag == 1? (exec lua)</span>
+<span class="keyword">je</span>  exec_lua
+<span class="keyword">cmp</span> eax, 3                  <span class="comment">; flag == 3? (exec + read)</span>
+<span class="keyword">je</span>  exec_result
+<span class="keyword">cmp</span> eax, 4                  <span class="comment">; flag == 4? (read only)</span>
+<span class="keyword">je</span>  read_only
+<span class="keyword">cmp</span> eax, 5                  <span class="comment">; flag == 5? (terrain click)</span>
+<span class="keyword">je</span>  terrain_click
+<span class="keyword">cmp</span> eax, 6                  <span class="comment">; flag == 6? (CTM call)</span>
+<span class="keyword">je</span>  ctm_call
+<span class="keyword">jmp</span> skip                    <span class="comment">; flag == 0 -- ничего не делать</span>
+
+<span class="str">exec_lua:</span>
+  push 0                    <span class="comment">; Lua_DoString(luaStr, "bot", 0)</span>
+  push _botStringAddr
+  push _luaStringAddr
+  call Lua_DoString          <span class="comment">; 0x00819210</span>
+  add esp, 12
+  mov [_flagAddr], 2         <span class="comment">; flag = done</span>
+  jmp skip
+
+<span class="str">exec_result:</span>
+  <span class="comment">; Lua_DoString + lua_getfield + lua_tolstring + lua_settop</span>
+  ... call Lua_DoString ...
+  push "WB_R"
+  push LUA_GLOBALSINDEX     <span class="comment">; -10002</span>
+  push [LuaState]           <span class="comment">; 0x00D3F78C</span>
+  call lua_getfield          <span class="comment">; 0x0084E590</span>
+  ...
+  call lua_tolstring         <span class="comment">; 0x0084E0E0 -- возвращает char* в eax</span>
+  mov [_returnPtrAddr], eax
+  call lua_settop(L, 0)     <span class="comment">; 0x0084DBF0 -- очистка стека</span>
+  mov [_flagAddr], 2
+
+<span class="str">terrain_click:</span>
+  push _terrainClickAddr
+  call HandleTerrainClick    <span class="comment">; 0x00527830</span>
+  add esp, 4
+  mov [_flagAddr], 2
+
+<span class="str">ctm_call:</span>
+  push [precision]           <span class="comment">; struct+24</span>
+  push posAddr               <span class="comment">; struct+12 (X,Y,Z)</span>
+  push guidAddr              <span class="comment">; struct+4</span>
+  push [clickType]           <span class="comment">; struct+0</span>
+  mov ecx, [playerBase]      <span class="comment">; struct+28 (this pointer)</span>
+  call 0x00727400            <span class="comment">; CGPlayer_C__ClickToMove</span>
+  mov [_flagAddr], 2
+
+<span class="str">skip:</span>
+  <span class="keyword">popfd</span>
+  <span class="keyword">popad</span>
+  <span class="comment">; [stolen bytes -- оригинальные инструкции EndScene]</span>
+  <span class="keyword">jmp</span> endScene + stolenByteCount  <span class="comment">; возврат</span>
+</pre>
+</section>
+
+<section id="flag-system">
+<h2>Система флагов</h2>
+<table>
+  <tr><th>Флаг</th><th>Значение</th><th>Описание</th><th>Кто ставит</th></tr>
+  <tr><td><span class="badge flag">0</span></td><td>idle</td><td>Ничего не делать</td><td>C# (после чтения done) / ASM</td></tr>
+  <tr><td><span class="badge flag">1</span></td><td>exec</td><td>Выполнить Lua_DoString</td><td>C# (ExecuteLua)</td></tr>
+  <tr><td><span class="badge flag">2</span></td><td>done</td><td>Выполнение завершено</td><td>ASM (после любого действия)</td></tr>
+  <tr><td><span class="badge flag">3</span></td><td>exec+read</td><td>Lua_DoString + getfield + tolstring</td><td>C# (ExecuteLuaWithResult step 1)</td></tr>
+  <tr><td><span class="badge flag">4</span></td><td>read only</td><td>Только getfield + tolstring (без DoString)</td><td>C# (ExecuteLuaWithResult step 2)</td></tr>
+  <tr><td><span class="badge flag">5</span></td><td>terrain</td><td>HandleTerrainClick (ground AoE)</td><td>C# (CastTerrainClick)</td></tr>
+  <tr><td><span class="badge flag">6</span></td><td>CTM call</td><td>CGPlayer_C__ClickToMove</td><td>C# (CallClickToMove)</td></tr>
+</table>
+
+<div class="card info">
+<h4>Протокол взаимодействия</h4>
+<p>C# записывает данные в буферы, затем ставит флаг. ASM в EndScene видит флаг, выполняет действие, ставит flag=2 (done). C# в цикле WaitForCompletion() ждёт flag=2, затем сбрасывает в 0.</p>
+</div>
+</section>
+
+<section id="execute-lua">
+<h2>ExecuteLua / ExecuteLuaWithResult</h2>
+
+<h3>ExecuteLua (flag=1)</h3>
+<ol>
+  <li>Записать Lua-строку в <code>_luaStringAddr</code></li>
+  <li>Установить <code>_flagAddr = 1</code></li>
+  <li>WaitForCompletion: поллить flag каждые 1мс, ждать flag==2</li>
+  <li>Сбросить flag=0, вернуть true</li>
+</ol>
+
+<h3>ExecuteLuaWithResult (двухшаговый)</h3>
+<ol>
+  <li><strong>Шаг 1:</strong> ExecuteLua (flag=1) -- выполняет Lua, устанавливает WB_R</li>
+  <li><strong>Пауза 50мс</strong> -- ждём 1 EndScene кадр</li>
+  <li><strong>Шаг 2:</strong> flag=4 (read only) -- lua_getfield("WB_R") + lua_tolstring</li>
+  <li>Читает указатель из <code>_returnPtrAddr</code></li>
+  <li>Читает строку по указателю: <code>ReadString(resultPtr, 4096)</code></li>
+</ol>
+
+<h3>WaitForCompletion</h3>
+<pre>
+<span class="keyword">while</span> (elapsed &lt; timeout)
+{
+    flag = ReadUInt32(_flagAddr);
+    <span class="keyword">if</span> (flag == 2) { WriteUInt32(_flagAddr, 0); <span class="keyword">return true</span>; }
+    <span class="keyword">if</span> (flag == 0) <span class="keyword">return false</span>;  <span class="comment">// кто-то уже сбросил</span>
+    Thread.Sleep(1);
+}
+<span class="comment">// timeout -- сбрасываем flag и возвращаем false</span>
+</pre>
+</section>
+
+<section id="terrain-ctm">
+<h2>TerrainClick / CTM Call</h2>
+
+<h3>CastTerrainClick (flag=5)</h3>
+<p>Для ground-targeted AoE спеллов (Гроза, Метель). Спелл уже должен быть в режиме прицеливания.</p>
+<table>
+  <tr><th>Offset</th><th>Тип</th><th>Поле</th></tr>
+  <tr><td>+0</td><td>uint64</td><td>GUID (0 для ground click)</td></tr>
+  <tr><td>+8</td><td>float</td><td>X</td></tr>
+  <tr><td>+12</td><td>float</td><td>Y</td></tr>
+  <tr><td>+16</td><td>float</td><td>Z</td></tr>
+  <tr><td>+20</td><td>uint32</td><td>Mouse button (1 = left)</td></tr>
+</table>
+
+<h3>CallClickToMove (flag=6)</h3>
+<p>Вызывает нативную <code>CGPlayer_C__ClickToMove(0x00727400)</code> через EndScene. Thiscall: ECX = playerBase.</p>
+<table>
+  <tr><th>Offset</th><th>Тип</th><th>Поле</th></tr>
+  <tr><td>+0</td><td>int32</td><td>clickType (1=face, 4=move, 5=interact)</td></tr>
+  <tr><td>+4</td><td>uint64</td><td>Target GUID</td></tr>
+  <tr><td>+12</td><td>float</td><td>X</td></tr>
+  <tr><td>+16</td><td>float</td><td>Y</td></tr>
+  <tr><td>+20</td><td>float</td><td>Z</td></tr>
+  <tr><td>+24</td><td>float</td><td>Precision</td></tr>
+  <tr><td>+28</td><td>uint32</td><td>playerBase (ECX -- this pointer)</td></tr>
+</table>
+</section>
+
+<section id="verification">
+<h2>Верификация хука</h2>
+<p>После установки хука выполняется тестовый скрипт:</p>
+<pre>
+_memory.WriteString(_luaStringAddr, <span class="str">"local x=1"</span>);
+_memory.WriteUInt32(_flagAddr, 1);
+WaitForCompletion(<span class="num">1000</span>);  <span class="comment">// timeout 1 секунда</span>
+</pre>
+<p>Если флаг не стал 2 за 1 секунду -- хук считается нерабочим, вызывается <code>Uninstall()</code> и выбрасывается исключение.</p>
+</section>
+
+<!-- ==================== OBJECTMANAGER ==================== -->
+<h1 id="objectmanager">ObjectManager <small>Game/ObjectManager.cs</small></h1>
+<p>Обходит связный список объектов WoW и создаёт типизированные обёртки.</p>
+
+<h2>Обход объектов (Update)</h2>
+<div class="flow">
+  <div class="step"><code>[0x00C79CE0]</code><br><small>ClientConnection</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><code>[CC + 0x2ED0]</code><br><small>ObjectManagerBase</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><code>[OMB + 0xC0]</code><br><small>LocalPlayerGuid</small></div>
+</div>
+<div class="flow" style="margin-top:4px">
+  <div class="step gold"><code>[OMB + 0xAC]</code><br><small>FirstObject</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><code>[obj + 0x14]</code><br><small>Type check</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step">Создать Entity</div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><code>[obj + 0x3C]</code><br><small>NextObject</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step gold">Loop (max 5000)</div>
+</div>
+
+<h3>Типы объектов</h3>
+<table>
+  <tr><th>Тип</th><th>Значение</th><th>Класс C#</th><th>Коллекция</th></tr>
+  <tr><td>Object</td><td>0</td><td>WowObject</td><td>Objects</td></tr>
+  <tr><td>Item</td><td>1</td><td>WowObject</td><td>Objects</td></tr>
+  <tr><td>Container</td><td>2</td><td>WowObject</td><td>Objects</td></tr>
+  <tr><td>Unit (NPC/mob)</td><td>3</td><td>WowUnit</td><td>Units</td></tr>
+  <tr><td>Player</td><td>4</td><td>WowPlayer</td><td>Players</td></tr>
+  <tr><td>GameObject</td><td>5</td><td>WowObject</td><td>Objects</td></tr>
+  <tr><td>DynamicObject</td><td>6</td><td>WowDynObject</td><td>DynObjects</td></tr>
+  <tr><td>Corpse</td><td>7</td><td>WowObject</td><td>Objects</td></tr>
+</table>
+
+<h3>Условие выхода из цикла</h3>
+<pre>
+<span class="keyword">while</span> (currentObject != 0 && (currentObject & 1) == 0 && safetyCounter &lt; <span class="num">5000</span>)
+</pre>
+<p><code>(currentObject & 1) == 0</code> -- проверка на нечётный адрес (невалидный указатель). Safety counter 5000 предотвращает бесконечный цикл.</p>
+
+<h3>GetTarget / GetUnitByGuid</h3>
+<p>GetTarget: читает <code>LocalPlayer.TargetGuid</code> и ищет юнит/игрок с этим GUID. Поиск линейный по обоим спискам (Units + Players).</p>
+
+<!-- ==================== ENTITIES ==================== -->
+<h1 id="entities">Entities <small>Game/Entities/</small></h1>
+
+<h2>WowObject (базовый)</h2>
+<table>
+  <tr><th>Свойство</th><th>Чтение</th><th>Описание</th></tr>
+  <tr><td><code>BaseAddress</code></td><td>передается в конструктор</td><td>Адрес объекта в памяти WoW</td></tr>
+  <tr><td><code>Guid</code></td><td><code>ReadUInt64(base + 0x30)</code></td><td>Уникальный 64-бит идентификатор</td></tr>
+  <tr><td><code>Type</code></td><td><code>ReadInt32(base + 0x14)</code></td><td>WowObjectType enum</td></tr>
+  <tr><td><code>DescriptorBase</code></td><td><code>ReadUInt32(base + 0x08)</code></td><td>Указатель на таблицу дескрипторов</td></tr>
+</table>
+<p>Дескрипторы читаются как: <code>ReadXxx(DescriptorBase + index * 4)</code> -- индекс НЕ умножен на 4 в константах!</p>
+
+<h2>WowUnit</h2>
+<table>
+  <tr><th>Свойство</th><th>Дескриптор / Offset</th><th>Тип</th><th>Примечания</th></tr>
+  <tr><td>Health</td><td>idx 0x18</td><td>int</td><td>WoWCircle (стандарт: 0x58)</td></tr>
+  <tr><td>MaxHealth</td><td>idx 0x20</td><td>int</td><td>WoWCircle (стандарт: 0x70)</td></tr>
+  <tr><td>HealthPercent</td><td>computed</td><td>float</td><td>Health/MaxHealth * 100</td></tr>
+  <tr><td>Mana</td><td>idx 0x19</td><td>int</td><td>Power1</td></tr>
+  <tr><td>MaxMana</td><td>idx 0x21</td><td>int</td><td>MaxPower1</td></tr>
+  <tr><td>Rage</td><td>idx 0x1A</td><td>int</td><td>/10 (WoW хранит * 10)</td></tr>
+  <tr><td>Energy</td><td>idx 0x1C</td><td>int</td><td>Power4</td></tr>
+  <tr><td>RunicPower</td><td>idx 0x1D</td><td>int</td><td>/10</td></tr>
+  <tr><td>Level</td><td>idx 0x36</td><td>int</td><td>WoWCircle (стандарт: 0x88)</td></tr>
+  <tr><td>FactionTemplate</td><td>idx 0x37</td><td>int</td><td></td></tr>
+  <tr><td>TargetGuid</td><td>idx 0x12 (2 slot)</td><td>ulong</td><td>64-бит GUID (2 * uint32)</td></tr>
+  <tr><td>UnitFlags</td><td>idx 0x3B</td><td>int</td><td></td></tr>
+  <tr><td>InCombat</td><td>flags & 0x80000</td><td>bool</td><td>UNIT_FLAG_IN_COMBAT</td></tr>
+  <tr><td>BoundingRadius</td><td>idx 0x41</td><td>float</td><td>Размер хитбокса модели</td></tr>
+  <tr><td>CombatReach</td><td>idx 0x42</td><td>float</td><td>Дистанция мили-удара</td></tr>
+  <tr><td>DisplayId</td><td>idx 0x3E</td><td>int</td><td></td></tr>
+  <tr><td>NpcId</td><td>idx 0x06</td><td>int</td><td>OBJECT_FIELD_ENTRY</td></tr>
+  <tr><td>X, Y, Z</td><td>base + 0x798/0x79C/0x7A0</td><td>float</td><td>Мировые координаты</td></tr>
+  <tr><td>Facing</td><td>base + 0x7A8</td><td>float</td><td>Направление (радианы, 0-2pi)</td></tr>
+  <tr><td>CastingSpellId</td><td>base + 0xA60</td><td>int</td><td>0 = не кастует</td></tr>
+  <tr><td>ChannelingSpellId</td><td>base + 0xA6C</td><td>int</td><td>0 = не ченнелит</td></tr>
+  <tr><td>IsCasting</td><td>computed</td><td>bool</td><td>CastingSpellId != 0 || ChannelingSpellId != 0</td></tr>
+  <tr><td>Name</td><td>base+0x964 &rarr; +0x05C</td><td>string</td><td>Двойная разыменовка указателя (NPC)</td></tr>
+</table>
+
+<h3>Ауры (GetAuraSpellIds)</h3>
+<p>Таблица аур хранится по двум путям:</p>
+<ul>
+  <li><strong>Обычный путь:</strong> count @ <code>base+0xDD0</code>, таблица @ <code>base+0xC50</code></li>
+  <li><strong>Альтернативный (count == -1):</strong> count @ <code>base+0xC54</code>, таблица -- указатель @ <code>base+0xC58</code></li>
+</ul>
+<p>Каждая аура: размер 0x18 (24 байта), spell ID @ offset 0x08 внутри записи. Макс. 80 аур.</p>
+
+<h2>WowDynObject</h2>
+<p>AoE зона на земле (Consecration, Death and Decay, Blizzard и т.д.). Используется для AoE Avoidance.</p>
+<table>
+  <tr><th>Свойство</th><th>Offset</th><th>Примечания</th></tr>
+  <tr><td>X, Y, Z</td><td>base + 0xE8/0xEC/0xF0</td><td>Позиция в мире</td></tr>
+  <tr><td>Caster</td><td>descriptor + 0x00</td><td>GUID кастера (8 байт)</td></tr>
+  <tr><td>SpellId</td><td>descriptor + 0x0C</td><td>ID спелла</td></tr>
+  <tr><td>Radius</td><td>descriptor + 0x10</td><td>Радиус (float)</td></tr>
+</table>
+
+<div class="card warn">
+<h4>WoWCircle: радиус всегда 1.0</h4>
+<p>На WoWCircle дескриптор Radius = 1.0 (некорректно). Если rawRadius &le; 1.5 -- используется таблица дефолтов по SpellId (Death and Decay=10yd, Consecration=8yd и т.д.).</p>
+</div>
+
+<!-- ==================== OFFSETS ==================== -->
+<h1 id="offsets">Таблица оффсетов <small>Game/Offsets.cs</small></h1>
+<p>Все оффсеты для WoW 3.3.5a Build 12340 (WoWCircle). <strong>Дескрипторы отличаются от стандарта!</strong></p>
+
+<h2>Глобальные указатели</h2>
+<table>
+  <tr><th>Константа</th><th>Адрес</th><th>Описание</th></tr>
+  <tr><td><code>ClientConnection</code></td><td><code>0x00C79CE0</code></td><td>Корень ObjectManager</td></tr>
+  <tr><td><code>PlayerName</code></td><td><code>0x00C79D18</code></td><td>Строка с именем персонажа</td></tr>
+  <tr><td><code>LuaState</code></td><td><code>0x00D3F78C</code></td><td>Lua VM state pointer</td></tr>
+</table>
+
+<h2>ObjectManager</h2>
+<table>
+  <tr><th>Константа</th><th>Offset</th><th>Описание</th></tr>
+  <tr><td><code>ObjectManagerOffset</code></td><td><code>0x2ED0</code></td><td>ClientConnection &rarr; ObjMgr</td></tr>
+  <tr><td><code>FirstObject</code></td><td><code>0xAC</code></td><td>ObjMgr &rarr; первый объект</td></tr>
+  <tr><td><code>NextObject</code></td><td><code>0x3C</code></td><td>obj &rarr; следующий объект</td></tr>
+  <tr><td><code>LocalPlayerGuid</code></td><td><code>0xC0</code></td><td>ObjMgr &rarr; GUID локального игрока</td></tr>
+</table>
+
+<h2>Поля объекта</h2>
+<table>
+  <tr><th>Константа</th><th>Offset</th><th>Описание</th></tr>
+  <tr><td><code>ObjectType</code></td><td><code>0x14</code></td><td>Тип объекта (int enum)</td></tr>
+  <tr><td><code>ObjectGuid</code></td><td><code>0x30</code></td><td>GUID (uint64)</td></tr>
+  <tr><td><code>ObjectDescriptors</code></td><td><code>0x08</code></td><td>Указатель на дескрипторы</td></tr>
+</table>
+
+<h2>Позиция юнита</h2>
+<table>
+  <tr><th>Константа</th><th>Offset</th><th>Тип</th></tr>
+  <tr><td><code>UnitPositionX</code></td><td><code>0x798</code></td><td>float</td></tr>
+  <tr><td><code>UnitPositionY</code></td><td><code>0x79C</code></td><td>float</td></tr>
+  <tr><td><code>UnitPositionZ</code></td><td><code>0x7A0</code></td><td>float</td></tr>
+  <tr><td><code>UnitRotation</code></td><td><code>0x7A8</code></td><td>float (rad)</td></tr>
+</table>
+
+<h2>Дескрипторы (WoWCircle -- НЕСТАНДАРТНЫЕ!)</h2>
+<table>
+  <tr><th>Константа</th><th>Index</th><th>Byte Offset</th><th>Стандарт</th><th>Описание</th></tr>
+  <tr><td><code>UnitFieldTarget</code></td><td>0x12</td><td>0x48</td><td>--</td><td>GUID таргета (2 слота)</td></tr>
+  <tr><td><code>UnitFieldHealth</code></td><td>0x18</td><td>0x60</td><td>0x58</td><td>Текущее здоровье</td></tr>
+  <tr><td><code>UnitFieldPower1</code></td><td>0x19</td><td>0x64</td><td>0x5C</td><td>Мана</td></tr>
+  <tr><td><code>UnitFieldPower2</code></td><td>0x1A</td><td>0x68</td><td>--</td><td>Ярость (*10)</td></tr>
+  <tr><td><code>UnitFieldPower3</code></td><td>0x1B</td><td>0x6C</td><td>--</td><td>Фокус</td></tr>
+  <tr><td><code>UnitFieldPower4</code></td><td>0x1C</td><td>0x70</td><td>--</td><td>Энергия</td></tr>
+  <tr><td><code>UnitFieldPower5</code></td><td>0x1D</td><td>0x74</td><td>--</td><td>Руническая сила (*10)</td></tr>
+  <tr><td><code>UnitFieldMaxHealth</code></td><td>0x20</td><td>0x80</td><td>0x70</td><td>Макс. здоровье</td></tr>
+  <tr><td><code>UnitFieldMaxPower1</code></td><td>0x21</td><td>0x84</td><td>0x74</td><td>Макс. мана</td></tr>
+  <tr><td><code>UnitFieldLevel</code></td><td>0x36</td><td>0xD8</td><td>0x88</td><td>Уровень</td></tr>
+  <tr><td><code>UnitFieldFactionTemplate</code></td><td>0x37</td><td>0xDC</td><td>--</td><td>Шаблон фракции</td></tr>
+  <tr><td><code>UnitFieldFlags</code></td><td>0x3B</td><td>0xEC</td><td>--</td><td>Флаги (InCombat = 0x80000)</td></tr>
+  <tr><td><code>UnitFieldDisplayId</code></td><td>0x3E</td><td>0xF8</td><td>--</td><td>ID модели</td></tr>
+  <tr><td><code>UnitFieldBoundingRadius</code></td><td>0x41</td><td>0x104</td><td>--</td><td>Радиус хитбокса (float)</td></tr>
+  <tr><td><code>UnitFieldCombatReach</code></td><td>0x42</td><td>0x108</td><td>--</td><td>Дальность мили (float)</td></tr>
+</table>
+
+<h2>Каст и ауры</h2>
+<table>
+  <tr><th>Константа</th><th>Offset</th><th>Описание</th></tr>
+  <tr><td><code>CurrentCastId</code></td><td><code>0xA60</code></td><td>ID текущего каста (0 = не кастует)</td></tr>
+  <tr><td><code>CurrentChannelId</code></td><td><code>0xA6C</code></td><td>ID текущего ченнелинга</td></tr>
+  <tr><td><code>AuraCount</code></td><td><code>0xDD0</code></td><td>Кол-во аур (-1 = alt path)</td></tr>
+  <tr><td><code>AuraTableBase</code></td><td><code>0xC50</code></td><td>Начало таблицы аур</td></tr>
+  <tr><td><code>AuraTableAlt</code></td><td><code>0xC58</code></td><td>Альтернативная таблица (указатель)</td></tr>
+  <tr><td><code>AuraTableCountAlt</code></td><td><code>0xC54</code></td><td>Кол-во аур (alt path)</td></tr>
+  <tr><td><code>AuraSize</code></td><td><code>0x18</code></td><td>Размер записи ауры (24 байта)</td></tr>
+  <tr><td><code>AuraSpellId</code></td><td><code>0x08</code></td><td>Spell ID внутри записи ауры</td></tr>
+</table>
+
+<h2>DirectX / Lua API</h2>
+<table>
+  <tr><th>Константа</th><th>Адрес</th><th>Описание</th></tr>
+  <tr><td><code>DevicePtr1</code></td><td><code>0x00C5DF88</code></td><td>D3D9 Device pointer (шаг 1)</td></tr>
+  <tr><td><code>DevicePtr2Offset</code></td><td><code>0x397C</code></td><td>D3D9 Device pointer (шаг 2)</td></tr>
+  <tr><td><code>EndSceneOffset</code></td><td><code>0xA8</code></td><td>VTable offset (index 42 * 4)</td></tr>
+  <tr><td><code>LuaDoString</code></td><td><code>0x00819210</code></td><td>Lua_DoString(lua, source, exec)</td></tr>
+  <tr><td><code>LuaGetLocalizedText</code></td><td><code>0x007225E0</code></td><td><strong>НЕ ИСПОЛЬЗОВАТЬ!</strong> Крашит WoW</td></tr>
+  <tr><td><code>LuaGetField</code></td><td><code>0x0084E590</code></td><td>lua_getfield(L, idx, name)</td></tr>
+  <tr><td><code>LuaToLString</code></td><td><code>0x0084E0E0</code></td><td>lua_tolstring(L, idx, lenPtr)</td></tr>
+  <tr><td><code>LuaSetTop</code></td><td><code>0x0084DBF0</code></td><td>lua_settop(L, idx) -- очистка стека</td></tr>
+  <tr><td><code>HandleTerrainClick</code></td><td><code>0x00527830</code></td><td>Обработка клика по земле</td></tr>
+</table>
+
+<h2>Имена</h2>
+<table>
+  <tr><th>Константа</th><th>Offset</th><th>Описание</th></tr>
+  <tr><td><code>NameStoreBase</code></td><td><code>0x00C5D938</code></td><td>Кеш имён игроков</td></tr>
+  <tr><td><code>NameStoreBaseOffset</code></td><td><code>0x08</code></td><td></td></tr>
+  <tr><td><code>NameStoreMask</code></td><td><code>0x24</code></td><td></td></tr>
+  <tr><td><code>NameStoreBasePtr</code></td><td><code>0x1C</code></td><td></td></tr>
+  <tr><td><code>NameStoreString</code></td><td><code>0x20</code></td><td></td></tr>
+  <tr><td><code>UnitNamePtr1</code></td><td><code>0x964</code></td><td>NPC/моб: первый указатель</td></tr>
+  <tr><td><code>UnitNamePtr2</code></td><td><code>0x05C</code></td><td>NPC/моб: второй указатель</td></tr>
+</table>
+
+<!-- ==================== NAVIGATION ==================== -->
+<h1 id="navigation">Navigation <small>Game/Navigation.cs</small></h1>
+<p>Управление поворотом (face), определение состояния движения (стоит/двигается), движение вперёд.</p>
+
+<h2>FaceInstant</h2>
+<p>Мгновенный поворот к цели через <code>CGPlayer_C__ClickToMove</code> с clickType=1 (FaceTarget).</p>
+<pre>
+<span class="keyword">public bool</span> FaceInstant(WowUnit player, WowUnit target)
+{
+    <span class="keyword">if</span> (IsFacing(player, target)) <span class="keyword">return true</span>;
+    <span class="keyword">if</span> (player.IsCasting) <span class="keyword">return false</span>;
+    _hook.CallClickToMove(target.X, target.Y, target.Z, player.BaseAddress,
+        clickType: <span class="num">1</span>, precision: <span class="num">0.1f</span>, targetGuid: target.Guid);
+    <span class="keyword">return false</span>;
+}
+</pre>
+<p>clickType=1 отправляет серверный пакет поворота (в отличие от WriteFacing, который только локальный).</p>
+
+<h2>Математика углов</h2>
+<table>
+  <tr><th>Метод</th><th>Описание</th></tr>
+  <tr><td><code>GetAngleTo(from, to)</code></td><td><code>atan2(dy, dx)</code>, нормализация в [0, 2pi]</td></tr>
+  <tr><td><code>IsFacing(from, to, tol)</code></td><td>Разница углов &lt; tolerance (0.5 rad ~29&deg;)</td></tr>
+  <tr><td><code>AngleDiff(from, to)</code></td><td>Кратчайшая разница с учётом 0/2pi перехода</td></tr>
+</table>
+
+<h2>Определение движения</h2>
+<p><code>IsPlayerStanding()</code>: сравнивает текущую позицию с предыдущей. Если не двигался 3 тика подряд (~450мс) -- считается "стоит".</p>
+<table>
+  <tr><th>Константа</th><th>Значение</th></tr>
+  <tr><td>MOVE_THRESHOLD</td><td>0.3 yards</td></tr>
+  <tr><td>STANDING_TICKS_REQUIRED</td><td>3 (450мс)</td></tr>
+  <tr><td>FACE_TOLERANCE</td><td>0.5 rad (~29&deg;)</td></tr>
+</table>
+
+<h2>WriteFacing</h2>
+<p>Прямая запись facing в память (локальная, без серверного пакета):</p>
+<pre>_memory.WriteFloat(unit.BaseAddress + <span class="num">0x7A8</span>, facing);</pre>
+
+<!-- ==================== CLICKTOMOVE ==================== -->
+<h1 id="clicktomove">ClickToMove <small>Game/ClickToMove.cs</small></h1>
+<p>Click-to-Move: записываем координаты в память WoW, клиент плавно бежит к точке.</p>
+
+<h2>CTM Structure (0x00CA11D8)</h2>
+<table>
+  <tr><th>Адрес</th><th>Offset</th><th>Тип</th><th>Поле</th></tr>
+  <tr><td><code>0x00CA11F4</code></td><td>+0x1C</td><td>int</td><td>Action (тип действия)</td></tr>
+  <tr><td><code>0x00CA11E4</code></td><td>+0x0C</td><td>float</td><td>Precision (точность остановки)</td></tr>
+  <tr><td><code>0x00CA1264</code></td><td>+0x8C</td><td>float</td><td>X (целевая координата)</td></tr>
+  <tr><td><code>0x00CA1268</code></td><td>+0x90</td><td>float</td><td>Y</td></tr>
+  <tr><td><code>0x00CA126C</code></td><td>+0x94</td><td>float</td><td>Z</td></tr>
+</table>
+
+<h2>Action types</h2>
+<table>
+  <tr><th>Значение</th><th>Константа</th><th>Описание</th></tr>
+  <tr><td><code>0x0</code></td><td>ActionNone</td><td>Idle (не двигается)</td></tr>
+  <tr><td><code>0x4</code></td><td>ActionMoveTo</td><td>Бежать к точке</td></tr>
+  <tr><td><code>0x5</code></td><td>ActionInteract</td><td>Взаимодействие с объектом</td></tr>
+  <tr><td><code>0xD</code></td><td>ActionStop</td><td>Остановка</td></tr>
+</table>
+
+<h2>Нативный CTM vs Прямая запись</h2>
+<div class="card highlight">
+<p><strong>Приоритет:</strong> если EndScene хук доступен -- используется нативная функция <code>CGPlayer_C__ClickToMove(0x00727400)</code> через flag=6. Она корректно инициализирует movement state machine.</p>
+<p><strong>Fallback:</strong> прямая запись X/Y/Z/Precision/Action в память. Может иметь "cold start" баг на свежем клиенте.</p>
+</div>
+
+<h2>WarmupMovement</h2>
+<p>Прогрев CTM: записывает action=3 (follow-stop) чтобы инициализировать rotation system. Также активирует CTM через <code>[0xBD08F4]+0x30 = 1</code>.</p>
+
+<!-- ==================== COMBAT POSITIONING ==================== -->
+<h1 id="combat-pos">CombatPositioning <small>Game/CombatPositioning.cs</small></h1>
+<p>Позиционирование в бою. Вдохновлено NPCBots bot_ai.cpp.</p>
+
+<h2>MoveBehind (мили ДПС)</h2>
+<p>Перемещает мили-ДПС за спину таргета. НЕ для танков и хилеров.</p>
+
+<h3>IsBehind / IsInFrontArc</h3>
+<pre>
+<span class="comment">// Угол от таргета к игроку</span>
+angleToPoint = atan2(player.Y - target.Y, player.X - target.X)
+diff = angleToPoint - target.Facing  <span class="comment">// нормализация в [-PI, PI]</span>
+inFront = |diff| &lt; PI/2              <span class="comment">// передние 180&deg;</span>
+behind = !inFront                     <span class="comment">// задние 180&deg;</span>
+</pre>
+
+<h3>GetBehindPosition</h3>
+<p>Точка за спиной таргета на дистанции <code>max(текущая дистанция, 2.0)</code>:</p>
+<pre>
+behindAngle = target.Facing + PI  <span class="comment">// opposite direction</span>
+x = target.X + dist * cos(behindAngle)
+y = target.Y + dist * sin(behindAngle)
+</pre>
+
+<h3>Интервалы и антибаунс</h3>
+<table>
+  <tr><th>Класс</th><th>Интервал</th><th>Реальное время</th><th>Антибаунс пауза</th></tr>
+  <tr><td>Rogue / Feral Druid</td><td>3 тика</td><td>~450мс</td><td>9 тиков (~1.35с)</td></tr>
+  <tr><td>Остальные мили</td><td>5 тиков</td><td>~750мс</td><td>15 тиков (~2.25с)</td></tr>
+</table>
+<p><strong>Антибаунс:</strong> после прибытия за спину, <code>_repositionTick = -(interval * 3)</code>. Это создаёт паузу перед следующей проверкой, чтобы не метаться туда-сюда.</p>
+
+<h2>RangedPos (ранж ДПС)</h2>
+<p>Встает на 25 ярдов от таргета под углом 135&deg; от лица (сбоку-сзади). Интервал: 15 тиков (~2.25с). Активируется если ближе 15м или в передней дуге.</p>
+
+<!-- ==================== AOE AVOIDANCE ==================== -->
+<h1 id="aoe-avoid">AoE Avoidance <small>В BotEngine.cs</small></h1>
+<p>Автоматическое выбегание из вражеских AoE зон (луж). Основан на DynObject детекции.</p>
+
+<h2>Алгоритм (TryAoEAvoidance)</h2>
+<ol>
+  <li>Проверка каждые ~450мс (3 тика)</li>
+  <li>Получить список DynObjects из ObjectManager</li>
+  <li>Получить ауры (дебаффы) игрока</li>
+  <li>Для каждого DynObject: <strong>SpellId совпадает с дебафом на нас?</strong></li>
+  <li>Проверить SafeAoeDebuffs (Осквернение ДК -- только слоу, не бежим)</li>
+  <li>Расстояние до центра DynObject &lt; radius + 2yd?</li>
+  <li>Если несколько луж -- вычислить центр масс</li>
+  <li><strong>Вектор побега:</strong> от центра масс наружу на <code>maxRadius + 5yd</code></li>
+  <li>CTM.MoveTo() к точке побега</li>
+  <li>Grace period: <code>_aoeFleeUntil = +2 секунды</code></li>
+</ol>
+
+<pre>
+escapeAngle = atan2(player.Y - meanY, player.X - meanX)
+escapeDist  = maxRadius + <span class="num">5</span>
+fleeX = meanX + escapeDist * cos(escapeAngle)
+fleeY = meanY + escapeDist * sin(escapeAngle)
+</pre>
+
+<div class="card info">
+<p><strong>Приоритет:</strong> AoE Flee имеет наивысший приоритет в Tick(). Пока <code>IsAoeFleeing == true</code>, пропускаются: follow, rotation, hivemind, всё.</p>
+</div>
+
+<!-- ==================== LUAREADER ==================== -->
+<h1 id="luareader">LuaReader <small>Game/LuaReader.cs</small></h1>
+<p>Читает результаты Lua через макрос WoW. Записывает значение в макрос через <code>EditMacro()</code>, затем читает строку из памяти WoW.</p>
+
+<h2>Initialize (двухпроходный скан)</h2>
+<ol>
+  <li><strong>Создание макроса:</strong> <code>CreateMacro('WB', 1, 'init')</code> если нет</li>
+  <li><strong>Проход 1 (маркер A):</strong> <code>EditMacro(1, 'WB', 1, 'WBMA_12345_PADDING...')</code></li>
+  <li><strong>Скан памяти:</strong> ищем маркер A в 3 регионах (0x01-0x08, 0x08-0x20, 0x20-0x30 GB)</li>
+  <li><strong>Проход 2 (маркер B):</strong> записываем другой маркер</li>
+  <li><strong>Верификация:</strong> среди кандидатов из прохода 1 ищем кто содержит маркер B</li>
+  <li>Найденный адрес = <code>_macroAddr</code></li>
+</ol>
+
+<div class="card">
+<h4>Зачем 2 прохода?</h4>
+<p>Маркер A может быть найден в нескольких местах (Lua буфер, копия строки, кеш). Проход 2 перезаписывает только <strong>настоящий</strong> адрес макроса -- остальные кандидаты устаревают.</p>
+</div>
+
+<h3>LuaConcatMarker</h3>
+<p>Маркер разбивается конкатенацией: <code>'WBM'..'A_12345'</code> -- чтобы полная строка НЕ попала в Lua буфер (иначе будет ложный кандидат).</p>
+
+<h2>Execute</h2>
+<ol>
+  <li>Очистить макрос: <code>EditMacro(1,'WB',1,'WB_CLR')</code></li>
+  <li>Проверить адрес (прочитать 'WB_CLR' по _macroAddr)</li>
+  <li>Если адрес протух -- быстрый пересканм</li>
+  <li>ExecuteLua(luaCode) -- код должен заканчиваться <code>EditMacro(1,'WB',1,WB_R)</code></li>
+  <li>Thread.Sleep(300) -- дать WoW время</li>
+  <li>ReadString(_macroAddr, 255)</li>
+  <li>Если пусто -- одна попытка retry (+200мс)</li>
+</ol>
+
+<h3>Автопереинициализация</h3>
+<p>Если 5 подряд неудач (<code>MAX_FAILS_BEFORE_REINIT</code>), вызывается повторная <code>Initialize()</code>.</p>
+
+<h3>Регионы сканирования</h3>
+<table>
+  <tr><th>Регион</th><th>Start</th><th>End</th><th>Размер</th></tr>
+  <tr><td>1</td><td>0x01000000</td><td>0x08000000</td><td>112 MB</td></tr>
+  <tr><td>2</td><td>0x08000000</td><td>0x20000000</td><td>384 MB</td></tr>
+  <tr><td>3</td><td>0x20000000</td><td>0x30000000</td><td>256 MB</td></tr>
+</table>
+
+<!-- ==================== LOGGER ==================== -->
+<h1 id="logger">Logger <small>Logger.cs</small></h1>
+<p>Статический логгер с категориями, per-character файлами и ring buffer для UI.</p>
+
+<h2>Категории (LogCat)</h2>
+<table>
+  <tr><th>Категория</th><th>Бит</th><th>Описание</th></tr>
+  <tr><td><code>General</code></td><td>1 &lt;&lt; 0</td><td>Аттач, хук, скрипты</td></tr>
+  <tr><td><code>Rotation</code></td><td>1 &lt;&lt; 1</td><td>Ротация (ExecRotation)</td></tr>
+  <tr><td><code>Heal</code></td><td>1 &lt;&lt; 2</td><td>Хилер логика</td></tr>
+  <tr><td><code>Tank</code></td><td>1 &lt;&lt; 3</td><td>Танк (taunt, def CD)</td></tr>
+  <tr><td><code>AoE</code></td><td>1 &lt;&lt; 4</td><td>AoE avoidance, ground AoE</td></tr>
+  <tr><td><code>Follow</code></td><td>1 &lt;&lt; 5</td><td>Follow / CTM</td></tr>
+  <tr><td><code>Hivemind</code></td><td>1 &lt;&lt; 6</td><td>Hivemind команды</td></tr>
+  <tr><td><code>Buffs</code></td><td>1 &lt;&lt; 7</td><td>Бафф-скрипты</td></tr>
+  <tr><td><code>Position</code></td><td>1 &lt;&lt; 8</td><td>Позиционирование (MoveBehind)</td></tr>
+  <tr><td><code>Combat</code></td><td>1 &lt;&lt; 9</td><td>SmartTaunt, BreakCC</td></tr>
+  <tr><td><code>Lua</code></td><td>1 &lt;&lt; 10</td><td>Lua консоль</td></tr>
+  <tr><td><code>Error</code></td><td>1 &lt;&lt; 11</td><td><strong>ВСЕГДА включен</strong></td></tr>
+</table>
+
+<h3>Пресеты</h3>
+<table>
+  <tr><th>Пресет</th><th>Категории</th></tr>
+  <tr><td>Default</td><td>General, Rotation, Heal, Tank, AoE, Combat, Error</td></tr>
+  <tr><td>Minimal</td><td>General, Error</td></tr>
+  <tr><td>Debug</td><td>All</td></tr>
+</table>
+
+<h2>Файлы</h2>
+<p>Per-character: <code>wowbot_{CharName}.log</code>. При <code>Init()</code> файл перезаписывается с заголовком.</p>
+
+<h2>Ring Buffer</h2>
+<p>200 записей в <code>ConcurrentQueue&lt;string&gt;</code>. Доступен через <code>GetRecentLogs(count)</code> для UI.</p>
+
+<h2>Формат строки</h2>
+<pre>[HH:mm:ss] LEVEL [Category] [CharName] message</pre>
+
+<!-- ==================== MEMORYREADER ==================== -->
+<h1 id="memoryreader">MemoryReader <small>Memory/MemoryReader.cs</small></h1>
+<p>Обёртка над Win32 API для чтения/записи памяти процесса WoW.</p>
+
+<h2>Attach</h2>
+<table>
+  <tr><th>Метод</th><th>Права доступа</th><th>Назначение</th></tr>
+  <tr><td><code>Attach()</code></td><td>PROCESS_VM_READ | PROCESS_QUERY_INFORMATION</td><td>Только чтение (мониторинг)</td></tr>
+  <tr><td><code>AttachForInject()</code></td><td>PROCESS_ALL_ACCESS</td><td>Чтение + запись + аллокация (для хука)</td></tr>
+</table>
+
+<h2>Методы чтения</h2>
+<table>
+  <tr><th>Метод</th><th>Тип</th><th>Размер</th></tr>
+  <tr><td><code>ReadBytes(addr, count)</code></td><td>byte[]</td><td>Произвольный</td></tr>
+  <tr><td><code>ReadUInt32(addr)</code></td><td>uint</td><td>4 байт</td></tr>
+  <tr><td><code>ReadInt32(addr)</code></td><td>int</td><td>4 байт</td></tr>
+  <tr><td><code>ReadUInt64(addr)</code></td><td>ulong</td><td>8 байт</td></tr>
+  <tr><td><code>ReadFloat(addr)</code></td><td>float</td><td>4 байт</td></tr>
+  <tr><td><code>ReadString(addr, max)</code></td><td>string</td><td>до null-terminator (UTF-8)</td></tr>
+</table>
+
+<h2>Методы записи</h2>
+<table>
+  <tr><th>Метод</th><th>Тип</th></tr>
+  <tr><td><code>WriteBytes(addr, data)</code></td><td>byte[]</td></tr>
+  <tr><td><code>WriteUInt32(addr, value)</code></td><td>uint</td></tr>
+  <tr><td><code>WriteInt32(addr, value)</code></td><td>int</td></tr>
+  <tr><td><code>WriteFloat(addr, value)</code></td><td>float</td></tr>
+  <tr><td><code>WriteString(addr, value)</code></td><td>string + \0</td></tr>
+</table>
+
+<h2>Аллокация</h2>
+<pre>
+AllocateMemory(size, protection = PAGE_EXECUTE_READWRITE)
+  &rarr; VirtualAllocEx(handle, null, size, MEM_COMMIT | MEM_RESERVE, protection)
+  &rarr; возвращает uint адрес
+
+FreeMemory(address)
+  &rarr; VirtualFreeEx(handle, addr, 0, MEM_RELEASE)
+</pre>
+
+<div style="height:80px"></div>
+<div style="text-align:center; color:var(--text-dim); font-size:12px; border-top:1px solid var(--card-border); padding-top:20px;">
+  WowBot Engine Documentation &mdash; WoW 3.3.5a WoWCircle &mdash; .NET 8.0 x86<br>
+  Generated 2026-04-09
+</div>
+<div style="height:40px"></div>
+
+</main>
+</body>
+</html>

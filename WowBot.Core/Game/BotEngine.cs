@@ -118,40 +118,7 @@ public class BotEngine : IDisposable
     private int _blessingCooldown; // пропустить N баф-чеков после каста благословения
     private double _lastRegisterTime;
     private double _lastAckTime;
-    private uint _hiveMacroAddr;
-    private int _hiveAddrRetry;
-
-    /// <summary>Найти адрес макроса #2 в памяти WoW</summary>
-    private uint FindHiveMacroAddr()
-    {
-        // Пишем маркер в макрос #2
-        string marker = "WBHM_" + (Environment.TickCount % 100000);
-        _hook.ExecuteLua($"EditMacro(2,'WH',1,'{marker}')", 300);
-        System.Threading.Thread.Sleep(300);
-
-        // Сканируем память
-        byte[] needle = System.Text.Encoding.UTF8.GetBytes(marker);
-        uint[][] regions = { new uint[] { 0x01000000, 0x20000000 }, new uint[] { 0x20000000, 0x30000000 } };
-        foreach (var region in regions)
-        {
-            for (uint addr = region[0]; addr < region[1]; addr += 4096)
-            {
-                try
-                {
-                    byte[] block = _objectManager.Memory.ReadBytes(addr, 4096 + needle.Length);
-                    for (int i = 0; i < 4096; i++)
-                    {
-                        bool match = true;
-                        for (int j = 0; j < needle.Length; j++)
-                            if (block[i + j] != needle[j]) { match = false; break; }
-                        if (match) return addr + (uint)i;
-                    }
-                }
-                catch { }
-            }
-        }
-        return 0;
-    }
+    private int _listenerCheckTick; // проверка живости листенера
     private string? _specName;
     public string? SpecName { get => _specName; set => _specName = value; }
 
@@ -417,8 +384,6 @@ public class BotEngine : IDisposable
         catch { }
     }
 
-    public LuaReader? LuaReader { get; set; }
-
     public void LoadRotation(string instantScript, string fullScript)
     {
         _instantScript = instantScript;
@@ -654,17 +619,26 @@ public class BotEngine : IDisposable
     {
         if (Hivemind.CurrentRole != Hivemind.Role.Slave && Hivemind.CurrentRole != Hivemind.Role.Master) return;
 
-        // Устанавливаем слушатель (один раз)
+        // Устанавливаем слушатель (один раз) + проверка живости каждые ~30 сек
         if (!Hivemind._slaveListenerInstalled)
         {
             _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
             Hivemind._slaveListenerInstalled = true;
+            _listenerCheckTick = 0;
             Logger.Info("Hivemind: slave listener installed");
-            if (_hiveMacroAddr == 0 && LuaReader != null && LuaReader.IsInitialized)
+        }
+        else
+        {
+            _listenerCheckTick++;
+            if (_listenerCheckTick >= 200) // ~30 сек (200 * 150мс)
             {
-                System.Threading.Thread.Sleep(300);
-                _hiveMacroAddr = FindHiveMacroAddr();
-                Logger.Log(LogCat.Hivemind, $"Hivemind: macro#2 addr=0x{_hiveMacroAddr:X8}");
+                _listenerCheckTick = 0;
+                var alive = _hook.ExecuteLuaWithResult("WB_R=WB_HIVE_REGISTERED and '1' or '0'");
+                if (alive != "1")
+                {
+                    Logger.Info("Hivemind: listener DEAD — reinstalling");
+                    _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
+                }
             }
         }
 
@@ -673,13 +647,38 @@ public class BotEngine : IDisposable
         if (_hiveCheckTick < 3 || Hivemind.GossipReading) return;
         _hiveCheckTick = 0;
 
-        // Команды мастера (для слейвов)
-        string checkLua = Hivemind.GetSlaveReadScript();
-        string? response = _hook.ExecuteLuaWithResult(checkLua);
+        // Батч: мастер читает cmd+register+ACK одним Lua вызовом, слейв — только cmd
+        string? response;
+        if (Hivemind.CurrentRole == Hivemind.Role.Master)
+        {
+            // Один вызов вместо трёх: cmd|arg|sender|time#reg|regSender|regTime#ack|ackTime
+            response = _hook.ExecuteLuaWithResult(
+                "WB_R=(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0')" +
+                "..'#'..(WB_HIVE_REG or '')..'|'..(WB_HIVE_REG_SENDER or '')..'|'..(WB_HIVE_REG_TIME or '0')" +
+                "..'#'..(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
+        }
+        else
+        {
+            response = _hook.ExecuteLuaWithResult(Hivemind.GetSlaveReadScript());
+        }
         if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
+
         if (response != null)
         {
-            var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(response);
+            // Парсим cmd часть (до первого # или всё для слейва)
+            string cmdPart = response;
+            string? regPart = null, ackPart = null;
+
+            if (Hivemind.CurrentRole == Hivemind.Role.Master)
+            {
+                var sections = response.Split('#');
+                cmdPart = sections.Length > 0 ? sections[0] : "";
+                regPart = sections.Length > 1 ? sections[1] : null;
+                ackPart = sections.Length > 2 ? sections[2] : null;
+            }
+
+            // Команды
+            var (cmd, arg, sender, time) = Hivemind.ParseSlaveResponse(cmdPart);
             bool isNew = time > LastHiveCheck || (time == LastHiveCheck && cmd != _lastHiveCmd);
             if (cmd != null && isNew)
             {
@@ -698,45 +697,52 @@ public class BotEngine : IDisposable
                     Hivemind.ExecuteSlaveCommand(cmd.Value, arg);
                 }
             }
+
+            // Register + ACK (мастер) — из того же ответа
+            if (Hivemind.CurrentRole == Hivemind.Role.Master)
+            {
+                if (regPart != null)
+                {
+                    var regParts = regPart.Split('|');
+                    if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
+                    {
+                        double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double regTime);
+                        if (regTime > _lastRegisterTime)
+                        {
+                            _lastRegisterTime = regTime;
+                            Logger.Info($"Hivemind: REGISTER received — data=[{regParts[0]}] time={regTime}");
+                            Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
+                        }
+                    }
+                    else if (_logTick == 0 && regParts.Length >= 3)
+                    {
+                        // regParts[0] пуст — регистрация не пришла
+                        Logger.Log(LogCat.Hivemind, $"Hivemind: no register data (reg=[{regPart}])");
+                    }
+                }
+
+                if (ackPart != null)
+                {
+                    var ackParts = ackPart.Split('|');
+                    if (ackParts.Length >= 2 && !string.IsNullOrEmpty(ackParts[0]))
+                    {
+                        double.TryParse(ackParts[1], System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double ackTime);
+                        if (ackTime > _lastAckTime)
+                        {
+                            _lastAckTime = ackTime;
+                            var ap = ackParts[0].Split('~', 2);
+                            if (ap.Length == 2 && int.TryParse(ap[0], out int ackSeq))
+                                Hivemind.ReceiveAck(ackSeq, ap[1]);
+                        }
+                    }
+                }
+                Hivemind.TickAck();
+            }
         }
-
-        // Register + ACK (для мастера)
-        if (Hivemind.CurrentRole == Hivemind.Role.Master)
+        else if (Hivemind.CurrentRole == Hivemind.Role.Master)
         {
-            string regLua = Hivemind.GetRegisterReadScript();
-            string? regResponse = _hook.ExecuteLuaWithResult(regLua);
-            if (regResponse != null)
-            {
-                var regParts = regResponse.Split('|');
-                if (regParts.Length >= 3 && !string.IsNullOrEmpty(regParts[0]))
-                {
-                    double.TryParse(regParts[2], System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out double regTime);
-                    if (regTime > _lastRegisterTime)
-                    {
-                        _lastRegisterTime = regTime;
-                        Hivemind.ExecuteSlaveCommand(Hivemind.Command.Register, regParts[0]);
-                    }
-                }
-            }
-
-            string? ackResp = _hook.ExecuteLuaWithResult("WB_R=(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
-            if (ackResp != null)
-            {
-                var ackParts = ackResp.Split('|');
-                if (ackParts.Length >= 2 && !string.IsNullOrEmpty(ackParts[0]))
-                {
-                    double.TryParse(ackParts[1], System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out double ackTime);
-                    if (ackTime > _lastAckTime)
-                    {
-                        _lastAckTime = ackTime;
-                        var ap = ackParts[0].Split('~', 2);
-                        if (ap.Length == 2 && int.TryParse(ap[0], out int ackSeq))
-                            Hivemind.ReceiveAck(ackSeq, ap[1]);
-                    }
-                }
-            }
             Hivemind.TickAck();
         }
 

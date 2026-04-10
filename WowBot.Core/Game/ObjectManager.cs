@@ -17,10 +17,10 @@ public class ObjectManager : IObjectManager
 
     public ulong LocalPlayerGuid { get; private set; }
     public WowPlayer? LocalPlayer { get; private set; }
-    public List<WowUnit> Units { get; private set; } = new();
-    public List<WowPlayer> Players { get; private set; } = new();
-    public List<WowDynObject> DynObjects { get; private set; } = new();
-    public List<WowObject> Objects { get; private set; } = new();
+    public List<WowUnit> Units { get; private set; } = new(128);
+    public List<WowPlayer> Players { get; private set; } = new(32);
+    public List<WowDynObject> DynObjects { get; private set; } = new(16);
+    public List<WowObject> Objects { get; private set; } = new(64);
 
     // IObjectManager — через интерфейс возвращаем readonly списки
     IWowPlayer? IObjectManager.LocalPlayer => LocalPlayer;
@@ -42,17 +42,17 @@ public class ObjectManager : IObjectManager
     /// </summary>
     public void Update()
     {
-        var units = new List<WowUnit>();
-        var players = new List<WowPlayer>();
-        var dynObjects = new List<WowDynObject>();
-        var objects = new List<WowObject>();
+        Units.Clear();
+        Players.Clear();
+        DynObjects.Clear();
+        Objects.Clear();
         WowPlayer? localPlayer = null;
 
         uint clientConnection = _memory.ReadUInt32(Offsets.ClientConnection);
-        if (clientConnection == 0) { Units = units; Players = players; Objects = objects; LocalPlayer = null; return; }
+        if (clientConnection == 0) { LocalPlayer = null; return; }
 
         uint objectManagerBase = _memory.ReadUInt32(clientConnection + Offsets.ObjectManagerOffset);
-        if (objectManagerBase == 0) { Units = units; Players = players; Objects = objects; LocalPlayer = null; return; }
+        if (objectManagerBase == 0) { LocalPlayer = null; return; }
 
         LocalPlayerGuid = _memory.ReadUInt64(objectManagerBase + Offsets.LocalPlayerGuid);
 
@@ -73,13 +73,13 @@ public class ObjectManager : IObjectManager
                 case WowObjectType.Unit:
                 {
                     var unit = new WowUnit(_memory, currentObject);
-                    units.Add(unit);
+                    Units.Add(unit);
                     break;
                 }
                 case WowObjectType.Player:
                 {
                     var player = new WowPlayer(_memory, currentObject);
-                    players.Add(player);
+                    Players.Add(player);
 
                     if (player.Guid == LocalPlayerGuid)
                         localPlayer = player;
@@ -90,7 +90,7 @@ public class ObjectManager : IObjectManager
                     try
                     {
                         var dynObj = new WowDynObject(_memory, currentObject);
-                        dynObjects.Add(dynObj);
+                        DynObjects.Add(dynObj);
                     }
                     catch (Exception ex) { Logger.Log(LogCat.Error, $"DynObject parse failed at 0x{currentObject:X}: {ex.Message}", "ERR"); }
                     break;
@@ -98,7 +98,7 @@ public class ObjectManager : IObjectManager
                 default:
                 {
                     var obj = new WowObject(_memory, currentObject);
-                    objects.Add(obj);
+                    Objects.Add(obj);
                     break;
                 }
             }
@@ -106,10 +106,6 @@ public class ObjectManager : IObjectManager
             currentObject = _memory.ReadUInt32(currentObject + Offsets.NextObject);
         }
 
-        Units = units;
-        Players = players;
-        DynObjects = dynObjects;
-        Objects = objects;
         LocalPlayer = localPlayer;
 
         _updateCount++;

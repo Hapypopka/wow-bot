@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WowBot — Документация</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0a0f;color:#e8e6e3;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px}
+h1{font-size:36px;color:#c8aa6e;margin-bottom:8px}
+.sub{font-size:14px;color:#6b6b7b;margin-bottom:40px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;width:100%}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+a.card{display:block;background:#12121a;border:1px solid #252830;border-radius:12px;padding:24px;text-decoration:none;transition:all .2s;position:relative;overflow:hidden}
+a.card:hover{border-color:#c8aa6e;transform:translateY(-2px);box-shadow:0 8px 24px rgba(200,168,110,.15)}
+a.card .emoji{font-size:32px;margin-bottom:12px;display:block}
+a.card h2{font-size:18px;color:#c8aa6e;margin-bottom:8px}
+a.card p{font-size:13px;color:#8b8d93;line-height:1.6}
+a.card .tag{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-top:8px}
+.tag-blue{background:#1a2a3a;color:#8ac}
+.tag-green{background:#1a3a1a;color:#8c8}
+.tag-yellow{background:#3a3a1a;color:#cc8}
+.tag-red{background:#3a1a1a;color:#c88}
+.footer{margin-top:40px;color:#6b6b7b;font-size:12px}
+.stats{display:flex;gap:24px;margin:20px 0 32px;flex-wrap:wrap;justify-content:center}
+.stat{background:#12121a;border:1px solid #252830;border-radius:8px;padding:12px 20px;text-align:center}
+.stat .num{font-size:24px;color:#c8aa6e;font-weight:700}
+.stat .label{font-size:11px;color:#6b6b7b;margin-top:2px}
+</style>
+</head>
+<body>
+
+<h1>WowBot</h1>
+<div class="sub">WoW 3.3.5a WoTLK | WoWCircle | Полная документация проекта</div>
+
+<div class="stats">
+<div class="stat"><div class="num">20+</div><div class="label">спеков</div></div>
+<div class="stat"><div class="num">10</div><div class="label">классов</div></div>
+<div class="stat"><div class="num">12,000+</div><div class="label">строк кода</div></div>
+<div class="stat"><div class="num">560</div><div class="label">иконок</div></div>
+<div class="stat"><div class="num">10+</div><div class="label">персонажей</div></div>
+</div>
+
+<div class="grid">
+
+<a class="card" href="master-panel.html">
+<span class="emoji">🎮</span>
+<h2>Мастер-панель</h2>
+<p>Управление слейвами. Каждая кнопка подробно: что происходит от клика до действия в WoW. Бейте, Ко мне, Авто, Стоп, Scatter, Stack, горячие клавиши, Gossip, навигация Ctrl+ПКМ.</p>
+<span class="tag tag-blue">14 разделов</span>
+</a>
+
+<a class="card" href="hivemind.html">
+<span class="emoji">👥</span>
+<h2>Hivemind (мультибоксинг)</h2>
+<p>Протокол связи мастер-слейв. ACK система. Все режимы слейвов (Idle, Follow, Attack, Auto, GoingToPoint). Каждая команда с полной трассировкой кода. MT/OT логика.</p>
+<span class="tag tag-green">12 разделов</span>
+</a>
+
+<a class="card" href="overlay-rotation-docs.html">
+<span class="emoji">⚔</span>
+<h2>Оверлей и ротации</h2>
+<p>Игровой оверлей — все разделы меню. Ротации всех 20+ спеков с приоритетами и spell ID. Баффы, AoE, радио-группы. Break-CC. Настройки. Хелперы Lua.</p>
+<span class="tag tag-yellow">11 разделов</span>
+</a>
+
+<a class="card" href="engine-docs.html">
+<span class="emoji">🔧</span>
+<h2>Движок, хук, движение</h2>
+<p>BotEngine (главный цикл 150мс). EndScene Hook (x86 asm codecave). ObjectManager. Все оффсеты памяти. CTM. Позиционирование (MoveBehind, AoE Avoidance). LuaReader. AntiAFK.</p>
+<span class="tag tag-red">15 разделов</span>
+</a>
+
+</div>
+
+<div class="footer">WowBot Documentation | Сгенерировано 10.04.2026</div>
+
+</body>
+</html>

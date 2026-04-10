@@ -64,7 +64,7 @@ public partial class MainWindow : Window
     private EndSceneHook? _endSceneHook;
     private BotEngine? _botEngine;
     private string _playerClass = "";
-    private LuaReader? _luaReader;
+
     private DispatcherTimer? _updateTimer;
     private int _gossipCheckTick;
     private OverlayWindow? _overlay;
@@ -459,10 +459,6 @@ public partial class MainWindow : Window
             // Антиафк теперь в BotEngine.Tick (0x00B499A4)
             BtnExecuteLua.IsEnabled = true;
 
-            // Инициализируем LuaReader (чтение Lua через макрос)
-            _luaReader = new LuaReader(_memory, _endSceneHook);
-            _luaReader.Initialize();
-
             // Автодетект класса/спека
             string specName = "Unknown";
             string playerClass = "";
@@ -471,7 +467,6 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.SetCharName(earlyName);
             WowBot.Core.Logger.Init();
 
-            // Через Lua C API — не зависит от LuaReader
             {
                 string lua = "local _,c=UnitClass('player') local _,_,t1=GetTalentTabInfo(1) local _,_,t2=GetTalentTabInfo(2) local _,_,t3=GetTalentTabInfo(3) WB_R=c..'|'..t1..'|'..t2..'|'..t3";
                 string? classInfo = _endSceneHook.ExecuteLuaWithResult(lua);
@@ -517,7 +512,6 @@ public partial class MainWindow : Window
             _playerClass = playerClass;
             _botEngine.PlayerClass = playerClass;
             _botEngine.SpecName = specName;
-            _botEngine.LuaReader = _luaReader;
             AllRotations.ExportScripts(); // экспорт ПЕРЕД загрузкой — гарантирует актуальные скрипты
             // v2: RotationRegistry — ищем C# ротацию по классу+спеку, fallback на AllRotations
             var rotation = WowBot.Core.Game.Rotations.RotationRegistry.Find(playerClass, specName);
@@ -827,18 +821,23 @@ public partial class MainWindow : Window
                 {
                     case "role:master":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Master;
+                        _botEngine.EnsureRunning();
                         ShowMasterPanel();
                         break;
                     case "role:slave":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.Slave;
                         hive.ResetSlaveState();
                         _botEngine.EnsureRunning();
+                        // Автоскрытие: слейву не нужно главное окно
+                        Hide();
                         // Отправить Register мастеру
                         Task.Run(() => { System.Threading.Thread.Sleep(1000); hive.SendRegister(_playerClass); });
                         break;
                     case "role:none":
                         hive.CurrentRole = WowBot.Core.Game.Hivemind.Role.None;
                         CloseMasterPanel();
+                        // Вернуть окно
+                        Show();
                         break;
                     case "attack": hive.CmdAttack(); break;
                     case "follow": hive.CmdFollow(); break;
@@ -890,6 +889,7 @@ public partial class MainWindow : Window
                 {
                     case "master":
                         hive.CurrentRole = Hivemind.Role.Master;
+                        _botEngine.EnsureRunning();
                         _overlay.SetHivemindRole("master");
                         ShowMasterPanel();
                         WowBot.Core.Logger.Info("AutoConnect: role=Master");
@@ -899,6 +899,8 @@ public partial class MainWindow : Window
                         hive.ResetSlaveState();
                         _botEngine.EnsureRunning();
                         _overlay.SetHivemindRole("slave");
+                        // Автоскрытие: слейву не нужно главное окно
+                        Hide();
                         // Отправить Register мастеру через 1 сек (слушатель должен успеть)
                         Task.Run(() => { System.Threading.Thread.Sleep(1000); hive.SendRegister(_playerClass); });
                         WowBot.Core.Logger.Info("AutoConnect: role=Slave");
@@ -1110,7 +1112,7 @@ public partial class MainWindow : Window
     {
         _updateTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(200)
+            Interval = TimeSpan.FromMilliseconds(500)
         };
         _updateTimer.Tick += UpdateTick;
         _updateTimer.Start();
@@ -1147,14 +1149,15 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _objectManager.Update();
+            // ObjectManager.Update() уже вызывается в BotEngine.Tick() каждые 150мс
+            // UI просто читает кэшированные данные
             UpdateDisplay();
 
             // Авто-скрытие gossip по таймеру бездействия (15с без кликов)
             if (_masterPanel != null && _masterPanel.IsGossipListVisible)
             {
                 _gossipCheckTick++;
-                if (_gossipCheckTick >= 75) // 15с (75 * 200мс)
+                if (_gossipCheckTick >= 30) // 15с (30 * 500мс)
                 {
                     _masterPanel.HideGossipList();
                     _gossipCheckTick = 0;
@@ -1348,87 +1351,6 @@ public partial class MainWindow : Window
         TxtStatus.Text = $"Scanned {results.Count - 1} spells → spells.txt";
     }
 
-    private void BtnDump_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_memory.IsAttached || _endSceneHook == null) return;
-
-        TxtStatus.Text = "Writing macro + scanning memory...";
-        // BtnDump removed from UI
-
-        Task.Run(() =>
-        {
-            // Пишем уникальную строку в макрос
-            _endSceneHook.ExecuteLua("EditMacro(1, 'WB', 1, 'WBTEST9988')", 500);
-            Thread.Sleep(200);
-
-            var results = new List<string>();
-            results.Add("=== MACRO SCAN — looking for 'WBSCAN7749' ===");
-
-            // Ищем строку в памяти WoW (сканируем основные регионы)
-            byte[] needle = System.Text.Encoding.UTF8.GetBytes("WBTEST9988");
-
-            // Сканируем регионы где WoW хранит данные
-            uint[][] regions = {
-                new uint[] { 0x00800000, 0x01200000 },  // .data/.rdata
-                new uint[] { 0x01200000, 0x02000000 },  // heap
-                new uint[] { 0x02000000, 0x04000000 },  // heap
-                new uint[] { 0x04000000, 0x08000000 },  // heap
-                new uint[] { 0x08000000, 0x10000000 },  // heap
-                new uint[] { 0x10000000, 0x30000000 },  // heap/mapped
-            };
-
-            foreach (var region in regions)
-            {
-                uint start = region[0];
-                uint end = region[1];
-                uint step = 4096; // читаем по 4KB
-
-                for (uint addr = start; addr < end; addr += step)
-                {
-                    try
-                    {
-                        byte[] block = _memory.ReadBytes(addr, (int)step + needle.Length);
-                        for (int i = 0; i < (int)step; i++)
-                        {
-                            bool match = true;
-                            for (int j = 0; j < needle.Length; j++)
-                            {
-                                if (block[i + j] != needle[j]) { match = false; break; }
-                            }
-                            if (match)
-                            {
-                                uint foundAddr = addr + (uint)i;
-                                results.Add($"*** FOUND at 0x{foundAddr:X8} ***");
-                            }
-                        }
-                    }
-                    catch { }
-                }
-            }
-
-            // Проверяем старые адреса — что там сейчас
-            uint[] oldAddrs = { 0x12EF0217, 0x1CC858B0, 0x22419B1C };
-            foreach (var a in oldAddrs)
-            {
-                string val = _memory.ReadString(a, 20);
-                results.Add($"Old addr 0x{a:X8} now contains: '{val}'");
-            }
-
-            if (results.Count == 1)
-                results.Add("Nothing found.");
-
-            var dumpPath = System.IO.Path.Combine(
-                System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
-                "macro_scan.txt");
-            System.IO.File.WriteAllLines(dumpPath, results);
-
-            Dispatcher.Invoke(() =>
-            {
-                TxtStatus.Text = $"Scan done! {results.Count - 1} results. Saved to macro_scan.txt";
-                // BtnDump removed from UI
-            });
-        });
-    }
 
     private Process? ShowProcessPicker(Process[] processes)
     {
