@@ -11,6 +11,11 @@ public class CombatPositioning
     private readonly ClickToMove _ctm;
     private int _repositionTick;
 
+    // Фиксированная точка за спиной — не пересчитываем при каждом повороте
+    private float _lockedX, _lockedY, _lockedZ;
+    private bool _hasLockedPosition;
+    private ulong _lockedTargetGuid; // сброс при смене цели
+
     // Роль (устанавливается BotEngine перед Tick)
     public bool IsMelee { get; set; }
     public bool IsTank { get; set; }

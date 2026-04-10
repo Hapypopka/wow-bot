@@ -64,16 +64,20 @@ public class BossEngine
             allNpcIds.Add(npcId);
         }
 
+        // Disrupting Shout (71022) — всегда мониторим в ICC
+        allSpellIds.Add(71022);
+
         string spellIdSet = string.Join(",", allSpellIds.Select(id => $"[{id}]=1"));
         string lua = @$"
 if not WB_BOSS_FRAME then
   WB_BOSS_EVT=''
+  WB_STOP_CAST=0
   WB_BOSS_IDS={{{spellIdSet}}}
   WB_BOSS_FRAME=CreateFrame('Frame')
   WB_BOSS_FRAME:RegisterEvent('COMBAT_LOG_EVENT_UNFILTERED')
-  WB_BOSS_FRAME:SetScript('OnEvent',function()
-    local _,evt,srcG,srcN,_,dstG,dstN,_,spId=CombatLogGetCurrentEventInfo()
+  WB_BOSS_FRAME:SetScript('OnEvent',function(self,event,_,evt,srcG,srcN,_,dstG,dstN,_,spId)
     if not spId or not WB_BOSS_IDS[spId] then return end
+    if spId==71022 and evt=='SPELL_CAST_START' then WB_STOP_CAST=GetTime()+3 end
     local isMe=(dstG==UnitGUID('player')) and 1 or 0
     WB_BOSS_EVT=evt..'|'..spId..'|'..(srcN or '')..'|'..(dstN or '')..'|'..isMe
   end)

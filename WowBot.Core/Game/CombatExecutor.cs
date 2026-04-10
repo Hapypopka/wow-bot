@@ -66,7 +66,9 @@ public class CombatExecutor
         // Если MoveBehind активно двигает — кастуем без approach
         if (_combatPositioning.IsMovingBehind)
         {
-            _hook.ExecuteLua(options.EnemyCountLua + options.SpellFlagsLua + options.RotationScript, 500);
+            string dc = options.IsMeleeSpec ? "" :
+                "if WB_STOP_CAST and GetTime()<WB_STOP_CAST then SpellStopCasting() return end ";
+            _hook.ExecuteLua(dc + options.EnemyCountLua + options.SpellFlagsLua + options.RotationScript, 500);
             return true;
         }
 
@@ -108,8 +110,10 @@ public class CombatExecutor
         if (!movingBehind && !options.IsHealer && options.AutoFace)
             _navigation.FaceInstant(player, target);
 
-        // 6. Ротация
-        string script = options.EnemyCountLua + options.SpellFlagsLua + options.RotationScript;
+        // 6. Ротация (кастеры стопают каст при Disrupting Shout)
+        string dangerCheck = options.IsMeleeSpec ? "" :
+            "if WB_STOP_CAST and GetTime()<WB_STOP_CAST then SpellStopCasting() return end ";
+        string script = dangerCheck + options.EnemyCountLua + options.SpellFlagsLua + options.RotationScript;
         _hook.ExecuteLua(script, 500);
         return true;
     }

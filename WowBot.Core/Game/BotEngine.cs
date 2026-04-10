@@ -378,6 +378,9 @@ public class BotEngine : IDisposable
 
     public bool AoeAvoidEnabled { get; set; } = true;
 
+    // Auto-mode: кулдаун на follow после боя (не фолловить сразу когда InCombat сбросился)
+    private DateTime _lastCombatTime = DateTime.MinValue;
+
     // Ghost route — полёт призрака по маршруту + repair route
     private List<(float x, float y, float z)>? _ghostRoute;
     private List<(float x, float y, float z)>? _repairRoute;
@@ -849,17 +852,28 @@ public class BotEngine : IDisposable
             AoeEnabled = _aoeEnabled,
             AoeMinEnemies = AoeMinEnemies,
             AutoFace = _autoFace,
-            NeedApproach = needApproach,
+            NeedApproach = needApproach && IsMeleeSpec,
         };
     }
 
     /// <summary>Слейв: подбег к таргету + ротация. Используется в Attacking и Auto.</summary>
+    private int _slaveAttackLogTick;
     private void SlaveAttackTick(Entities.WowPlayer player, string enemyCountLua)
     {
         if (AoeAvoidEnabled && IsAoeFleeing) return;
         if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
 
         var slaveTarget = _objectManager.GetTarget();
+        _slaveAttackLogTick++;
+        if (_slaveAttackLogTick >= 33) // каждые ~5с
+        {
+            _slaveAttackLogTick = 0;
+            int ctmAction = _ctm.GetCurrentAction();
+            float ctmX = _ctm.ReadX(), ctmY = _ctm.ReadY();
+            float dist = slaveTarget != null ? player.DistanceTo(slaveTarget) : -1;
+            Logger.Log(LogCat.Combat, $"SlaveAttack: target={slaveTarget?.Name ?? "NULL"} alive={slaveTarget?.IsAlive} combat={slaveTarget?.InCombat} type={slaveTarget?.Type} casting={player.IsCasting} dist={dist:F1} ctm={ctmAction} ctmXY=({ctmX:F0},{ctmY:F0}) pos=({player.X:F0},{player.Y:F0})");
+        }
+
         if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat)
         {
             _combatExecutor.StopApproach();
@@ -913,8 +927,14 @@ public class BotEngine : IDisposable
         bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
             autoTarget != null && autoTarget.IsAlive &&
             autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
-        // Если в бою (даже без таргета) — не фолловить, ждать AssistUnit
         bool playerInCombat = player.InCombat;
+
+        // Запоминаем время последнего боя
+        if (playerInCombat || hasAutoTarget)
+            _lastCombatTime = DateTime.UtcNow;
+
+        // Кулдаун: не фолловить 3 сек после боя (InCombat сбрасывается мгновенно между мобами)
+        bool recentCombat = (DateTime.UtcNow - _lastCombatTime).TotalSeconds < 3.0;
 
         if (hasAutoTarget)
         {
@@ -926,10 +946,9 @@ public class BotEngine : IDisposable
             }
             SlaveAttackTick(player, enemyCountLua);
         }
-        else if (playerInCombat && !Hivemind.AutoPauseAttack)
+        else if ((playerInCombat || recentCombat) && !Hivemind.AutoPauseAttack)
         {
-            // В бою но таргет временно пропал (AssistUnit между тиками) — НЕ фолловить
-            // Просто ждём следующий AssistUnit
+            // В бою или недавно был в бою — ждём AssistUnit, НЕ фолловить
         }
         else
         {
@@ -998,10 +1017,8 @@ public class BotEngine : IDisposable
         {
             response = _hook.ExecuteLuaWithResult(Hivemind.GetSlaveReadScript());
         }
-        // Диагностика: всегда логировать для мастера если есть данные
-        if (Hivemind.CurrentRole == Hivemind.Role.Master && response != null && !response.StartsWith("|||"))
-            Logger.Info($"Hivemind: raw response=[{response}]");
-        else if (_logTick == 0)
+        // Диагностика: логировать только если есть команда (cmd часть не пустая)
+        if (_logTick == 0)
             Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
 
         if (response != null)
@@ -1200,7 +1217,14 @@ public class BotEngine : IDisposable
     private int _logTick;
     private int _hiveCheckTick;
 
+    private int _tickRunning; // защита от re-entrant Timer
     private void Tick(object? state)
+    {
+        if (Interlocked.CompareExchange(ref _tickRunning, 1, 0) != 0) return; // тик уже выполняется
+        try { TickCore(state); }
+        finally { Interlocked.Exchange(ref _tickRunning, 0); }
+    }
+    private void TickCore(object? state)
     {
         if (_tickPaused) return;
         AntiAfkTick(); // всегда, даже если бот неактивен
@@ -1251,6 +1275,10 @@ public class BotEngine : IDisposable
             string glovesLua = IsSpellEnabled("Gloves") ? "do local s,d=GetInventoryItemCooldown('player',10) if s==0 and UnitAffectingCombat('player') then UseInventoryItem(10) end end " : "";
             string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_AEMIN={AoeMinEnemies} " + glovesLua;
 
+            // BossEngine CLEU listener — ставится для всех (master/solo/slave) для Disrupting Shout и тактик
+            if (player.InCombat && !BossEngine.IsActive)
+                BossEngine.InstallListener();
+
             // === HIVEMIND: коммуникация (addon messages, register, ACK) ===
             HivemindCommTick();
 
@@ -1260,7 +1288,7 @@ public class BotEngine : IDisposable
             // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
             {
-                // Follow к мастеру / к точке если есть команда follow/auto/goto (и follow не на паузе)
+                // Follow к мастеру — но в авто-режиме НЕ фолловить во время боя
                 bool healerFollow = Hivemind.Mode == Hivemind.SlaveMode.Following ||
                     Hivemind.Mode == Hivemind.SlaveMode.GoingToPoint ||
                     (Hivemind.Mode == Hivemind.SlaveMode.Auto && !Hivemind.AutoPauseFollow);
@@ -1274,7 +1302,8 @@ public class BotEngine : IDisposable
                 if (_healerTickCount >= 3)
                 {
                     _healerTickCount = 0;
-                    string script = enemyCountLua + SpellFlagsLua + _fullScript;
+                    string dangerCheck = "if WB_STOP_CAST and GetTime()<WB_STOP_CAST then SpellStopCasting() return end ";
+                    string script = dangerCheck + enemyCountLua + SpellFlagsLua + _fullScript;
                     _hook.ExecuteLua(script, 500);
                 }
                 return;

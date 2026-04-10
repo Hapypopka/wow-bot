@@ -101,10 +101,11 @@ public class SlaveController
 
     public void CmdStop()
     {
-        // CTM на свою позицию — мгновенная остановка (CTM перебивает CTM)
+        // Остановка через CallClickToMove на свою позицию — перебивает активный CGPlayer movement
         var player = _objectManager.LocalPlayer;
-        if (player != null)
-            _ctm.MoveTo(player.X, player.Y, player.Z, 0.5f);
+        if (player != null && _hook.IsHooked)
+            _hook.CallClickToMove(player.X, player.Y, player.Z, player.BaseAddress,
+                clickType: 4, precision: 0.5f, timeoutMs: 200);
         // НЕ вызываем ClearAction — иначе отменим свой же CTM-стоп
         _hook.ExecuteLua("MoveForwardStop() MoveBackwardStop() StrafeLeftStop() StrafeRightStop()", 100);
         CurrentState = State.Stopped;

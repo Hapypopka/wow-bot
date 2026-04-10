@@ -725,9 +725,9 @@ public class Hivemind
         if (_autoAssistTick < 7) return; // каждые ~1 сек
         _autoAssistTick = 0;
 
-        // Сбросить таргет + взять таргет мастера. Если у мастера нет цели — слейв без таргета → follow
+        // Всегда AssistUnit — переключаемся на таргет мастера
         string assistName = _botEngine?.SlaveCtrl.CommandSourceName ?? MasterName;
-        _hook.ExecuteLua($"ClearTarget() AssistUnit('{assistName}')", 200);
+        _hook.ExecuteLua($"AssistUnit('{assistName}')", 200);
     }
 
     private ulong _masterGuid;
