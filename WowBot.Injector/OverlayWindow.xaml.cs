@@ -1192,24 +1192,32 @@ public partial class OverlayWindow : Window
             }
             SubContent.Children.Add(mhWrap);
 
-            AddLabel("ОН оружие");
-            var ohWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
-            _weaponOHToggles.Clear();
-            foreach (var (key, icon, tooltip) in WeaponOptions)
+            // ОН оружие — только для Enhancement (остальные носят щит)
+            if (_playerSpec == "Enhancement Shaman")
             {
-                bool defOn = (_playerSpec == "Enhancement Shaman" && key == "FT");
-                var toggle = AddSpellIcon(ohWrap, icon, "ОН: " + tooltip, _selectedWeaponOH == key || (_selectedWeaponOH == "" && defOn));
-                _weaponOHToggles[key] = toggle;
-                var k = key;
-                toggle.Checked += (s, e) =>
+                AddLabel("ОН оружие");
+                var ohWrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
+                _weaponOHToggles.Clear();
+                foreach (var (key, icon, tooltip) in WeaponOptions)
                 {
-                    _selectedWeaponOH = k;
-                    foreach (var (k2, _) in _weaponOHToggles) if (k2 != k) _weaponOHToggles[k2].IsChecked = false;
-                };
-                toggle.Unchecked += (s, e) => { if (_selectedWeaponOH == k) _selectedWeaponOH = ""; };
-                if (toggle.IsChecked == true) _selectedWeaponOH = k;
+                    bool defOn = (key == "FT");
+                    var toggle = AddSpellIcon(ohWrap, icon, "ОН: " + tooltip, _selectedWeaponOH == key || (_selectedWeaponOH == "" && defOn));
+                    _weaponOHToggles[key] = toggle;
+                    var k = key;
+                    toggle.Checked += (s, e) =>
+                    {
+                        _selectedWeaponOH = k;
+                        foreach (var (k2, _) in _weaponOHToggles) if (k2 != k) _weaponOHToggles[k2].IsChecked = false;
+                    };
+                    toggle.Unchecked += (s, e) => { if (_selectedWeaponOH == k) _selectedWeaponOH = ""; };
+                    if (toggle.IsChecked == true) _selectedWeaponOH = k;
+                }
+                SubContent.Children.Add(ohWrap);
             }
-            SubContent.Children.Add(ohWrap);
+            else
+            {
+                _selectedWeaponOH = ""; // Resto/Ele — нет офхенда
+            }
         }
 
         // Выбор пета для варлока (радио)

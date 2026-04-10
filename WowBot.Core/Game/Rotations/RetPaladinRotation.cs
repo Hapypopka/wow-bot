@@ -63,7 +63,7 @@ public class RetPaladinRotation : ICombatRotation
         {
             sb.Append("if not UnitAffectingCombat('target') then return end ");
             sb.Append("if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end ");
-            sb.Append("if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() RunMacroText('/startattack') end ");
+            sb.Append("if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() StartAttack() end ");
         }
 
         sb.Append("if not WB_S then WB_S={} end ");
@@ -109,8 +109,8 @@ public class RetPaladinRotation : ICombatRotation
             // 9. Exorcism (только с AoW проком)
             AddToggle(sb, "Exo", $"if HB({ArtOfWar}) and IR({Exorcism}) then Cast({Exorcism}) return end ");
 
-            // 10. Sacred Shield
-            AddToggle(sb, "SS", $"if not HB({SacredShield}) and IR({SacredShield}) then Cast({SacredShield}) return end ");
+            // 10. Sacred Shield (на себя)
+            AddToggle(sb, "SS", $"if not HB({SacredShield}) and IR({SacredShield}) then CastOn('player',{SacredShield}) return end ");
         }
 
         sb.Append("end local ok,err=pcall(WB_Ret) if not ok then WB_ERR=err end ");

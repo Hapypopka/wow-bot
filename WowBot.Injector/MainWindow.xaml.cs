@@ -218,6 +218,18 @@ public partial class MainWindow : Window
                 hive.CmdSetBuffToSlave(slaveName, "aura", key);
                 return;
             }
+            if (cmd.StartsWith("buff_totem_"))
+            {
+                // buff_totem_earth:Stoneskin, buff_totem_fire:Flametongue, etc.
+                int colonIdx = cmd.IndexOf(':');
+                if (colonIdx > 0)
+                {
+                    string element = cmd.Substring("buff_totem_".Length, colonIdx - "buff_totem_".Length);
+                    string key = cmd.Substring(colonIdx + 1);
+                    hive.CmdSetBuffToSlave(slaveName, $"totem_{element}", key);
+                }
+                return;
+            }
             // Auto sub-toggles
             if (cmd == "auto_toggle_follow")
             {
@@ -261,6 +273,17 @@ public partial class MainWindow : Window
         {
             if (_botEngine == null) return;
             _botEngine.Hivemind.CmdSmartScatter();
+        };
+        // MT/OT taunt
+        _masterPanel.OnTauntMT += () =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdTauntMT();
+        };
+        _masterPanel.OnTauntOT += () =>
+        {
+            if (_botEngine == null) return;
+            _botEngine.Hivemind.CmdTauntOT();
         };
         // Interact / Gossip
         _masterPanel.OnInteract += () =>
@@ -569,6 +592,18 @@ public partial class MainWindow : Window
                     case "aura":
                         _botEngine.SelectedAura = key;
                         _overlay?.SetSelectedAura(key);
+                        break;
+                    case "totem_earth":
+                        _botEngine.SelectedTotemEarth = key;
+                        break;
+                    case "totem_fire":
+                        _botEngine.SelectedTotemFire = key;
+                        break;
+                    case "totem_water":
+                        _botEngine.SelectedTotemWater = key;
+                        break;
+                    case "totem_air":
+                        _botEngine.SelectedTotemAir = key;
                         break;
                 }
             });

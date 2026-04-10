@@ -34,6 +34,10 @@ public partial class MasterPanel : Window
     // Per-slave buff selections (сохраняем между перерисовками)
     private readonly Dictionary<string, string> _slaveBlessing = new();
     private readonly Dictionary<string, string> _slaveAura = new();
+    private readonly Dictionary<string, string> _slaveTotemEarth = new();
+    private readonly Dictionary<string, string> _slaveTotemFire = new();
+    private readonly Dictionary<string, string> _slaveTotemWater = new();
+    private readonly Dictionary<string, string> _slaveTotemAir = new();
     private bool _navExpanded;
 
     private Dictionary<string, Key> _hotkeys = new();
@@ -124,6 +128,15 @@ public partial class MasterPanel : Window
             BtnScatter.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a1a1a"));
             BtnScatter.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#c88a8a"));
         }
+    }
+
+    // --- Collapse/Expand ---
+    private void BtnCollapse_Click(object sender, RoutedEventArgs e)
+    {
+        bool collapsed = ContentPanel.Visibility == Visibility.Visible;
+        ContentPanel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        BtnCollapse.Content = collapsed ? "▼" : "▬";
+        BtnCollapse.ToolTip = collapsed ? "Развернуть" : "Свернуть";
     }
 
     // --- Settings toggle ---
@@ -285,6 +298,17 @@ public partial class MasterPanel : Window
 
         foreach (var slave in slaves)
         {
+            // Синхронизировать настройки бафов из слейва (если мастер ещё не менял)
+            if (slave.BuffSettings.Count > 0)
+            {
+                if (!_slaveBlessing.ContainsKey(slave.Name) && slave.BuffSettings.TryGetValue("bl", out var bl)) _slaveBlessing[slave.Name] = bl;
+                if (!_slaveAura.ContainsKey(slave.Name) && slave.BuffSettings.TryGetValue("au", out var au)) _slaveAura[slave.Name] = au;
+                if (!_slaveTotemEarth.ContainsKey(slave.Name) && slave.BuffSettings.TryGetValue("tE", out var tE)) _slaveTotemEarth[slave.Name] = tE;
+                if (!_slaveTotemFire.ContainsKey(slave.Name) && slave.BuffSettings.TryGetValue("tF", out var tF)) _slaveTotemFire[slave.Name] = tF;
+                if (!_slaveTotemWater.ContainsKey(slave.Name) && slave.BuffSettings.TryGetValue("tW", out var tW)) _slaveTotemWater[slave.Name] = tW;
+                if (!_slaveTotemAir.ContainsKey(slave.Name) && slave.BuffSettings.TryGetValue("tA", out var tA)) _slaveTotemAir[slave.Name] = tA;
+            }
+
             bool isIdle = slave.ActiveCommand == null || slave.ActiveCommand == WowBot.Core.Game.Hivemind.Command.Stop;
             string bgColor = isIdle ? "#3d1f1f" : "#1a1a28";
 
@@ -448,8 +472,9 @@ public partial class MasterPanel : Window
             lockBtn.PreviewMouseLeftButtonDown += (s, e) => { OnSlaveCommand?.Invoke(ln, "toggle_ignore"); e.Handled = true; };
             cmdPanel.Children.Add(lockBtn);
 
-            // ▼ раскрыть бафы (только для палов)
-            if (slave.ClassName.ToUpperInvariant() == "PALADIN")
+            // ▼ раскрыть бафы (палы + шаманы)
+            string slaveClassUp = slave.ClassName.ToUpperInvariant();
+            if (slaveClassUp == "PALADIN" || slaveClassUp == "SHAMAN")
             {
                 var buffBtn = new Button
                 {
@@ -462,7 +487,9 @@ public partial class MasterPanel : Window
                     ToolTip = "Настроить бафы", Style = null!,
                 };
                 // Панель бафов (скрыта по умолчанию)
-                var buffPanel = BuildSlaveBuffPanel(slave.Name);
+                var buffPanel = slaveClassUp == "SHAMAN"
+                    ? BuildShamanBuffPanel(slave.Name)
+                    : BuildSlaveBuffPanel(slave.Name);
                 buffBtn.PreviewMouseLeftButtonDown += (s, e) =>
                 {
                     buffPanel.Visibility = buffPanel.Visibility == Visibility.Visible
@@ -646,6 +673,83 @@ public partial class MasterPanel : Window
         return border;
     }
 
+    private Border BuildShamanBuffPanel(string slaveName)
+    {
+        string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
+        string iconsDir = System.IO.Path.Combine(basePath, "Icons");
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#12141a")),
+            Padding = new Thickness(6, 4, 6, 6),
+            Margin = new Thickness(22, 0, 0, 1),
+            CornerRadius = new CornerRadius(0, 0, 4, 4),
+            Visibility = Visibility.Collapsed,
+        };
+
+        var stack = new StackPanel();
+
+        var totemGroups = new (string label, string element, (string key, string icon, string tip)[] options, Dictionary<string, string> dict)[]
+        {
+            ("Земля", "earth", new[] {
+                ("Stoneskin", "spell_nature_stoneskintotem.jpg", "Каменной кожи"),
+                ("SoE", "spell_nature_earthbindtotem.jpg", "Силы земли"),
+                ("Tremor", "spell_nature_tremortotem.jpg", "Трепета"),
+            }, _slaveTotemEarth),
+            ("Огонь", "fire", new[] {
+                ("Flametongue", "spell_nature_guardianward.jpg", "Языка пламени"),
+                ("FrostRes", "frost_resistance.jpg", "Защиты от льда"),
+            }, _slaveTotemFire),
+            ("Вода", "water", new[] {
+                ("ManaSpring", "spell_nature_manaregentotem.jpg", "Источника маны"),
+                ("HealStream", "healing_stream.jpg", "Исцеляющего потока"),
+                ("Cleansing", "spell_nature_diseasecleansingtotem.jpg", "Очищения"),
+                ("FireRes", "fire_resistance.jpg", "Защиты от огня"),
+            }, _slaveTotemWater),
+            ("Воздух", "air", new[] {
+                ("WrathOfAir", "wrath_of_air.jpg", "Гнева воздуха"),
+                ("Windfury", "windfury_totem.jpg", "Неистовства ветра"),
+                ("NatureRes", "nature_resistance.jpg", "Защиты от природы"),
+            }, _slaveTotemAir),
+        };
+
+        foreach (var (label, element, options, dict) in totemGroups)
+        {
+            var lbl = new TextBlock
+            {
+                Text = label, FontSize = 9,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5a5d65")),
+                Margin = new Thickness(0, 0, 0, 2),
+            };
+            stack.Children.Add(lbl);
+
+            var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+            dict.TryGetValue(slaveName, out var curKey);
+            var buttons = new List<Button>();
+            foreach (var (key, icon, tip) in options)
+            {
+                bool isActive = curKey == key;
+                var btn = CreateBuffIcon(iconsDir, icon, tip, isActive);
+                string tk = key; string sn = slaveName; string el = element;
+                var localDict = dict;
+                btn.PreviewMouseLeftButtonDown += (s, e) =>
+                {
+                    localDict[sn] = tk;
+                    OnSlaveCommand?.Invoke(sn, $"buff_totem_{el}:{tk}");
+                    foreach (var b in buttons) SetBuffIconActive(b, false);
+                    SetBuffIconActive(btn, true);
+                    e.Handled = true;
+                };
+                buttons.Add(btn);
+                wrap.Children.Add(btn);
+            }
+            stack.Children.Add(wrap);
+        }
+
+        border.Child = stack;
+        return border;
+    }
+
     private static void SetBuffIconActive(Button btn, bool active)
     {
         btn.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#c8aa6e" : "#3a3a28"));
@@ -724,6 +828,11 @@ public partial class MasterPanel : Window
     // --- Stack to MA / Scatter ---
     public event Action? OnStackMA;
     public event Action? OnScatter;
+    public event Action? OnTauntMT;
+    public event Action? OnTauntOT;
+
+    private void BtnTauntMT_Click(object sender, RoutedEventArgs e) => OnTauntMT?.Invoke();
+    private void BtnTauntOT_Click(object sender, RoutedEventArgs e) => OnTauntOT?.Invoke();
 
     private void BtnStackMA_Click(object sender, RoutedEventArgs e)
     {

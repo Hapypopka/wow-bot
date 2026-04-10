@@ -49,10 +49,26 @@ public static class AllRotations
     local myName=UnitName('player')
     local isMT=(WB_MT and WB_MT==myName)
     local isOT=(not isMT and (WB_S and WB_S.AutoTaunt~=false))
+    -- Принудительный таунт от мастера (МТ забери / ОТ забери)
+    local function TryForceTaunt(tauntId)
+        if not WB_FORCE_TAUNT or not WB_FORCE_TAUNT_T then return false end
+        if GetTime()-WB_FORCE_TAUNT_T>5 then WB_FORCE_TAUNT=nil return false end -- протухло через 5 сек
+        local role=WB_FORCE_TAUNT_ROLE or ''
+        if (role=='MT' and not isMT) or (role=='OT' and not isOT) then return false end -- не моя роль
+        if not IR(tauntId) then return false end
+        -- Нахожу моба по имени и таунчу
+        local tgt=WB_FORCE_TAUNT
+        local nr=GetNumRaidMembers()
+        if nr>0 then for i=1,nr do local u='raid'..i..'target' if UnitExists(u) and UnitName(u)==tgt then TargetUnit(u) end end
+        else for i=1,4 do local u='party'..i..'target' if UnitExists(u) and UnitName(u)==tgt then TargetUnit(u) end end end
+        if UnitExists('target') and UnitName('target')==tgt then Cast(tauntId) WB_FORCE_TAUNT=nil return true end
+        return false
+    end
     -- Танк: автотаунт
     -- МТ: тянет всё на себя
     -- ОТ: тянет только мобов которые бьют НЕ мейнтанка (адды)
     local function TryTaunt(tauntId)
+        if TryForceTaunt(tauntId) then return true end
         if not WB_S or WB_S.AutoTaunt==false then return false end
         if not IR(tauntId) then return false end
         if not UnitAffectingCombat('target') then return false end
@@ -199,7 +215,7 @@ public static class AllRotations
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
-    if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() RunMacroText('/startattack') end
+    if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() StartAttack() end
 ";
 
     private const string PreChecksHealer = @"
@@ -373,8 +389,8 @@ public static class AllRotations
         if WB_S.Cons~=false and (GetUnitSpeed('target') or 0)==0 and IR(26573) then Cast(26573) return end
         -- Exorcism: только с Art of War проком (инстант)
         if WB_S.Exo~=false and HB(59578) and IR(879) then Cast(879) return end
-        -- Sacred Shield
-        if WB_S.SS~=false and not HB(53601) and IR(53601) then Cast(53601) return end
+        -- Sacred Shield (на себя)
+        if WB_S.SS~=false and not HB(53601) and IR(53601) then CastOn('player',53601) return end
     elseif t2>=t1 and t2>=t3 then
         -- PROT PALADIN (NPCBots-inspired)
         if not UnitAffectingCombat('target') then return end
@@ -400,7 +416,7 @@ public static class AllRotations
         -- Divine Plea + Holy Shield — поддерживать баффы
         if WB_S.Plea~=false and not HB(54428) and IR(54428) then Cast(54428) return end
         if WB_S.HolyShield~=false and not HB(20925) and IR(20925) then Cast(20925) return end
-        if WB_S.SS~=false and not HB(53601) and IR(53601) then Cast(53601) return end
+        if WB_S.SS~=false and not HB(53601) and IR(53601) then CastOn('player',53601) return end
         -- Ротация: AS → HoR → ShoR → Judge → Cons → Holy Wrath
         if WB_S.AS~=false and IR(31935) then Cast(31935) return end
         if WB_S.HoR~=false and IR(53595) then Cast(53595) return end
@@ -449,24 +465,24 @@ public static class AllRotations
                 end
             end
         end
+        -- Sacred Shield: МТ → фокус → единственный танк → не кидать
         if WB_S.SS~=false and IR(53601) then
             local sn=SN(53601)
-            local function FindWithoutBuff(buffName)
-                local function Check(u)
-                    if not UnitExists(u) or UnitIsDeadOrGhost(u) then return false end
-                    if not IsTankUnit(u) then return false end
-                    if not CheckInteractDistance(u,4) then return false end
-                    if buffName then for i=1,40 do local n=UnitBuff(u,i) if not n then break end if n==buffName then return false end end end
-                    return true
-                end
-                if UnitExists('focus') and Check('focus') then return 'focus' end
+            local function NeedSS(u) if not UnitExists(u) or UnitIsDeadOrGhost(u) or not CheckInteractDistance(u,4) then return false end if sn then for i=1,40 do local n=UnitBuff(u,i) if not n then break end if n==sn then return false end end end return true end
+            -- 1) МТ из рейда
+            if WB_MT then
                 local nr=GetNumRaidMembers()
-                if nr>0 then for i=1,nr do local u='raid'..i if Check(u) then return u end end
-                else for i=1,4 do local u='party'..i if Check(u) then return u end end end
-                return nil
+                for i=1,nr do local u='raid'..i if UnitName(u)==WB_MT and NeedSS(u) then CastOn(u,53601) return end end
+            -- 2) Фокус
+            elseif UnitExists('focus') then
+                if NeedSS('focus') then CastOn('focus',53601) return end
+            -- 3) Единственный танк
+            else
+                local tanks={} local nr=GetNumRaidMembers()
+                if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and IsTankUnit(u) then tanks[#tanks+1]=u end end
+                else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and IsTankUnit(u) then tanks[#tanks+1]=u end end end
+                if #tanks==1 and NeedSS(tanks[1]) then CastOn(tanks[1],53601) return end
             end
-            local st = FindWithoutBuff(sn)
-            if st then CastOn(st,53601) return end
         end
         if WB_S.Plea~=false and MP()<0.7 and IR(54428) then
             if IR(31884) then Cast(31884)
@@ -834,7 +850,8 @@ public static class AllRotations
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
     -- Тотемы: в бою → Зов Духов, вне боя → Возвращение тотемов
-    if WB_S.CallSpirits~=false then
+    -- Не трогать тотемы 15с после Mana Tide (чтобы не перебить)
+    if WB_S.CallSpirits~=false and (not WB_MTT or GetTime()-WB_MTT>15) then
         local inCombat = UnitAffectingCombat('player')
         local hasTotem = false
         for i=1,4 do local _,_,_,d = GetTotemInfo(i) if d and d>0 then hasTotem=true break end end
@@ -864,16 +881,25 @@ public static class AllRotations
         -- Mana potion
         if MP()<0.2 then local s13,_=GetInventoryItemCooldown('player',13) local s14,_=GetInventoryItemCooldown('player',14) if s13==0 then UseInventoryItem(13) end if s14==0 then UseInventoryItem(14) end end
         -- Mana Tide Totem: мана < 30% (КД 5 мин)
-        if MP()<0.3 and IR(16190) then Cast(16190) return end
-        -- Earth Shield на танке (авто-поиск, не только фокус)
+        if MP()<0.3 and IR(16190) then WB_MTT=GetTime() Cast(16190) return end
+        -- Earth Shield: МТ → фокус → единственный танк → не кидать
         if WB_S.ES~=false and IR(974) then
             local esn=SN(974)
             local function NeedES(u) if not UnitExists(u) or UnitIsDeadOrGhost(u) or not CheckInteractDistance(u,4) then return false end if esn then for i=1,40 do local n=UnitBuff(u,i) if not n then break end if n==esn then return false end end end return true end
-            -- Фокус приоритет, потом танки
-            if UnitExists('focus') and NeedES('focus') then CastOn('focus',974) return end
-            local nr=GetNumRaidMembers()
-            if nr>0 then for i=1,nr do local u='raid'..i if NeedES(u) and IsTankUnit(u) then CastOn(u,974) return end end
-            else for i=1,4 do local u='party'..i if NeedES(u) and IsTankUnit(u) then CastOn(u,974) return end end end
+            -- 1) МТ из рейда
+            if WB_MT then
+                local nr=GetNumRaidMembers()
+                for i=1,nr do local u='raid'..i if UnitName(u)==WB_MT and NeedES(u) then CastOn(u,974) return end end
+            -- 2) Фокус
+            elseif UnitExists('focus') then
+                if NeedES('focus') then CastOn('focus',974) return end
+            -- 3) Единственный танк
+            else
+                local tanks={} local nr=GetNumRaidMembers()
+                if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and IsTankUnit(u) then tanks[#tanks+1]=u end end
+                else for i=1,4 do local u='party'..i if UnitExists(u) and not UnitIsDeadOrGhost(u) and IsTankUnit(u) then tanks[#tanks+1]=u end end end
+                if #tanks==1 and NeedES(tanks[1]) then CastOn(tanks[1],974) return end
+            end
         end
         -- Проактивный Riptide на танка если needHoT
         if needHoT and WB_S.RT~=false and IR(61295) and best then CastOn(best,61295) return end

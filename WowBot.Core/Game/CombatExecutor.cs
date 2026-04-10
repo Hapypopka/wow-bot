@@ -20,17 +20,19 @@ public class CombatExecutor
     private readonly Navigation _navigation;
     private readonly CombatPositioning _combatPositioning;
     private readonly CombatHelper _combatHelper;
+    private readonly ClickToMove _ctm;
 
     // Slave approach state
     private bool _slaveApproaching;
 
     public CombatExecutor(EndSceneHook hook, Navigation navigation,
-        CombatPositioning combatPositioning, CombatHelper combatHelper)
+        CombatPositioning combatPositioning, CombatHelper combatHelper, ClickToMove ctm)
     {
         _hook = hook;
         _navigation = navigation;
         _combatPositioning = combatPositioning;
         _combatHelper = combatHelper;
+        _ctm = ctm;
     }
 
     /// <summary>
@@ -77,15 +79,23 @@ public class CombatExecutor
         if (!options.IsHealer && options.PlayerInCombat)
             _combatHelper.TrySmartTaunt(player, options.PlayerClass, options.SpellFlagsLua);
 
-        // 4. Approach для slave (Lua MoveForwardStart/Stop)
-        string approachLua = "";
+        // 4. Approach для slave (C# CTM)
         if (options.NeedApproach)
         {
             bool isMelee = options.IsMeleeSpec;
-            int distId = isMelee ? 3 : 1;
-            approachLua = $"if not CheckInteractDistance('target',{distId}) then MoveForwardStart() WB_FWD=1 " +
-                          $"elseif WB_FWD then MoveForwardStop() WB_FWD=nil end ";
-            _slaveApproaching = true;
+            float maxDist = isMelee ? 5f : 28f;
+            float dist = player.DistanceTo(target);
+            if (dist > maxDist)
+            {
+                _navigation.FaceInstant(player, target);
+                _ctm.MoveTo(target.X, target.Y, target.Z, maxDist * 0.8f);
+                _slaveApproaching = true;
+                return true; // не кастуем ротацию пока бежим
+            }
+            else if (_slaveApproaching)
+            {
+                StopApproach();
+            }
         }
 
         // 5. Поворот к таргету
@@ -93,7 +103,7 @@ public class CombatExecutor
             _navigation.FaceInstant(player, target);
 
         // 6. Ротация
-        string script = approachLua + options.EnemyCountLua + options.SpellFlagsLua + options.RotationScript;
+        string script = options.EnemyCountLua + options.SpellFlagsLua + options.RotationScript;
         _hook.ExecuteLua(script, 500);
         return true;
     }
@@ -103,7 +113,6 @@ public class CombatExecutor
     {
         if (_slaveApproaching)
         {
-            try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
             _slaveApproaching = false;
         }
     }

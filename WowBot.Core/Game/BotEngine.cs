@@ -151,7 +151,7 @@ public class BotEngine : IDisposable
         _combatPositioning = new CombatPositioning(ctm);
         _buffManager = new BuffManager();
         _combatHelper = new CombatHelper(objectManager, hook, ctm);
-        _combatExecutor = new CombatExecutor(hook, navigation, _combatPositioning, _combatHelper);
+        _combatExecutor = new CombatExecutor(hook, navigation, _combatPositioning, _combatHelper, ctm);
         _multiDotHelper = new MultiDotHelper(objectManager);
 
         // Навигация через навмеш (опционально)
@@ -304,7 +304,9 @@ public class BotEngine : IDisposable
                 break;
 
             case Abstractions.BotCommandType.Scatter:
-                // Scatter не меняет Mode — только бежит в сторону
+                // Scatter: разбежаться + остановить Follow (стоять и бить)
+                Hivemind.Mode = Hivemind.SlaveMode.Attacking;
+                HivemindFollowing = false;
                 var scPlayer = _objectManager?.LocalPlayer;
                 if (scPlayer != null)
                 {
@@ -588,6 +590,8 @@ public class BotEngine : IDisposable
         bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
             autoTarget != null && autoTarget.IsAlive &&
             autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
+        // Если в бою (даже без таргета) — не фолловить, ждать AssistUnit
+        bool playerInCombat = player.InCombat;
 
         if (hasAutoTarget)
         {
@@ -598,6 +602,11 @@ public class BotEngine : IDisposable
                 Logger.Info("Auto: IN COMBAT — stop follow, switch to attack mode");
             }
             SlaveAttackTick(player, enemyCountLua);
+        }
+        else if (playerInCombat && !Hivemind.AutoPauseAttack)
+        {
+            // В бою но таргет временно пропал (AssistUnit между тиками) — НЕ фолловить
+            // Просто ждём следующий AssistUnit
         }
         else
         {
@@ -753,7 +762,7 @@ public class BotEngine : IDisposable
             if (_registerTick >= 66)
             {
                 _registerTick = 0;
-                Hivemind.SendRegister(PlayerClass);
+                Hivemind.SendRegister(PlayerClass, GetBuffSettingsString());
             }
         }
 
@@ -1117,6 +1126,25 @@ public class BotEngine : IDisposable
         _buffManager.AoeEnabled = _aoeEnabled;
         _buffManager.AoeSealSwap = AoeSealSwap;
         _buffManager.EnabledBuffs = _enabledBuffs;
+    }
+
+    /// <summary>Строка текущих настроек бафов для Register</summary>
+    public string GetBuffSettingsString()
+    {
+        var parts = new List<string>();
+        if (PlayerClass == "SHAMAN")
+        {
+            if (!string.IsNullOrEmpty(SelectedTotemEarth)) parts.Add($"tE={SelectedTotemEarth}");
+            if (!string.IsNullOrEmpty(SelectedTotemFire)) parts.Add($"tF={SelectedTotemFire}");
+            if (!string.IsNullOrEmpty(SelectedTotemWater)) parts.Add($"tW={SelectedTotemWater}");
+            if (!string.IsNullOrEmpty(SelectedTotemAir)) parts.Add($"tA={SelectedTotemAir}");
+        }
+        if (PlayerClass == "PALADIN")
+        {
+            if (!string.IsNullOrEmpty(SelectedBlessing)) parts.Add($"bl={SelectedBlessing}");
+            if (!string.IsNullOrEmpty(SelectedAura)) parts.Add($"au={SelectedAura}");
+        }
+        return string.Join(",", parts);
     }
 
     /// <summary>Делегирование в BuffManager (обратная совместимость)</summary>

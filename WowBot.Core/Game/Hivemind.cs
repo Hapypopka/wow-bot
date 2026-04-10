@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -33,6 +33,8 @@ public class Hivemind
         public bool AutoFollowPaused { get; set; } = false; // авто: follow на паузе
         public bool AutoAttackPaused { get; set; } = false; // авто: атака на паузе
         public string AckStatus { get; set; } = ""; // "", "pending", "ok", "timeout"
+        /// <summary>Настройки бафов слейва (tE=Stoneskin,tF=Flametongue,bl=BoK,au=AuRet...)</summary>
+        public Dictionary<string, string> BuffSettings { get; set; } = new();
     }
 
     /// <summary>Список подключённых слейвов (мастер)</summary>
@@ -385,6 +387,22 @@ public class Hivemind
     /// <summary>Мастер: пинг (проверка связи)</summary>
     public void CmdPing() => SendCommand(Command.Ping);
 
+    /// <summary>Мастер: МТ таунтит таргет мастера</summary>
+    public void CmdTauntMT()
+    {
+        string? target = GetMasterTargetName();
+        if (!string.IsNullOrEmpty(target))
+            SendCommand(Command.TauntMT, target);
+    }
+
+    /// <summary>Мастер: ОТ таунтит таргет мастера</summary>
+    public void CmdTauntOT()
+    {
+        string? target = GetMasterTargetName();
+        if (!string.IsNullOrEmpty(target))
+            SendCommand(Command.TauntOT, target);
+    }
+
     /// <summary>Мастер: задать бафф слейвам (blessing=BoM, aura=AuRet)</summary>
     /// <summary>Мастер: хилы стоп хилить (вайп)</summary>
     public void CmdWipe() => SendCommand(Command.Wipe);
@@ -602,23 +620,48 @@ public class Hivemind
     }
 
     /// <summary>Мастер: зарегистрировать слейва (или обновить)</summary>
-    public void RegisterSlave(string name, string className)
+    public void RegisterSlave(string name, string className, string buffSettingsRaw = "")
     {
+        var settings = ParseBuffSettings(buffSettingsRaw);
         var existing = ConnectedSlaves.FirstOrDefault(s => s.Name == name);
         if (existing != null)
         {
             existing.LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            return; // уже зарегистрирован — не перерисовываем
+            if (settings.Count > 0 && existing.BuffSettings.Count == 0)
+            {
+                existing.BuffSettings = settings;
+                OnSlavesChanged?.Invoke(); // первые настройки — обновить UI
+            }
+            else if (settings.Count > 0)
+            {
+                existing.BuffSettings = settings;
+            }
+            return;
         }
 
         ConnectedSlaves.Add(new SlaveInfo
         {
             Name = name,
             ClassName = className,
-            LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            LastSeen = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            BuffSettings = settings
         });
-        Logger.Info($"Hivemind: slave registered — {name} ({className})");
+        Logger.Info($"Hivemind: slave registered — {name} ({className}) buffs={buffSettingsRaw}");
         OnSlavesChanged?.Invoke();
+    }
+
+    /// <summary>Парсить строку настроек: "tE=Stoneskin,tF=Flametongue,bl=BoK"</summary>
+    private static Dictionary<string, string> ParseBuffSettings(string raw)
+    {
+        var dict = new Dictionary<string, string>();
+        if (string.IsNullOrEmpty(raw)) return dict;
+        foreach (var pair in raw.Split(','))
+        {
+            var kv = pair.Split('=', 2);
+            if (kv.Length == 2 && !string.IsNullOrEmpty(kv[0]))
+                dict[kv[0]] = kv[1];
+        }
+        return dict;
     }
 
     /// <summary>Мастер: тогл выбора слейва</summary>
@@ -655,14 +698,16 @@ public class Hivemind
         Logger.Info("Hivemind: slave state reset");
     }
 
-    /// <summary>Слейв: отправить Register мастеру (имя + класс)</summary>
-    public void SendRegister(string playerClass)
+    /// <summary>Слейв: отправить Register мастеру (имя + класс + настройки бафов)</summary>
+    public void SendRegister(string playerClass, string buffSettings = "")
     {
         string name = _objectManager.GetPlayerName() ?? "unknown";
-        string msg = $"Register:{name};{playerClass}";
+        string msg = string.IsNullOrEmpty(buffSettings)
+            ? $"Register:{name};{playerClass}"
+            : $"Register:{name};{playerClass};{buffSettings}";
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
-        Logger.Info($"Hivemind: SLAVE sent Register — {name} ({playerClass})");
+        Logger.Info($"Hivemind: SLAVE sent Register — {name} ({playerClass}) buffs=[{buffSettings}]");
     }
 
     internal bool _slaveListenerInstalled;
@@ -855,16 +900,41 @@ WB_HIVE_REG_TIME = 0
             return;
         }
 
-        // SetBuff — не отменяет текущую команду
+        // SetBuff — не отменяет текущую команду, адресная фильтрация
         if (cmd == Command.SetBuff)
         {
-            string cleanArg2 = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
+            string cleanArg2 = arg;
+            if (arg.Contains('~'))
+            {
+                var split = arg.Split('~', 2);
+                cleanArg2 = split[0];
+                string targetList = split[1];
+                string myName = _objectManager.GetPlayerName() ?? "";
+                if (!string.IsNullOrEmpty(targetList) && !targetList.Split(',').Contains(myName))
+                {
+                    Logger.Info($"Hivemind: SLAVE skipping SetBuff — not in [{targetList}] (me={myName})");
+                    return;
+                }
+            }
             if (cleanArg2.Contains('='))
             {
                 var bParts = cleanArg2.Split('=', 2);
                 OnBuffChanged?.Invoke(bParts[0], bParts[1]);
                 Logger.Info($"Hivemind: SLAVE SetBuff {bParts[0]}={bParts[1]}");
             }
+            return;
+        }
+
+        // TauntMT/TauntOT — принудительный таунт конкретного моба
+        if (cmd == Command.TauntMT || cmd == Command.TauntOT)
+        {
+            if (CurrentRole != Role.Slave) return;
+            string role = cmd == Command.TauntMT ? "MT" : "OT";
+            string targetName = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
+            // Ставим Lua переменную — ротация подхватит
+            string lua = $"WB_FORCE_TAUNT='{targetName}' WB_FORCE_TAUNT_ROLE='{role}' WB_FORCE_TAUNT_T=GetTime()";
+            _hook.ExecuteLua(lua, 100);
+            Logger.Info($"Hivemind: SLAVE force taunt {role} → '{targetName}'");
             return;
         }
 
@@ -875,7 +945,7 @@ WB_HIVE_REG_TIME = 0
             {
                 var regParts = arg.Split(';');
                 if (regParts.Length >= 2)
-                    RegisterSlave(regParts[0], regParts[1]);
+                    RegisterSlave(regParts[0], regParts[1], regParts.Length >= 3 ? regParts[2] : "");
             }
             return;
         }
@@ -930,17 +1000,17 @@ WB_HIVE_REG_TIME = 0
         switch (cmd)
         {
             case Command.StackMA:
-                // К наводчику: Lua FollowUnit (нет аналога в BotCommand)
+                // К наводчику: бежим к MAINASSIST, потом стоим и бьём
                 try
                 {
                     _hook.ExecuteLua(
                         "WB_MA='' for i=1,40 do local n,_,_,_,_,_,_,_,_,role=GetRaidRosterInfo(i) if role=='MAINASSIST' then WB_MA=n break end end " +
                         "if WB_MA~='' then FollowUnit(WB_MA) end", 300);
-                    Mode = SlaveMode.Following;
-                    if (_botEngine != null) _botEngine.HivemindFollowing = true;
+                    Mode = SlaveMode.GoingToPoint;
+                    if (_botEngine != null) _botEngine.HivemindFollowing = false;
                     OnAutoToggle?.Invoke("rotation", true);
                     OnAutoToggle?.Invoke("buffs", true);
-                    Logger.Info("SLAVE: stack to MAINASSIST (Lua FollowUnit)");
+                    Logger.Info("SLAVE: stack to MAINASSIST (Lua FollowUnit, then stop)");
                 }
                 catch (Exception ex) { Logger.Error($"StackMA error: {ex.Message}"); }
                 break;
