@@ -872,9 +872,19 @@ WB_HIVE_REG_TIME = 0
             string cleanArg3 = arg.Contains('~') ? arg.Split('~', 2)[0] : arg;
             if (cleanArg3 == "repop")
             {
-                _hook.ExecuteLua("RepopMe()", 200);
+                // RepopMe не всегда срабатывает с 1го раза — retry 3 раза
+                for (int i = 0; i < 3; i++)
+                {
+                    _hook.ExecuteLua("RepopMe()", 200);
+                    System.Threading.Thread.Sleep(500);
+                }
                 _botEngine?.StartGhostRun();
-                Logger.Info("Hivemind: SLAVE RepopMe — покинул тело + ghost run");
+                Logger.Info("Hivemind: SLAVE RepopMe (x3) — покинул тело + ghost run");
+            }
+            else if (cleanArg3 == "repair")
+            {
+                _botEngine?.StartRepairRun();
+                Logger.Info("Hivemind: SLAVE repair run");
             }
             else
             {

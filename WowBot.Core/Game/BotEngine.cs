@@ -378,11 +378,30 @@ public class BotEngine : IDisposable
 
     public bool AoeAvoidEnabled { get; set; } = true;
 
-    // Ghost route — полёт призрака по маршруту
+    // Ghost route — полёт призрака по маршруту + repair route
     private List<(float x, float y, float z)>? _ghostRoute;
+    private List<(float x, float y, float z)>? _repairRoute;
     private int _ghostRouteIndex; // -1 = ждём загрузки
     private bool _ghostRunning;
     private int _ghostAliveCheckTick;
+    private bool _ghostSawNull; // видели LocalPlayer == null (загрузка началась)
+    private enum GhostPhase { Flying, WaitingCorpse, RepairRun, Repairing }
+    private GhostPhase _ghostPhase;
+
+    public void StartRepairRun()
+    {
+        if (_repairRoute == null || _repairRoute.Count == 0)
+            LoadGhostRoute();
+        if (_repairRoute == null || _repairRoute.Count == 0)
+        {
+            Logger.Info("RepairRun: нет маршрута (Routes/repair_route_*.txt)");
+            return;
+        }
+        _ghostRunning = true;
+        _ghostAliveCheckTick = 0;
+        StartRepairPhase();
+        EnsureRunning();
+    }
 
     public void StartGhostRun()
     {
@@ -394,8 +413,10 @@ public class BotEngine : IDisposable
             return;
         }
         _ghostRouteIndex = -1; // -1 = ждём загрузки
+        _ghostPhase = GhostPhase.Flying;
         _ghostRunning = true;
         _ghostAliveCheckTick = 0;
+        _ghostSawNull = false;
         EnsureRunning();
         Logger.Info($"GhostRun: STARTED, {_ghostRoute.Count} points, waiting for load screen");
     }
@@ -405,10 +426,19 @@ public class BotEngine : IDisposable
         string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
         string routesDir = System.IO.Path.Combine(basePath, "Routes");
         if (!System.IO.Directory.Exists(routesDir)) return;
-        // Берём последний файл
-        var files = System.IO.Directory.GetFiles(routesDir, "ghost_route_*.txt").OrderByDescending(f => f).ToArray();
-        if (files.Length == 0) return;
-        _ghostRoute = new();
+
+        _ghostRoute = LoadRoute(routesDir, "ghost_route_*.txt");
+        _repairRoute = LoadRoute(routesDir, "repair_route_*.txt");
+
+        if (_ghostRoute != null) Logger.Info($"GhostRun: loaded ghost route {_ghostRoute.Count} points");
+        if (_repairRoute != null) Logger.Info($"GhostRun: loaded repair route {_repairRoute.Count} points");
+    }
+
+    private static List<(float x, float y, float z)>? LoadRoute(string dir, string pattern)
+    {
+        var files = System.IO.Directory.GetFiles(dir, pattern).OrderByDescending(f => f).ToArray();
+        if (files.Length == 0) return null;
+        var route = new List<(float x, float y, float z)>();
         foreach (var line in System.IO.File.ReadAllLines(files[0]))
         {
             var parts = line.Split(';');
@@ -416,29 +446,93 @@ public class BotEngine : IDisposable
                 float.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float x) &&
                 float.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float y) &&
                 float.TryParse(parts[2], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float z))
-                _ghostRoute.Add((x, y, z));
+                route.Add((x, y, z));
         }
-        Logger.Info($"GhostRun: loaded {_ghostRoute.Count} points from {files[0]}");
+        return route.Count > 0 ? route : null;
     }
 
     private void GhostRunTick()
     {
-        if (!_ghostRunning || _ghostRoute == null) return;
+        if (!_ghostRunning) return;
 
-        // Фаза 1: ждём загрузки — проверяем Lua каждый тик
+        // Безопасность: если жив и в Flying фазе — ghost run завис, остановить
+        if (_ghostPhase == GhostPhase.Flying)
+        {
+            var p = _objectManager.LocalPlayer;
+            if (p != null && !p.IsDead && p.Health > 1)
+            {
+                try
+                {
+                    var alive = _hook.ExecuteLuaWithResult("WB_R=UnitIsGhost('player') and '1' or '0'");
+                    if (alive == "0")
+                    {
+                        _ghostRunning = false;
+                        Logger.Info("GhostRunTick: player alive, aborting ghost run");
+                        return;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        switch (_ghostPhase)
+        {
+            case GhostPhase.Flying:
+                GhostFlyTick();
+                break;
+            case GhostPhase.WaitingCorpse:
+                GhostWaitCorpseTick();
+                break;
+            case GhostPhase.RepairRun:
+                RepairRunTick();
+                break;
+            case GhostPhase.Repairing:
+                RepairTick();
+                break;
+        }
+    }
+
+    private void GhostFlyTick()
+    {
+        if (_ghostRoute == null) { _ghostRunning = false; return; }
+
+        // Ждём загрузки: RepopMe → загрузка (player=null) → кладбище (player!=null + IsGhost)
         if (_ghostRouteIndex == -1)
         {
+            var player = _objectManager.LocalPlayer;
+
+            // Фаза 1: ждём начало загрузки (player пропадает)
+            if (!_ghostSawNull)
+            {
+                if (player == null)
+                {
+                    _ghostSawNull = true;
+                    Logger.Info("GhostRun: load screen detected (player=null)");
+                }
+                else
+                {
+                    // Уже призрак без загрузки (повторное нажатие) — пропускаем ожидание
+                    try
+                    {
+                        var preCheck = _hook.ExecuteLuaWithResult("WB_R=UnitIsGhost('player') and '1' or '0'");
+                        if (preCheck == "1") { _ghostSawNull = true; Logger.Info("GhostRun: already ghost, skipping load wait"); }
+                    }
+                    catch { }
+                }
+                if (!_ghostSawNull) return;
+            }
+
+            // Фаза 2: ждём окончание загрузки (player появился + призрак)
+            if (player == null) return; // ещё грузится
+
             try
             {
-                var check = _hook.ExecuteLuaWithResult("WB_R=UnitIsDeadOrGhost('player') and '1' or '0'");
-                if (check != "1") return; // ещё грузится или живой
+                var check = _hook.ExecuteLuaWithResult("WB_R=UnitIsGhost('player') and '1' or '0'");
+                if (check != "1") return;
             }
-            catch { return; } // hook не работает — ждём
+            catch { return; }
 
-            // Загрузились! Найти ближайшую точку маршрута
-            var player = _objectManager.LocalPlayer;
-            if (player == null) return;
-
+            // Загрузились на кладбище! Найти ближайшую точку маршрута
             float bestDist = float.MaxValue;
             int bestIdx = 0;
             for (int i = 0; i < _ghostRoute.Count; i++)
@@ -448,14 +542,14 @@ public class BotEngine : IDisposable
                 if (d < bestDist) { bestDist = d; bestIdx = i; }
             }
             _ghostRouteIndex = bestIdx;
-            Logger.Info($"GhostRun: loaded! Nearest point={bestIdx}/{_ghostRoute.Count} dist={MathF.Sqrt(bestDist):F0}");
+            Logger.Info($"GhostRun: loaded on graveyard! Nearest point={bestIdx}/{_ghostRoute.Count} dist={MathF.Sqrt(bestDist):F0}");
             return;
         }
 
         var pl = _objectManager.LocalPlayer;
         if (pl == null) return;
 
-        // Проверка: ещё призрак? (каждые ~5 сек, не каждый тик)
+        // Проверка: ещё призрак?
         _ghostAliveCheckTick++;
         if (_ghostAliveCheckTick >= 33)
         {
@@ -465,20 +559,19 @@ public class BotEngine : IDisposable
                 var ghostCheck = _hook.ExecuteLuaWithResult("WB_R=UnitIsDeadOrGhost('player') and '1' or '0'");
                 if (ghostCheck == "0")
                 {
-                    _ghostRunning = false;
-                    Logger.Info("GhostRun: ALIVE — stopped");
+                    // Воскресли раньше (кто-то зарезал) — сразу к ремонту
+                    StartRepairPhase();
                     return;
                 }
             }
-            catch { } // hook лагнул — не останавливаемся
+            catch { }
         }
 
         if (_ghostRouteIndex >= _ghostRoute.Count)
         {
-            // Дошли до конца — RetrieveCorpse
             _hook.ExecuteLua("RetrieveCorpse()", 200);
-            _ghostRunning = false;
-            Logger.Info("GhostRun: FINISHED — RetrieveCorpse");
+            Logger.Info("GhostRun: RetrieveCorpse — waiting for load screen");
+            _ghostPhase = GhostPhase.WaitingCorpse;
             return;
         }
 
@@ -486,15 +579,106 @@ public class BotEngine : IDisposable
         float dx = pl.X - target.x, dy = pl.Y - target.y;
         float dist = MathF.Sqrt(dx * dx + dy * dy);
 
-        if (dist < 15f) // близко к точке → следующая (15м — призрак летит быстро)
+        if (dist < 15f)
         {
             _ghostRouteIndex++;
             Logger.Info($"GhostRun: point {_ghostRouteIndex}/{_ghostRoute.Count} reached");
             return;
         }
 
-        // Лететь к точке
         _ctm.MoveTo(target.x, target.y, target.z, 10f);
+    }
+
+    private void GhostWaitCorpseTick()
+    {
+        // Ждём пока загрузимся живыми (после RetrieveCorpse)
+        try
+        {
+            var check = _hook.ExecuteLuaWithResult("WB_R=UnitIsDeadOrGhost('player') and '1' or '0'");
+            if (check == "0")
+            {
+                Logger.Info("GhostRun: alive after RetrieveCorpse");
+                StartRepairPhase();
+            }
+        }
+        catch { } // ещё грузится
+    }
+
+    private void StartRepairPhase()
+    {
+        if (_repairRoute == null || _repairRoute.Count == 0)
+        {
+            _ghostRunning = false;
+            Logger.Info("GhostRun: DONE (no repair route)");
+            return;
+        }
+
+        // Найти ближайшую точку repair route (ждём загрузку)
+        var player = _objectManager.LocalPlayer;
+        if (player == null) return; // ещё грузится — ждём
+
+        float bestDist = float.MaxValue;
+        int bestIdx = 0;
+        for (int i = 0; i < _repairRoute.Count; i++)
+        {
+            var p = _repairRoute[i];
+            float d = (player.X - p.x) * (player.X - p.x) + (player.Y - p.y) * (player.Y - p.y);
+            if (d < bestDist) { bestDist = d; bestIdx = i; }
+        }
+        _ghostRouteIndex = bestIdx;
+        _ghostPhase = GhostPhase.RepairRun;
+        Logger.Info($"RepairRun: START nearest={bestIdx}/{_repairRoute.Count} dist={MathF.Sqrt(bestDist):F0}");
+    }
+
+    private void RepairRunTick()
+    {
+        if (_repairRoute == null) { _ghostRunning = false; return; }
+
+        var pl = _objectManager.LocalPlayer;
+        if (pl == null) return;
+
+        if (_ghostRouteIndex >= _repairRoute.Count)
+        {
+            // Дошли до ремонтника — починиться
+            _ghostPhase = GhostPhase.Repairing;
+            _ghostAliveCheckTick = 0;
+            Logger.Info("RepairRun: arrived at NPC, repairing");
+            return;
+        }
+
+        var target = _repairRoute[_ghostRouteIndex];
+        float dx = pl.X - target.x, dy = pl.Y - target.y;
+        float dist = MathF.Sqrt(dx * dx + dy * dy);
+
+        if (dist < 5f)
+        {
+            _ghostRouteIndex++;
+            Logger.Info($"RepairRun: point {_ghostRouteIndex}/{_repairRoute.Count} reached");
+            return;
+        }
+
+        _ctm.MoveTo(target.x, target.y, target.z, 3f);
+    }
+
+    private void RepairTick()
+    {
+        _ghostAliveCheckTick++;
+        if (_ghostAliveCheckTick < 10) return; // дать время подойти
+        _ghostAliveCheckTick = 0;
+
+        // Interact с ремонтником + ремонт
+        try
+        {
+            _hook.ExecuteLua("InteractUnit('Алхимик Финкльштейн')", 300);
+            Logger.Info("RepairRun: InteractUnit sent");
+            System.Threading.Thread.Sleep(1500);
+            _hook.ExecuteLua("RepairAllItems()", 200);
+            Logger.Info("RepairRun: RepairAllItems sent");
+        }
+        catch (Exception ex) { Logger.Error($"RepairRun error: {ex.Message}"); }
+
+        _ghostRunning = false;
+        Logger.Info("GhostRun: FULLY DONE (ghost → repair)");
     }
 
     public bool IsTankSpec => _specName is "Prot Warrior" or "Prot Paladin" or "Blood DK";
@@ -773,6 +957,8 @@ public class BotEngine : IDisposable
             _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
             Hivemind._slaveListenerInstalled = true;
             _listenerCheckTick = 0;
+            _lastRegisterTime = 0;
+            _lastAckTime = 0;
             Logger.Info("Hivemind: slave listener installed");
         }
         else
@@ -786,6 +972,8 @@ public class BotEngine : IDisposable
                 {
                     Logger.Info("Hivemind: listener DEAD — reinstalling");
                     _hook.ExecuteLua(Game.Hivemind.GetSlaveListenerScript(), 500);
+                    _lastRegisterTime = 0;
+                    _lastAckTime = 0;
                 }
             }
         }
@@ -802,14 +990,18 @@ public class BotEngine : IDisposable
             // Один вызов вместо трёх: cmd|arg|sender|time#reg|regSender|regTime#ack|ackTime
             response = _hook.ExecuteLuaWithResult(
                 "WB_R=(WB_HIVE_CMD or '')..'|'..(WB_HIVE_ARG or '')..'|'..(WB_HIVE_SENDER or '')..'|'..(WB_HIVE_TIME or '0')" +
-                "..'#'..(WB_HIVE_REG or '')..'|'..(WB_HIVE_REG_SENDER or '')..'|'..(WB_HIVE_REG_TIME or '0')" +
-                "..'#'..(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
+                "..'§'..(WB_HIVE_REG or '')..'|'..(WB_HIVE_REG_SENDER or '')..'|'..(WB_HIVE_REG_TIME or '0')" +
+                "..'§'..(WB_HIVE_ACK or '')..'|'..(WB_HIVE_ACK_TIME or '0')");
         }
         else
         {
             response = _hook.ExecuteLuaWithResult(Hivemind.GetSlaveReadScript());
         }
-        if (_logTick == 0) Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
+        // Диагностика: всегда логировать для мастера если есть данные
+        if (Hivemind.CurrentRole == Hivemind.Role.Master && response != null && !response.StartsWith("|||"))
+            Logger.Info($"Hivemind: raw response=[{response}]");
+        else if (_logTick == 0)
+            Logger.Log(LogCat.Hivemind, $"Hivemind: raw response=[{response ?? "NULL"}]");
 
         if (response != null)
         {
@@ -819,7 +1011,7 @@ public class BotEngine : IDisposable
 
             if (Hivemind.CurrentRole == Hivemind.Role.Master)
             {
-                var sections = response.Split('#');
+                var sections = response.Split('§');
                 cmdPart = sections.Length > 0 ? sections[0] : "";
                 regPart = sections.Length > 1 ? sections[1] : null;
                 ackPart = sections.Length > 2 ? sections[2] : null;

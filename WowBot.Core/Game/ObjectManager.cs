@@ -132,6 +132,14 @@ public class ObjectManager : IObjectManager
         return null;
     }
 
+    /// <summary>Найти юнит по имени (NPC, мобы)</summary>
+    public WowUnit? FindUnitByName(string name)
+    {
+        foreach (var unit in Units)
+            if (unit.Name == name) return unit;
+        return null;
+    }
+
     /// <summary>
     /// Получить текущий таргет локального игрока
     /// </summary>

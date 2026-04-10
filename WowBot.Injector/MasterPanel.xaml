@@ -134,12 +134,17 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Button x:Name="BtnRepop" Content="💀 Покинуть тело" FontSize="9" Grid.Column="0"
+                <Button x:Name="BtnRepop" Content="💀 Реснуться" FontSize="9" Grid.Column="0"
                         Click="BtnRepop_Click" Style="{x:Null}"
                         Background="#2a1a2a" Foreground="#c88ac8" BorderThickness="0"
-                        Height="22" Cursor="Hand" ToolTip="Все слейвы покидают тело (RepopMe)" Padding="4,0"/>
-                <Button x:Name="BtnRecordPath" Content="📍 Запись пути" FontSize="9" Grid.Column="1"
+                        Height="22" Cursor="Hand" ToolTip="Покинуть тело → лететь к данжу → ремонт" Padding="4,0"/>
+                <Button x:Name="BtnRepair" Content="🔧 К ремонтнику" FontSize="9" Grid.Column="1"
+                        Click="BtnRepair_Click" Style="{x:Null}"
+                        Background="#1a2a1a" Foreground="#8ac88a" BorderThickness="0"
+                        Height="22" Margin="2,0,0,0" Cursor="Hand" ToolTip="Все бегут к ремонтнику и чинятся" Padding="4,0"/>
+                <Button x:Name="BtnRecordPath" Content="📍 Запись пути" FontSize="9" Grid.Column="2"
                         Click="BtnRecordPath_Click" Style="{x:Null}"
                         Background="#1a1a2a" Foreground="#8a8ac8" BorderThickness="0"
                         Height="22" Margin="2,0,0,0" Cursor="Hand" ToolTip="Записать маршрут (лети призраком)" Padding="4,0"/>

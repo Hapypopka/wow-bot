@@ -855,7 +855,9 @@ public partial class MasterPanel : Window
     public event Action<bool>? OnRecordPath; // true=start, false=stop
     private bool _recording;
 
+    public event Action? OnRepair;
     private void BtnRepop_Click(object sender, RoutedEventArgs e) => OnRepop?.Invoke();
+    private void BtnRepair_Click(object sender, RoutedEventArgs e) => OnRepair?.Invoke();
 
     private void BtnRecordPath_Click(object sender, RoutedEventArgs e)
     {

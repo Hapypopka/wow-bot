@@ -290,12 +290,26 @@ public partial class MainWindow : Window
         {
             WowBot.Core.Logger.Info($"OnRepop: botEngine={_botEngine != null} hook={_endSceneHook != null}");
             if (_botEngine == null || _endSceneHook == null) return;
-            // Мастер покидает тело + запускает ghost run
-            _endSceneHook.ExecuteLua("RepopMe()", 200);
-            _botEngine.StartGhostRun();
-            // Слейвы через Hivemind
+            // Сначала слейвы — пока мастер ещё не в загрузке
             _botEngine.Hivemind.SendCommand(WowBot.Core.Game.Hivemind.Command.Wipe, "repop");
+            System.Threading.Thread.Sleep(300); // дать время уйти addon message
+            // Потом мастер покидает тело + ghost run
+            for (int i = 0; i < 3; i++)
+            {
+                _endSceneHook.ExecuteLua("RepopMe()", 200);
+                System.Threading.Thread.Sleep(500);
+            }
+            _botEngine.StartGhostRun();
             WowBot.Core.Logger.Info("OnRepop: sent RepopMe + ghost run to all");
+        };
+        _masterPanel.OnRepair += () =>
+        {
+            if (_botEngine == null) return;
+            // Мастер бежит к ремонтнику
+            _botEngine.StartRepairRun();
+            // Слейвы тоже
+            _botEngine.Hivemind.SendCommand(WowBot.Core.Game.Hivemind.Command.Wipe, "repair");
+            WowBot.Core.Logger.Info("OnRepair: sent repair run to all");
         };
         System.Windows.Threading.DispatcherTimer? _pathRecordTimer = null;
         List<(float x, float y, float z)>? _recordedPath = null;
@@ -332,7 +346,7 @@ public partial class MainWindow : Window
                     string basePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
                     string routesDir = System.IO.Path.Combine(basePath, "Routes");
                     System.IO.Directory.CreateDirectory(routesDir);
-                    string fileName = $"ghost_route_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+                    string fileName = $"repair_route_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
                     string filePath = System.IO.Path.Combine(routesDir, fileName);
                     var lines = _recordedPath.Select(p => string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1};{1:F1};{2:F1}", p.x, p.y, p.z));
                     System.IO.File.WriteAllLines(filePath, lines);
