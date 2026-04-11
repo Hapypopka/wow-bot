@@ -58,6 +58,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Button x:Name="BtnRefreshGuid" Content="🔄" FontSize="14" Grid.Column="0"
                         Click="BtnRefreshGuid_Click" Style="{x:Null}"
