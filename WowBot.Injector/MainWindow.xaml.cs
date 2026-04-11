@@ -619,6 +619,7 @@ public partial class MainWindow : Window
             _playerClass = playerClass;
             _botEngine.PlayerClass = playerClass;
             _botEngine.SpecName = specName;
+
             AllRotations.ExportScripts(); // экспорт ПЕРЕД загрузкой — гарантирует актуальные скрипты
             // v2: RotationRegistry — ищем C# ротацию по классу+спеку, fallback на AllRotations
             var rotation = WowBot.Core.Game.Rotations.RotationRegistry.Find(playerClass, specName);
@@ -744,6 +745,7 @@ public partial class MainWindow : Window
             _overlay.OnTotemChanged += (element, key) =>
             {
                 if (_botEngine == null) return;
+                Logger.Log(LogCat.Buffs, $"UI OnTotemChanged: element={element} key={key}");
                 switch (element)
                 {
                     case "Земля": _botEngine.SelectedTotemEarth = key; break;
@@ -751,6 +753,13 @@ public partial class MainWindow : Window
                     case "Вода": _botEngine.SelectedTotemWater = key; break;
                     case "Воздух": _botEngine.SelectedTotemAir = key; break;
                 }
+                Logger.Log(LogCat.Buffs, $"UI after set: tE={_botEngine.SelectedTotemEarth} tF={_botEngine.SelectedTotemFire} tW={_botEngine.SelectedTotemWater} tA={_botEngine.SelectedTotemAir}");
+            };
+            _overlay.OnBuffsToggled += (on) =>
+            {
+                if (_botEngine == null) return;
+                _botEngine.BuffsEnabled = on;
+                Logger.Log(LogCat.Buffs, $"UI BuffsToggled: {on}");
             };
             _overlay.OnReloadScripts += () =>
             {
@@ -999,6 +1008,20 @@ public partial class MainWindow : Window
             WowBot.Core.Logger.Info("Showing overlay...");
             _overlay.Show();
             WowBot.Core.Logger.Info("Overlay shown OK");
+
+            // Синхронизировать начальное состояние из сохранённых настроек
+            if (_botEngine != null)
+            {
+                if (_overlay.BuffsEnabled)
+                {
+                    _botEngine.BuffsEnabled = true;
+                    WowBot.Core.Logger.Info("Buffs auto-enabled from saved settings");
+                }
+                _botEngine.SelectedTotemEarth = _overlay.SelectedTotemEarth;
+                _botEngine.SelectedTotemFire = _overlay.SelectedTotemFire;
+                _botEngine.SelectedTotemWater = _overlay.SelectedTotemWater;
+                _botEngine.SelectedTotemAir = _overlay.SelectedTotemAir;
+            }
 
             // Автороль из лаунчера
             if (!string.IsNullOrEmpty(_autoConnectRole) && _botEngine != null)

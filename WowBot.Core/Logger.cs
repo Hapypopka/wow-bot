@@ -24,7 +24,7 @@ public enum LogCat
 
     // Пресеты
     All = ~0,
-    Default = General | Rotation | Heal | Tank | AoE | Combat | Error,
+    Default = General | Rotation | Heal | Tank | AoE | Combat | Buffs | Error,
     Minimal = General | Error,
     Debug = All,
 }

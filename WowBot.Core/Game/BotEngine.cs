@@ -150,6 +150,25 @@ public class BotEngine : IDisposable
         BossEngine = new BossEngine(hook, objectManager, ctm, navigation);
         _combatPositioning = new CombatPositioning(ctm);
         _buffManager = new BuffManager();
+        Hivemind.OnBuffChanged += (key, value) =>
+        {
+            switch (key)
+            {
+                case "seal": SelectedSeal = value; _buffManager.SelectedSeal = value; break;
+                case "blessing": SelectedBlessing = value; _buffManager.SelectedBlessing = value; break;
+                case "aura": SelectedAura = value; _buffManager.SelectedAura = value; break;
+                case "shout": SelectedShout = value; _buffManager.SelectedShout = value; break;
+                case "stance": SelectedStance = value; _buffManager.SelectedStance = value; break;
+                case "presence": SelectedPresence = value; _buffManager.SelectedPresence = value; break;
+                case "totem_earth": SelectedTotemEarth = value; _buffManager.SelectedTotemEarth = value; break;
+                case "totem_fire": SelectedTotemFire = value; _buffManager.SelectedTotemFire = value; break;
+                case "totem_water": SelectedTotemWater = value; _buffManager.SelectedTotemWater = value; break;
+                case "totem_air": SelectedTotemAir = value; _buffManager.SelectedTotemAir = value; break;
+                case "weapon_mh": SelectedWeaponMH = value; _buffManager.SelectedWeaponMH = value; break;
+                case "weapon_oh": SelectedWeaponOH = value; _buffManager.SelectedWeaponOH = value; break;
+            }
+            Logger.Info($"BuffChanged: {key}={value}");
+        };
         _combatHelper = new CombatHelper(objectManager, hook, ctm);
         _combatExecutor = new CombatExecutor(hook, navigation, _combatPositioning, _combatHelper, ctm);
         _multiDotHelper = new MultiDotHelper(objectManager);
@@ -872,6 +891,13 @@ public class BotEngine : IDisposable
             float ctmX = _ctm.ReadX(), ctmY = _ctm.ReadY();
             float dist = slaveTarget != null ? player.DistanceTo(slaveTarget) : -1;
             Logger.Log(LogCat.Combat, $"SlaveAttack: target={slaveTarget?.Name ?? "NULL"} alive={slaveTarget?.IsAlive} combat={slaveTarget?.InCombat} type={slaveTarget?.Type} casting={player.IsCasting} dist={dist:F1} ctm={ctmAction} ctmXY=({ctmX:F0},{ctmY:F0}) pos=({player.X:F0},{player.Y:F0})");
+            // Лог тотемов шамана
+            if (PlayerClass == "SHAMAN")
+            {
+                string? totemLog = _hook.ExecuteLuaWithResult("WB_R=WB_TOTEM_LOG or '' WB_TOTEM_LOG=nil");
+                if (!string.IsNullOrEmpty(totemLog))
+                    Logger.Info($"TOTEM: {totemLog}");
+            }
         }
 
         if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat)

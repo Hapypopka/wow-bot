@@ -329,14 +329,16 @@ public class BuffManager
             var waterIds = new Dictionary<string, int> { ["ManaSpring"] = 58774, ["HealStream"] = 58757, ["Cleansing"] = 8170, ["FireRes"] = 58739 };
             var airIds = new Dictionary<string, int> { ["WrathOfAir"] = 3738, ["Windfury"] = 8512, ["NatureRes"] = 58749 };
 
+            // Забиваем набор во все 3 Call-спелла: Elements(133-136), Ancestors(137-140), Spirits(141-144)
+            // Так неважно какой "Зов" выбран у юзера — тотемы всегда правильные
             if (!string.IsNullOrEmpty(SelectedTotemFire) && fireIds.TryGetValue(SelectedTotemFire, out int fireId))
-                sb.Append($"SetMultiCastSpell(141,{fireId}) ");
+                sb.Append($"SetMultiCastSpell(133,{fireId}) SetMultiCastSpell(137,{fireId}) SetMultiCastSpell(141,{fireId}) ");
             if (!string.IsNullOrEmpty(SelectedTotemEarth) && earthIds.TryGetValue(SelectedTotemEarth, out int earthId))
-                sb.Append($"SetMultiCastSpell(142,{earthId}) ");
+                sb.Append($"SetMultiCastSpell(134,{earthId}) SetMultiCastSpell(138,{earthId}) SetMultiCastSpell(142,{earthId}) ");
             if (!string.IsNullOrEmpty(SelectedTotemWater) && waterIds.TryGetValue(SelectedTotemWater, out int waterId))
-                sb.Append($"SetMultiCastSpell(143,{waterId}) ");
+                sb.Append($"SetMultiCastSpell(135,{waterId}) SetMultiCastSpell(139,{waterId}) SetMultiCastSpell(143,{waterId}) ");
             if (!string.IsNullOrEmpty(SelectedTotemAir) && airIds.TryGetValue(SelectedTotemAir, out int airId))
-                sb.Append($"SetMultiCastSpell(144,{airId}) ");
+                sb.Append($"SetMultiCastSpell(136,{airId}) SetMultiCastSpell(140,{airId}) SetMultiCastSpell(144,{airId}) ");
         }
 
         // Аспект охотника

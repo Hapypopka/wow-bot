@@ -812,6 +812,7 @@ public partial class OverlayWindow : Window
     private void MenuTarget_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Target");
     private void MenuHivemind_Click(object s, MouseButtonEventArgs e) => ShowSubmenu("Hivemind");
     private void MenuReload_Click(object s, MouseButtonEventArgs e) => OnReloadScripts?.Invoke();
+    public event Action<bool>? OnBuffsToggled;
     public event Action? OnReloadScripts;
     public event Func<string, string?>? OnLuaExecute;
 
@@ -1896,7 +1897,9 @@ public partial class OverlayWindow : Window
     }
     private void BtnBuffs_Click(object sender, RoutedEventArgs e)
     {
-        BtnBuffs.Content = BtnBuffs.IsChecked == true ? "ON" : "OFF";
+        bool on = BtnBuffs.IsChecked == true;
+        BtnBuffs.Content = on ? "ON" : "OFF";
+        OnBuffsToggled?.Invoke(on);
         SaveSettings();
     }
 
