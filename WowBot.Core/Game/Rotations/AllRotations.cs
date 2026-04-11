@@ -850,20 +850,20 @@ public static class AllRotations
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
     -- Тотемы: в бою → Зов Духов, вне боя → Возвращение тотемов
-    -- Не трогать тотемы 15с после Mana Tide (чтобы не перебить)
+    -- Не трогать тотемы 15с после Mana Tide и пока Fire Elemental жив
     if WB_S.CallSpirits~=false and (not WB_MTT or GetTime()-WB_MTT>15) then
         local inCombat = UnitAffectingCombat('player')
+        if not inCombat and WB_SLAVE then
+            local nr=GetNumRaidMembers() if nr>0 then for i=1,nr do local u='raid'..i if UnitExists(u) and UnitAffectingCombat(u) then inCombat=true break end end
+            else for i=1,4 do local u='party'..i if UnitExists(u) and UnitAffectingCombat(u) then inCombat=true break end end end
+        end
         local hasTotem = false
         for i=1,4 do local _,_,_,d = GetTotemInfo(i) if d and d>0 then hasTotem=true break end end
-        -- В бою + нет тотемов → поставить
+        local fetUp = WB_FET_T and (GetTime()-WB_FET_T)<120
+        -- В бою + нет тотемов → поставить (Зов Духов поставит все 4, потом элементаль перебьёт огонь)
         if inCombat and not hasTotem and IsReady('Зов Духов') then CastSpellByName('Зов Духов') return end
-        -- В бою + тотемы далеко (нет баффа воздуха) → возвращение, след тик поставит заново
-        if inCombat and hasTotem then
-            local hasBuff=false for i=1,40 do local n=UnitBuff('player',i) if not n then break end if n=='Тотем гнева воздуха' or n=='Тотем неистовства ветра' or n=='Сопротивление силам природы' then hasBuff=true break end end
-            if not hasBuff and IsReady('Возвращение тотемов') then CastSpellByName('Возвращение тотемов') return end
-        end
-        -- Вне боя + тотемы стоят → подобрать
-        if not inCombat and hasTotem and IsReady('Возвращение тотемов') then CastSpellByName('Возвращение тотемов') return end
+        -- Вне боя + тотемы стоят + нет Fire Elemental → подобрать (не трогать пока элементаль жив)
+        if not inCombat and hasTotem and not fetUp and IsReady('Возвращение тотемов') then CastSpellByName('Возвращение тотемов') return end
     end
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
@@ -952,7 +952,7 @@ public static class AllRotations
             if WB_S.CL~=false and IR(421) then Cast(421) return end
             if WB_S.LB~=false then Cast(403) end
         else
-            -- ENHANCEMENT (SimCraft WotLK 3.3.5a приоритет)
+            -- ENHANCEMENT (EJ 3.3.5a приоритет)
             -- 1. Lightning Shield (если не горит)
             if WB_S.LS~=false and not HB(324) then Cast(324) return end
             -- 2. Maelstrom 5 стаков: Chain Lightning (AoE) или Lightning Bolt (сингл)
@@ -960,24 +960,24 @@ public static class AllRotations
                 if WB_S.CL~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(421) then Cast(421) return end
                 Cast(403) return
             end
-            -- 3. Бурсты: Heroism (только босс!) + Fire Elemental + SR (T10 4PC) + Wolves
+            -- 3. Magma Totem — если нет огненного и Fire Elemental не активен
+            local fetUp = WB_FET_T and (GetTime()-WB_FET_T)<120
+            if WB_S.Magma~=false and not fetUp then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then Cast(58734) return end end
+            -- 4. Бурсты: Heroism (только босс!) + Fire Elemental + SR (T10 4PC) + Wolves
             if WB_S.Hero~=false and not WB_SLAVE and IR(32182) and UnitClassification('target')=='worldboss' then Cast(32182) return end
             if WB_S.FET~=false and IR(2894) then WB_FET_T=GetTime() Cast(2894) return end
             if WB_S.SR~=false and IR(30823) then Cast(30823) return end
             if WB_S.Wolves~=false and IR(51533) then Cast(51533) return end
-            -- 4. Stormstrike
+            -- 5. Stormstrike
             if WB_S.SS~=false and IR(17364) then Cast(17364) return end
-            -- 5. Flame Shock (если не тикает на таргете)
-            if WB_S.FS~=false and not HD('target',8050) then Cast(8050) return end
-            -- 6. Earth Shock
-            if WB_S.ES~=false and IR(8042) then Cast(8042) return end
-            -- 7. Fire Totem — если нет огненного и Fire Elemental не активен (120с)
-            local fetUp = WB_FET_T and (GetTime()-WB_FET_T)<120
-            if WB_S.Searing~=false and not fetUp then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then Cast(58734) return end end
-            -- 8. Fire Nova (если Flame Shock на таргете)
-            if WB_S.FN~=false and HD('target',8050) and IR(61657) then Cast(61657) return end
-            -- 9. Lava Lash
+            -- 6. Lava Lash
             if WB_S.LL~=false and IR(60103) then Cast(60103) return end
+            -- 7. Flame Shock (если не тикает на таргете)
+            if WB_S.FS~=false and not HD('target',8050) then Cast(8050) return end
+            -- 8. Earth Shock
+            if WB_S.ES~=false and IR(8042) then Cast(8042) return end
+            -- 9. Fire Nova (если Flame Shock на таргете)
+            if WB_S.FN~=false and HD('target',8050) and IR(61657) then Cast(61657) return end
         end
     end
 ");

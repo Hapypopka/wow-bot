@@ -523,7 +523,7 @@ public partial class OverlayWindow : Window
         ["Enhancement Shaman"] = new[]
         {
             ("CallSpirits", "spell_fire_totemofwrath.jpg", "Зов Духов (тотемы в бою)", true),
-            ("Searing", "spell_fire_selfdestruct.jpg", "Тотем магмы (авто)", true),
+            ("Magma", "spell_fire_selfdestruct.jpg", "Тотем магмы (авто)", true),
             ("LS", "spell_nature_lightningshield.jpg", "Щит молний", true),
             ("SS", "ability_shaman_stormstrike.jpg", "Удар бури", true),
             ("FS", "spell_fire_flameshock.jpg", "Огненный шок", true),
@@ -1509,7 +1509,24 @@ public partial class OverlayWindow : Window
             }
 
             AddTotemRadio("Земля", TotemEarthOptions, "earth", _totemEarthToggles);
-            AddTotemRadio("Огонь", TotemFireOptions, "fire", _totemFireToggles);
+            if (_playerSpec == "Enhancement Shaman")
+            {
+                // Энх управляет fire totem через ротацию (Magma Totem), сбрасываем выбор
+                _selectedTotemFire = "";
+                var fireLabel = new TextBlock
+                {
+                    Text = "Огонь: Тотем магмы (авто)",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
+                    FontSize = 10, FontStyle = FontStyles.Italic,
+                    Margin = new Thickness(4, 4, 0, 0),
+                    ToolTip = "Для энха тотем огня не выбирается — Magma Totem ставится автоматически через ротацию"
+                };
+                SubContent.Children.Add(fireLabel);
+            }
+            else
+            {
+                AddTotemRadio("Огонь", TotemFireOptions, "fire", _totemFireToggles);
+            }
             AddTotemRadio("Вода", TotemWaterOptions, "water", _totemWaterToggles);
             AddTotemRadio("Воздух", TotemAirOptions, "air", _totemAirToggles);
         }

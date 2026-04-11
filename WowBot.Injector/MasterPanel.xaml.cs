@@ -714,8 +714,25 @@ public partial class MasterPanel : Window
             }, _slaveTotemAir),
         };
 
+        // Энх шаман: нет tF в настройках → fire totem управляется ротацией
+        bool isEnhShaman = !_slaveTotemFire.ContainsKey(slaveName);
+
         foreach (var (label, element, options, dict) in totemGroups)
         {
+            // Для энха скрыть выбор fire totem — Magma Totem ставится автоматически
+            if (element == "fire" && isEnhShaman)
+            {
+                var fireLbl = new TextBlock
+                {
+                    Text = "Огонь: Магма (авто)", FontSize = 9, FontStyle = FontStyles.Italic,
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666")),
+                    Margin = new Thickness(0, 0, 0, 4),
+                    ToolTip = "Для энха тотем огня не выбирается — Magma Totem ставится через ротацию",
+                };
+                stack.Children.Add(fireLbl);
+                continue;
+            }
+
             var lbl = new TextBlock
             {
                 Text = label, FontSize = 9,
