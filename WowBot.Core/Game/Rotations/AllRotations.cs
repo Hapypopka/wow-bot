@@ -99,6 +99,7 @@ public static class AllRotations
         return false
     end
     local function CastOn(u,id) local n=SN(id) if n and u then RunMacroText('/cast [@'..u..'] '..n) end end
+    local function IsBoss() return UnitClassification('target')=='worldboss' end
     local function IsTankUnit(u) for i=1,40 do local n,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,i) if not n then return false end if id==48263 or id==25780 or id==5487 or id==9634 then return true end end return false end
     if not WB_RES then WB_RES={} end
     local function TryRes(spellId)
@@ -263,6 +264,24 @@ public static class AllRotations
         end
         return rec.dps -- HP%/сек
     end
+    -- Beacon of Light: если HPal, определяем кто носит Частицу
+    local beaconUnit = nil
+    if WB_HPAL then
+        local bn = SN(53563)
+        if bn then
+            local function FindBeacon(u)
+                if not UnitExists(u) or UnitIsDeadOrGhost(u) then return false end
+                for i=1,40 do local n=UnitBuff(u,i) if not n then return false end if n==bn then return true end end
+                return false
+            end
+            if FindBeacon('player') then beaconUnit='player' end
+            if not beaconUnit then
+                local nr=GetNumRaidMembers()
+                if nr>0 then for i=1,nr do local u='raid'..i if FindBeacon(u) then beaconUnit=u break end end
+                else for i=1,4 do local u='party'..i if FindBeacon(u) then beaconUnit=u break end end end
+            end
+        end
+    end
     local function CheckUnit(u)
         if not UnitExists(u) or UnitIsDeadOrGhost(u) or not UnitIsConnected(u) then return end
         if not CheckInteractDistance(u,4) then return end
@@ -278,6 +297,8 @@ public static class AllRotations
         elseif predicted < 0.2 then urg = 1 end
         -- Вес: танк 0.7, urgency снижает вес дополнительно
         local w = (isTank and hp*0.7 or hp) - urg*0.3
+        -- Beacon: хилить носителя Частицы ПОСЛЕДНИМ (хил другим зеркалится на него)
+        if beaconUnit and UnitIsUnit(u, beaconUnit) then w = w + 0.5 end
         -- Порог входа: танк < 95%, остальные < 90%
         local threshold = isTank and 0.95 or 0.9
         if hp < threshold and w < bestW then
@@ -358,6 +379,7 @@ public static class AllRotations
     if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
     if UnitIsDeadOrGhost('player') then return end
     if not WB_S then WB_S={} end
+    WB_HPAL = nil
     local _,_,t1 = GetTalentTabInfo(1)
     local _,_,t2 = GetTalentTabInfo(2)
     local _,_,t3 = GetTalentTabInfo(3)
@@ -375,8 +397,8 @@ public static class AllRotations
         if PHP()<0.5 and HB(59578) and IR(19750) then CastSpellByName(SN(19750),'player') return end
         -- Divine Plea: мана < 10%
         if WB_S.Plea~=false and MP()<0.1 and not HB(54428) and IR(54428) then Cast(54428) return end
-        -- Бурст: Avenging Wrath при 3+ стаках Holy Vengeance
-        if WB_S.AW~=false then local _,_,_,stk=UnitDebuff('target',SN(31803) or '') if (stk or 0)>=3 and IR(31884) then Cast(31884) return end end
+        -- Бурст: Avenging Wrath (только босс)
+        if WB_S.AW~=false and IsBoss() then local _,_,_,stk=UnitDebuff('target',SN(31803) or '') if (stk or 0)>=3 and IR(31884) then Cast(31884) return end end
         -- Hammer of Wrath: добивание < 20%
         if WB_S.HoW~=false and THP()<0.2 and IR(24275) then Cast(24275) return end
         -- Judgement
@@ -426,6 +448,7 @@ public static class AllRotations
         if WB_S.HW~=false and IR(2812) then Cast(2812) return end
     else
         -- HOLY
+        WB_HPAL = true
 " + HealerFindTarget + @"
         -- Resurrect вне боя (Paladin)
         if TryRes(7328) then return end
@@ -828,9 +851,11 @@ public static class AllRotations
         if WB_S.Pest~=false and hasFF and hasBP and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
         -- 4. Лик смерти — сброс RP при >80 (не копить в потолок)
         if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end
-        -- 5. Бурсты
-        if WB_S.Gargoyle~=false and IR(49206) then Cast(49206) return end
-        if WB_S.UB~=false and IR(49194) then Cast(49194) return end
+        -- 5. Бурсты (только босс)
+        if IsBoss() then
+            if WB_S.Gargoyle~=false and IR(49206) then Cast(49206) return end
+            if WB_S.UB~=false and IR(49194) then Cast(49194) return end
+        end
         -- 6. Удар Плети — ОСНОВНОЙ урон (Unholy+Frost руны)
         if WB_S.SS~=false and IR(55090) then Cast(55090) return end
         -- 7. Кровоотвод → Кровавый удар — конверсия Blood → Death руна
@@ -963,11 +988,13 @@ public static class AllRotations
             -- 3. Magma Totem — если нет огненного и Fire Elemental не активен
             local fetUp = WB_FET_T and (GetTime()-WB_FET_T)<120
             if WB_S.Magma~=false and not fetUp then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then Cast(58734) return end end
-            -- 4. Бурсты: Heroism (только босс!) + Fire Elemental + SR (T10 4PC) + Wolves
-            if WB_S.Hero~=false and not WB_SLAVE and IR(32182) and UnitClassification('target')=='worldboss' then Cast(32182) return end
-            if WB_S.FET~=false and IR(2894) then WB_FET_T=GetTime() Cast(2894) return end
-            if WB_S.SR~=false and IR(30823) then Cast(30823) return end
-            if WB_S.Wolves~=false and IR(51533) then Cast(51533) return end
+            -- 4. Бурсты: только на боссах
+            if WB_S.Hero~=false and not WB_SLAVE and IR(32182) and IsBoss() then Cast(32182) return end
+            if IsBoss() then
+                if WB_S.FET~=false and IR(2894) then WB_FET_T=GetTime() Cast(2894) return end
+                if WB_S.SR~=false and IR(30823) then Cast(30823) return end
+                if WB_S.Wolves~=false and IR(51533) then Cast(51533) return end
+            end
             -- 5. Stormstrike
             if WB_S.SS~=false and IR(17364) then Cast(17364) return end
             -- 6. Lava Lash
@@ -988,22 +1015,22 @@ public static class AllRotations
     local _,_,t3 = GetTalentTabInfo(3)
     if t1>=t2 and t1>=t3 then
         -- ARCANE
-        if WB_S.AP~=false and IR(12042) then Cast(12042) return end
-        if WB_S.Mirror~=false and IR(55342) then Cast(55342) return end
+        if WB_S.AP~=false and IsBoss() and IR(12042) then Cast(12042) return end
+        if WB_S.Mirror~=false and IsBoss() and IR(55342) then Cast(55342) return end
         if WB_S.Barrage~=false and HB(44401) and IR(44425) then Cast(44425) return end
         if WB_S.Evoc~=false and MP()<0.35 and IR(12051) then Cast(12051) return end
         if WB_S.AB~=false then Cast(30451) end
     elseif t2>=t1 and t2>=t3 then
         -- FIRE
-        if WB_S.Mirror~=false and IR(55342) then Cast(55342) return end
-        if WB_S.Combust~=false and IR(11129) then Cast(11129) return end
+        if WB_S.Mirror~=false and IsBoss() and IR(55342) then Cast(55342) return end
+        if WB_S.Combust~=false and IsBoss() and IR(11129) then Cast(11129) return end
         if WB_S.LB~=false and not HD('target',44457) then Cast(44457) return end
         if WB_S.Pyro~=false and HB(48108) and IR(11366) then Cast(11366) return end
         if WB_S.Scorch~=false and not HD('target',2948) then Cast(2948) return end
         if WB_S.FB~=false then Cast(133) end
     else
         -- FROST
-        if WB_S.Mirror~=false and IR(55342) then Cast(55342) return end
+        if WB_S.Mirror~=false and IsBoss() and IR(55342) then Cast(55342) return end
         if WB_S.DF~=false and IR(44572) then Cast(44572) return end
         if WB_S.IL~=false and HB(44544) and IR(30455) then Cast(30455) return end
         if WB_S.FFB~=false and HB(57761) then Cast(44614) return end
@@ -1054,10 +1081,10 @@ public static class AllRotations
         if WB_S.LifeTap~=false and pMP<0.15 and pHP>0.3 then Cast(1454) return end
         -- [УГРОЗА] Soulshatter: сброс агро
         if UnitThreatSituation('player') and UnitThreatSituation('player')>=3 and IR(29858) then Cast(29858) return end
-        -- [БУРСТ] Meta
-        if WB_S.Meta~=false and not HasBuffById(47241) and IR(47241) then Cast(47241) return end
-        -- [БУРСТ] Demonic Empowerment (только если есть пет)
-        if WB_S.DemonEmpower~=false and UnitExists('pet') and IR(47193) then Cast(47193) return end
+        -- [БУРСТ] Meta (только босс)
+        if WB_S.Meta~=false and IsBoss() and not HasBuffById(47241) and IR(47241) then Cast(47241) return end
+        -- [БУРСТ] Demonic Empowerment (только босс, только если есть пет)
+        if WB_S.DemonEmpower~=false and IsBoss() and UnitExists('pet') and IR(47193) then Cast(47193) return end
         -- [МЕТА] Immolation Aura (в мете, ближний бой)
         if WB_S.ImmoAura~=false and HasBuffById(47241) and IR(50589) and CheckInteractDistance('target',3) then Cast(50589) return end
         -- [AOE] Семя порчи — спам если врагов >= порог из ползунка
@@ -1114,8 +1141,8 @@ public static class AllRotations
         if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
         if WB_S.Moonkin~=false and not HB(24858) then Cast(24858) return end
         if WB_S.Innervate~=false and MP()<0.3 and IR(29166) then Cast(29166) return end
-        if WB_S.Starfall~=false and IR(48505) then Cast(48505) return end
-        if WB_S.Treants~=false and IR(33831) then Cast(33831) return end
+        if WB_S.Starfall~=false and IsBoss() and IR(48505) then Cast(48505) return end
+        if WB_S.Treants~=false and IsBoss() and IR(33831) then Cast(33831) return end
         if WB_S.FF~=false and not HD('target',770) then Cast(770) return end
         if WB_S.IS~=false and not HD('target',5570) then Cast(5570) return end
         if WB_S.MF_d~=false and not HD('target',8921) then Cast(8921) return end
