@@ -8,9 +8,11 @@ paths:
 
 # WoWCircle 3.3.5a — кастомные нюансы
 
-## Оффсеты дескрипторов — ОТЛИЧАЮТСЯ от стандартного build 12340!
-- HEALTH = 0x18 (стандарт: 0x58), MANA = 0x19, MAX_HEALTH = 0x20, MAX_MANA = 0x21
-- LEVEL = 0x36, TARGET = 0x12, FLAGS = 0x3B, DISPLAY_ID = 0x3E
+## Оффсеты дескрипторов — СТАНДАРТНЫЕ (проверено по TrinityCore UpdateFields.h)
+- OBJECT_END = 0x06
+- TARGET = 0x12 (OBJECT_END+0x0C), HEALTH = 0x18 (OBJECT_END+0x12), MANA = 0x19
+- MAX_HEALTH = 0x20 (OBJECT_END+0x1A), MAX_MANA = 0x21
+- LEVEL = 0x36 (OBJECT_END+0x30), FLAGS = 0x3B, DISPLAY_ID = 0x3E
 
 ## Глобальные указатели — стандартные
 - ClientConnection = 0x00C79CE0, ObjMgr = +0x2ED0

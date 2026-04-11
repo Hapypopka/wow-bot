@@ -871,7 +871,7 @@ public class BotEngine : IDisposable
             AoeEnabled = _aoeEnabled,
             AoeMinEnemies = AoeMinEnemies,
             AutoFace = _autoFace,
-            NeedApproach = needApproach && IsMeleeSpec,
+            NeedApproach = needApproach,
         };
     }
 
@@ -900,7 +900,8 @@ public class BotEngine : IDisposable
             }
         }
 
-        if (slaveTarget == null || !slaveTarget.IsAlive || !slaveTarget.InCombat)
+        bool isAttackingMode = Hivemind.Mode == Hivemind.SlaveMode.Attacking;
+        if (slaveTarget == null || !slaveTarget.IsAlive || (!isAttackingMode && !slaveTarget.InCombat))
         {
             _combatExecutor.StopApproach();
             return;
@@ -1325,11 +1326,12 @@ public class BotEngine : IDisposable
                     Hivemind.SlaveAutoTick();
 
                 var autoTarget = _objectManager.GetTarget();
+                bool isAttacking = Hivemind.Mode == Hivemind.SlaveMode.Attacking;
                 bool hasAutoTarget = autoTarget != null && autoTarget.IsAlive &&
-                    autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
+                    autoTarget.Type != WowObjectType.Player && (autoTarget.InCombat || isAttacking);
 
-                // В авто-режиме в бою: позиционируемся как ДПС (HPal=мили, остальные=рейнж)
-                if (inAutoMode && (inCombat || hasAutoTarget))
+                // В бою (авто или атака): позиционируемся как ДПС (HPal=мили, остальные=рейнж)
+                if ((inAutoMode || isAttacking) && (inCombat || hasAutoTarget))
                 {
                     var healTarget = _objectManager.GetTarget();
                     if (healTarget != null && healTarget.IsAlive && healTarget.InCombat &&
@@ -1337,13 +1339,13 @@ public class BotEngine : IDisposable
                     {
                         bool isMeleeHealer = PlayerClass == "PALADIN"; // HPal = мили хилер
                         // Approach: HPal → мили рейндж, остальные хилы → 28 ярдов
-                        float effectiveReach = healTarget.CombatReach + player.CombatReach + 0.66f;
-                        float maxDist = isMeleeHealer ? effectiveReach : 28f;
+                        float meleeRange = MathF.Max(healTarget.CombatReach + player.CombatReach + 4f / 3f, 5f);
+                        float maxDist = isMeleeHealer ? meleeRange : 28f;
                         float dist = player.DistanceTo(healTarget);
                         if (dist > maxDist)
                         {
                             float angle = MathF.Atan2(player.Y - healTarget.Y, player.X - healTarget.X);
-                            float stopDist = MathF.Max(effectiveReach, 1.5f);
+                            float stopDist = isMeleeHealer ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
                             float destX = healTarget.X + stopDist * MathF.Cos(angle);
                             float destY = healTarget.Y + stopDist * MathF.Sin(angle);
                             _navigation.FaceInstant(player, healTarget);

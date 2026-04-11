@@ -85,14 +85,14 @@ public class CombatExecutor
         if (options.NeedApproach)
         {
             bool isMelee = options.IsMeleeSpec;
-            float effectiveReach = target.CombatReach + player.CombatReach + 0.66f;
-            float maxDist = isMelee ? effectiveReach : 28f;
+            float meleeRange = MathF.Max(target.CombatReach + player.CombatReach + 4f / 3f, 5f);
+            float maxDist = isMelee ? meleeRange : 28f;
             float dist = player.DistanceTo(target);
             if (dist > maxDist)
             {
-                // Бежим к точке на краю хитбокса, не к центру моба
+                // Мили: внутрь мили рейнджа с запасом. Рейнж: на 25 ярдов
                 float angle = MathF.Atan2(player.Y - target.Y, player.X - target.X);
-                float stopDist = MathF.Max(effectiveReach, 1.5f);
+                float stopDist = isMelee ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
                 float destX = target.X + stopDist * MathF.Cos(angle);
                 float destY = target.Y + stopDist * MathF.Sin(angle);
                 _navigation.FaceInstant(player, target);
