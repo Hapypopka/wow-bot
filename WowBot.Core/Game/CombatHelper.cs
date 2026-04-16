@@ -200,6 +200,43 @@ public class CombatHelper
 
         if (aoeSpell == null) return false;
 
+        // Объединённая проверка: скорость + GCD. В беге и на GCD каст не начнётся.
+        int checkSpellId = aoeSpell == "WB_VOLLEY" ? 58433 : 48467; // Volley rank 6 / Hurricane rank 6
+        string checkLua =
+            $"local n=GetSpellInfo({checkSpellId}) " +
+            $"local sp = GetUnitSpeed('player') or 0 " +
+            $"local cdLeft = 0 " +
+            $"if n then local s,d = GetSpellCooldown(n) if s and s > 0 then cdLeft = (s + d) - GetTime() end end " +
+            $"WB_R = tostring(sp) .. '|' .. tostring(cdLeft)";
+        string? checkResult = _hook.ExecuteLuaWithResult(checkLua);
+        var parts = (checkResult ?? "0|0").Split('|');
+        double speed = 0, cdLeft = 0;
+        if (parts.Length >= 1) double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out speed);
+        if (parts.Length >= 2) double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out cdLeft);
+
+        if (speed > 0.1)
+        {
+            Logger.Log(LogCat.AoE, $"GroundAoE: skipped, speed={speed:F2} (moving)");
+            return false;
+        }
+        if (cdLeft > 0.1)
+        {
+            Logger.Log(LogCat.AoE, $"GroundAoE: skipped, GCD/cd={cdLeft:F2}s");
+            return false;
+        }
+
+        // Balance Druid: Гроза кастится только в форме Moonkin (24858), иначе меньше урона
+        if (aoeSpell == "Гроза")
+        {
+            var auras = player.GetAuraSpellIds();
+            if (!auras.Contains(24858))
+            {
+                _hook.ExecuteLua("local n=GetSpellInfo(24858) if n then CastSpellByName(n) end", 200);
+                Logger.Log(LogCat.AoE, "GroundAoE: no Moonkin form → dance first");
+                return false; // на следующем тике форма будет, скастим Грозу
+            }
+        }
+
         if (aoeSpell == "WB_VOLLEY")
             _hook.ExecuteLua("local n=GetSpellInfo(1510) if n then CastSpellByName(n) end", 200);
         else
@@ -209,17 +246,24 @@ public class CombatHelper
 
         if (ok)
         {
-            // Ждём 200мс чтобы канал успел начаться, потом читаем реальное endTime из WoW
-            System.Threading.Thread.Sleep(200);
+            // Ждём 400мс чтобы канал успел начаться, потом читаем реальное endTime из WoW
+            System.Threading.Thread.Sleep(400);
             string? result = _hook.ExecuteLuaWithResult(
-                "local _,_,_,_,_,endTime = UnitChannelInfo('player') WB_R = tostring((((endTime or 0)/1000) - GetTime()))");
+                "local _,_,_,_,_,endTime = UnitChannelInfo('player') if endTime then WB_R = tostring(endTime/1000 - GetTime()) else WB_R = '0' end");
             double remaining = 0;
             double.TryParse(result, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out remaining);
-            if (remaining > 0)
+            if (remaining > 0.5)
+            {
                 _groundAoECastUntil = DateTime.UtcNow.AddSeconds(remaining);
+                Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} channel={remaining:F1}s");
+            }
             else
-                _groundAoECastUntil = DateTime.UtcNow.AddSeconds(8); // fallback если Lua не ответил
-            Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok=True channel={remaining:F1}s");
+            {
+                // Канал не зарегистрировался — значит каст не удался (был в беге? прерван?).
+                // Короткий throttle 1.5s — дать бросить таргет/остановиться, потом попробовать снова
+                _groundAoECastUntil = DateTime.UtcNow.AddSeconds(1.5);
+                Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} FAILED — channel not registered (retry in 1.5s)");
+            }
         }
         else
         {
