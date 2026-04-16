@@ -52,6 +52,10 @@ public class DeathKnightRotation : ICombatRotation
             for i=1,40 do local n,_,_,_,_,_,ex=UnitDebuff('target',i) if not n then break end if ffN and n==ffN then ffLeft=ex-GetTime() end if bpN and n==bpN then bpLeft=ex-GetTime() end end
             if (ffLeft>0 and ffLeft<3) or (bpLeft>0 and bpLeft<3) then if IR(50842) then Cast(50842) return end end
         end
+        -- AoE: Howling Blast (при Rime proc — free+instant, иначе по CD) + Blood Boil + DnD
+        if WB_S.HB_aoe~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(49184) then Cast(49184) return end
+        if WB_S.BloodBoil~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(48721) then Cast(48721) return end
+        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
         if WB_S.UA~=false and IR(51271) then Cast(51271) return end
         if WB_S.HB~=false and HB(59052) and IR(49184) then Cast(49184) return end
         if WB_S.Oblit~=false and IR(49020) then Cast(49020) return end
@@ -65,13 +69,16 @@ public class DeathKnightRotation : ICombatRotation
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
         if WB_S.Pest~=false and hasFF and hasBP and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
+        -- DnD поднят выше: в AoE приоритетнее одиночных ударов
+        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        -- Sudden Doom proc (49530 buff ID) — free Death Coil, не тратит RP
+        if WB_S.DC~=false and HB(49530) and IR(47541) then Cast(47541) return end
         if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end
         if WB_S.Gargoyle~=false and IR(49206) then Cast(49206) return end
         if WB_S.UB~=false and IR(49194) then Cast(49194) return end
         if WB_S.SS~=false and IR(55090) then Cast(55090) return end
         if WB_S.BT~=false and IR(45529) then Cast(45529) return end
         if WB_S.BS~=false and IR(45902) then Cast(45902) return end
-        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
         if WB_S.ERW~=false and IR(47568) then Cast(47568) return end
         if WB_S.DC~=false and IR(47541) then Cast(47541) end
     end

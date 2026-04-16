@@ -195,13 +195,22 @@ public class CombatHelper
         {
             "DRUID" when specName?.Contains("Balance") == true => hurricaneEnabled ? "Гроза" : null,
             "HUNTER" => spellFlagsLua?.Contains("Volley=true") == true ? "WB_VOLLEY" : null,
+            "MAGE" when specName?.Contains("Fire") == true => spellFlagsLua?.Contains("Flamestrike=true") == true ? "WB_FLAMESTRIKE" : null,
+            "MAGE" when specName?.Contains("Frost") == true => spellFlagsLua?.Contains("Blizzard=true") == true ? "WB_BLIZZARD" : null,
+            "MAGE" when specName?.Contains("Arcane") == true => spellFlagsLua?.Contains("Blizzard=true") == true ? "WB_BLIZZARD" : null,
             _ => null
         };
 
         if (aoeSpell == null) return false;
 
         // Объединённая проверка: скорость + GCD. В беге и на GCD каст не начнётся.
-        int checkSpellId = aoeSpell == "WB_VOLLEY" ? 58433 : 48467; // Volley rank 6 / Hurricane rank 6
+        int checkSpellId = aoeSpell switch
+        {
+            "WB_VOLLEY" => 58433,       // Volley rank 6
+            "WB_FLAMESTRIKE" => 42926,  // Flamestrike rank 9
+            "WB_BLIZZARD" => 42940,     // Blizzard rank 8
+            _ => 48467                   // Hurricane rank 6 (default Druid Balance)
+        };
         string checkLua =
             $"local n=GetSpellInfo({checkSpellId}) " +
             $"local sp = GetUnitSpeed('player') or 0 " +
@@ -239,6 +248,10 @@ public class CombatHelper
 
         if (aoeSpell == "WB_VOLLEY")
             _hook.ExecuteLua("local n=GetSpellInfo(1510) if n then CastSpellByName(n) end", 200);
+        else if (aoeSpell == "WB_FLAMESTRIKE")
+            _hook.ExecuteLua("local n=GetSpellInfo(42926) if n then CastSpellByName(n) end", 200);
+        else if (aoeSpell == "WB_BLIZZARD")
+            _hook.ExecuteLua("local n=GetSpellInfo(42940) if n then CastSpellByName(n) end", 200);
         else
             _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
         System.Threading.Thread.Sleep(100);

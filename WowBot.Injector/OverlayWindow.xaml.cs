@@ -673,6 +673,8 @@ public partial class OverlayWindow : Window
         ["Unholy DK"] = new[] { ("Gargoyle", "ability_hunter_pet_bat.jpg", "Призыв горгульи", false) },
     };
     public bool AoeEnabled => BtnAoe.IsChecked == true;
+    public bool ThreatCapEnabled => _chkThreatCap?.IsChecked == true;
+    public int ThreatCapPercent => (int)(_sliderThreatCap?.Value ?? GetSavedDouble("slider_threatCap", 90));
     public bool UseMultiDot => _chkMultiDot?.IsChecked == true;
     public int MaxDotTargets => (int)(_sliderMaxDots?.Value ?? 4);
     public bool UseMindSear => _chkMindSear?.IsChecked == true;
@@ -1055,6 +1057,8 @@ public partial class OverlayWindow : Window
     }
 
     private Slider _sliderAoeMin = null!;
+    private CheckBox _chkThreatCap = null!;
+    private Slider _sliderThreatCap = null!;
     public int AoeMinEnemies => (int)(_sliderAoeMin?.Value ?? GetSavedDouble("slider_aoeMin", 3));
 
     private void BuildAoeSubmenu()
@@ -1064,6 +1068,13 @@ public partial class OverlayWindow : Window
         // Глобальный ползунок: мин. врагов для AoE (для всех классов)
         _sliderAoeMin = AddSlider("Мин. врагов для AoE", _sliderAoeMin?.Value ?? GetSavedDouble("slider_aoeMin", 3), 2, 10, 1);
         _sliderAoeMin.ValueChanged += (s, e) => SaveSettings();
+
+        // Threat cap: не перегонять танка (для DPS)
+        _chkThreatCap = AddCheckBox("Не перегонять танка", _chkThreatCap?.IsChecked ?? GetSavedBool("chk_threatCap", false));
+        _chkThreatCap.Checked += (s, e) => SaveSettings();
+        _chkThreatCap.Unchecked += (s, e) => SaveSettings();
+        _sliderThreatCap = AddSlider("Порог угрозы %", _sliderThreatCap?.Value ?? GetSavedDouble("slider_threatCap", 90), 50, 99, 1);
+        _sliderThreatCap.ValueChanged += (s, e) => SaveSettings();
 
         if (specKey == "Shadow Priest")
         {
@@ -2212,6 +2223,10 @@ public partial class OverlayWindow : Window
             else if (_saved.ContainsKey("slider_mindSear")) data["slider_mindSear"] = GetSavedDouble("slider_mindSear", 4);
             if (_sliderAoeMin != null) data["slider_aoeMin"] = _sliderAoeMin.Value;
             else if (_saved.ContainsKey("slider_aoeMin")) data["slider_aoeMin"] = GetSavedDouble("slider_aoeMin", 3);
+            if (_chkThreatCap != null) data["chk_threatCap"] = _chkThreatCap.IsChecked == true;
+            else if (_saved.ContainsKey("chk_threatCap")) data["chk_threatCap"] = GetSavedBool("chk_threatCap", false);
+            if (_sliderThreatCap != null) data["slider_threatCap"] = _sliderThreatCap.Value;
+            else if (_saved.ContainsKey("slider_threatCap")) data["slider_threatCap"] = GetSavedDouble("slider_threatCap", 90);
             if (_sliderDist != null) data["slider_dist"] = _sliderDist.Value;
             else if (_saved.ContainsKey("slider_dist")) data["slider_dist"] = GetSavedDouble("slider_dist", 8);
             if (_sliderMaxRange != null) data["slider_maxRange"] = _sliderMaxRange.Value;

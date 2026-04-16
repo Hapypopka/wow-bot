@@ -1381,6 +1381,8 @@ public partial class MainWindow : Window
                 _botEngine.MaxTargetRange = _overlay.MaxTargetRange;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
                 _botEngine.AoeMinEnemies = _overlay.AoeMinEnemies;
+                _botEngine.ThreatCapEnabled = _overlay.ThreatCapEnabled;
+                _botEngine.ThreatCapPercent = _overlay.ThreatCapPercent;
                 _botEngine.UseMultiDot = _overlay.UseMultiDot;
                 _botEngine.MaxDotTargets = _overlay.MaxDotTargets;
                 _botEngine.UseMindSear = _overlay.UseMindSear;

@@ -1,5 +1,25 @@
 # Log
 
+## [2025-04-17] feat | AoE ротации для всех классов + процы
+Большая актуализация: добавлены AoE-ветки для ВСЕХ классов где их не было + оптимизация процов.
+- Rogue (все 3 спека): Fan of Knives (51723) + Blade Flurry для Combat
+- Mage Fire: Flamestrike (ground AoE) + Blast Wave + Dragon's Breath
+- Mage Frost: Blizzard (ground AoE) + Cone of Cold
+- Mage Arcane: Arcane Explosion + Blizzard (ground AoE)
+- Warrior Arms: Bladestorm + Sweeping Strikes + Cleave (>=2)
+- Warrior Fury: Whirlwind + Cleave (>=2)
+- Warlock Affli: Seed of Corruption + Drain Soul execute
+- Warlock Destro: Seed of Corruption
+- Hunter BM: Multi-Shot (через WB_NCET)
+- Hunter Survival: Lock and Load (56453) proc
+- DK Frost: Howling Blast + Blood Boil + DnD (AoE приоритет)
+- DK Unholy: Sudden Doom (49530) free Death Coil
+- Shaman Elemental: Magma Totem + Fire Nova + Chain Lightning (>=2)
+- Mage Frost: Deep Freeze требует Fingers of Frost (44544) proc
+
+Ground AoE расширен: Flamestrike (42926), Blizzard (42940) — по аналогии с Hurricane/Volley.
+Затронуты: [[rogue]], [[mage]], [[warrior]], [[warlock]], [[hunter]], [[death-knight]], [[shaman]], [[aoe-system]]
+
 ## [2025-04-17] fix | WowDynObject.Caster — правильный оффсет +0x18
 Предыдущий фикс (пропуск своих AoE) не работал: Caster читался из +0x00, где на WoWCircle лежит GUID самого DynObject, а не кастера. Настоящий Caster — по +0x18. Найдено через диагностический dump дескриптора.
 Затронуты: [[wowcircle-quirks]], [[2025-04-16-own-aoe-filter]]. Протестировано на сове — Гроза каста́ется полный канал.

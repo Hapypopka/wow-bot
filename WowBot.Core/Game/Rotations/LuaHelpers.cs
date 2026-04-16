@@ -37,6 +37,7 @@ if not WB_S then WB_S={} end
 if UnitCastingInfo('player') or UnitChannelInfo('player') then return end
 if not UnitAffectingCombat('target') then return end
 if not UnitExists('target') or UnitIsDeadOrGhost('target') or not UnitCanAttack('player','target') then return end
+if WB_THREAT_CAP and WB_THREAT_CAP>0 then local _,_,sp=UnitDetailedThreatSituation('player','target') if sp and sp>=WB_THREAT_CAP then return end end
 if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() StartAttack() end
 ";
 

@@ -23,9 +23,13 @@ public class WarlockRotation : ICombatRotation
         if WB_S.CoA==true and IsBoss() and NR('target',980) then Cast(980) return end
         if WB_S.CoE==true and IsBoss() and NR('target',1490) then Cast(1490) return end
         if WB_S.Immolate~=false and NR('target',348) then Cast(348) return end
+        -- AoE: Seed of Corruption (сидуем на таргет, детонация bonk всех рядом)
+        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and not HD('target',27243) and IR(27243) then Cast(27243) return end
         if WB_S.DF~=false and IR(30283) then Cast(30283) return end
         if WB_S.LTGlyph==true and not HB(63321) then Cast(1454) return end
         if WB_S.LifeTap~=false and MP()<0.3 then Cast(1454) return end
+        -- Drain Soul execute (< 25% HP)
+        if WB_S.DrainSoul~=false and THP()<0.25 and IR(47855) then Cast(47855) return end
         if WB_S.ShadowBolt~=false then Cast(686) end
     elseif t2>=t1 and t2>=t3 then
         -- DEMONOLOGY
@@ -43,7 +47,7 @@ public class WarlockRotation : ICombatRotation
         if WB_S.Meta~=false and not HasBuffById(47241) and IR(47241) then Cast(47241) return end
         if WB_S.DemonEmpower~=false and UnitExists('pet') and IR(47193) then Cast(47193) return end
         if WB_S.ImmoAura~=false and HasBuffById(47241) and IR(50589) and CheckInteractDistance('target',3) then Cast(50589) return end
-        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) then Cast(27243) return end
+        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and not HD('target',27243) and IR(27243) then Cast(27243) return end
         if WB_S.CoA==true and IsBoss() and not HD('target',980) then Cast(980) return end
         if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end
         if WB_S.CoE==true and IsBoss() and not HD('target',1490) then Cast(1490) return end
@@ -63,6 +67,8 @@ public class WarlockRotation : ICombatRotation
         if WB_S.Corruption~=false and not HD('target',172) then Cast(172) return end
         if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end
         if WB_S.CoE==true and IsBoss() and not HD('target',1490) then Cast(1490) return end
+        -- AoE: Seed of Corruption (дёшево, на 3+ целях)
+        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and not HD('target',27243) and IR(27243) then Cast(27243) return end
         if WB_S.LTGlyph==true and not HB(63321) then Cast(1454) return end
         if WB_S.LifeTap~=false and MP()<0.3 then Cast(1454) return end
         if WB_S.Incinerate~=false then Cast(29722) end

@@ -46,8 +46,11 @@ public class HunterRotation : ICombatRotation
     if not HD('target',1130) and WB_S.Mark~=false then Cast(1130) return end
     if WB_S.Kill~=false and THP()<0.2 and IR(53351) then Cast(53351) return end
     if t1>=t2 and t1>=t3 then
+        -- BEAST MASTERY
         if WB_S.Bestial~=false and IR(19574) then Cast(19574) return end
         if WB_S.BW~=false and IR(34471) then Cast(34471) return end
+        -- AoE: Multi-Shot (такое же условие как у MM)
+        if WB_S.MultiShot~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
         if WB_S.Serpent~=false and not HD('target',1978) then Cast(1978) return end
         if WB_S.Aimed~=false and IR(19434) then Cast(19434) return end
         if WB_S.Arcane~=false and IR(3044) then Cast(3044) return end
@@ -67,8 +70,14 @@ public class HunterRotation : ICombatRotation
         if WB_S.Readiness~=false and IR(23989) and not IR(53209) and not IR(3045) then Cast(23989) return end
         if WB_S.Steady~=false then Cast(56641) end
     else
+        -- SURVIVAL
+        -- Lock and Load proc (56453) — free Explosive Shot, не тратит cooldown. Приоритет #1.
+        if WB_S.Explosive~=false and HB(56453) then Cast(53301) return end
         if WB_S.Explosive~=false and IR(53301) then Cast(53301) return end
         if WB_S.Black~=false and not HD('target',3674) and IR(3674) then Cast(3674) return end
+        -- AoE: Multi-Shot при Lock and Load или 3+ врагах
+        if WB_S.MultiShot~=false and HB(56453) and (GetUnitSpeed('player') or 0)==0 then Cast(2643) return end
+        if WB_S.MultiShot~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
         if WB_S.Serpent~=false and not HD('target',1978) then Cast(1978) return end
         if WB_S.Aimed~=false and IR(19434) then Cast(19434) return end
         if WB_S.Arcane~=false and IR(3044) then Cast(3044) return end

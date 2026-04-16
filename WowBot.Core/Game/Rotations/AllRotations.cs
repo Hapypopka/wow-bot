@@ -116,6 +116,34 @@ public static class AllRotations
         return false
     end
     local function NR(u,id,cid) local sn=SN(id) if not sn then return true end for i=1,40 do local n,_,_,_,_,_,exp=UnitDebuff(u,i) if not n then return true end if n==sn then local left=exp-GetTime() local _,_,_,ct=GetSpellInfo(cid or id) return left<=(ct or 1500)/1000 end end return true end
+    -- Smart Interrupt: прерываем каст/канал таргета если interrupt готов и прошло ~50% каста (больше шанс успеха)
+    local function TryInterrupt()
+        if not WB_S or WB_S.Interrupt==false then return false end
+        if not UnitExists('target') or UnitIsDeadOrGhost('target') then return false end
+        local name,_,_,_,startTime,endTime,_,_,nii = UnitCastingInfo('target')
+        if not endTime then name,_,_,_,startTime,endTime,_,nii = UnitChannelInfo('target') end
+        if not endTime or nii then return false end
+        local now=GetTime()*1000
+        local elapsed = now - (startTime or now)
+        local total = endTime - (startTime or now)
+        if total <= 0 then return false end
+        -- Ждём 50% каста: выше шанс что сервер не отменит, меньше шанс что моб перепрыгнет
+        if elapsed < total*0.5 then return false end
+        if (endTime - now) < 200 then return false end -- слишком поздно
+        local _,class = UnitClass('player')
+        local id = 0
+        if class == 'WARRIOR' then id = 6552           -- Pummel (Berserker)
+        elseif class == 'ROGUE' then id = 1766         -- Kick
+        elseif class == 'MAGE' then id = 2139          -- Counterspell
+        elseif class == 'SHAMAN' then id = 57994       -- Wind Shear
+        elseif class == 'DEATHKNIGHT' then id = 47528  -- Mind Freeze
+        elseif class == 'HUNTER' then id = 34490       -- Silencing Shot (MM only)
+        elseif class == 'PRIEST' then id = 15487       -- Silence (Shadow only)
+        end
+        if id == 0 or not IR(id) then return false end
+        Cast(id)
+        return true
+    end
 ";
 
     // Break-CC: автоматическое снятие контроля (стан/страх/корень)
@@ -216,6 +244,8 @@ public static class AllRotations
     if not UnitExists('target') then return end
     if UnitIsDeadOrGhost('target') then return end
     if not UnitCanAttack('player', 'target') then return end
+    if WB_THREAT_CAP and WB_THREAT_CAP>0 then local _,_,sp=UnitDetailedThreatSituation('player','target') if sp and sp>=WB_THREAT_CAP then return end end
+    if TryInterrupt() then return end
     if not WB_SA or GetTime()-WB_SA>1 then WB_SA=GetTime() StartAttack() end
 ";
 
@@ -849,20 +879,20 @@ public static class AllRotations
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
         -- 3. Мор только в AoE (нет символа мора)
         if WB_S.Pest~=false and hasFF and hasBP and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
-        -- 4. Лик смерти — сброс RP при >80 (не копить в потолок)
+        -- 4. DnD (AoE) — приоритет в AoE ситуации
+        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        -- 5. Лик смерти — сброс RP при >80 (не копить в потолок)
         if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end
-        -- 5. Бурсты (только босс)
+        -- 6. Бурсты (только босс)
         if IsBoss() then
             if WB_S.Gargoyle~=false and IR(49206) then Cast(49206) return end
             if WB_S.UB~=false and IR(49194) then Cast(49194) return end
         end
-        -- 6. Удар Плети — ОСНОВНОЙ урон (Unholy+Frost руны)
+        -- 7. Удар Плети — ОСНОВНОЙ урон (Unholy+Frost руны)
         if WB_S.SS~=false and IR(55090) then Cast(55090) return end
-        -- 7. Кровоотвод → Кровавый удар — конверсия Blood → Death руна
+        -- 8. Кровоотвод → Кровавый удар — конверсия Blood → Death руна
         if WB_S.BT~=false and IR(45529) then Cast(45529) return end
         if WB_S.BS~=false and IR(45902) then Cast(45902) return end
-        -- 8. DnD (AoE)
-        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
         -- 9. Усиление рунического оружия — если руны на КД
         if WB_S.ERW~=false and IR(47568) then Cast(47568) return end
         -- 10. Лик смерти — дамп остатков RP
@@ -973,8 +1003,13 @@ public static class AllRotations
             if WB_S.Hero~=false and not WB_SLAVE and IR(32182) and UnitClassification('target')=='worldboss' then Cast(32182) return end
             if WB_S.FS~=false and not HD('target',8050) then Cast(8050) return end
             if WB_S.LvB~=false and IR(51505) then Cast(51505) return end
+            -- AoE: Magma Totem + Fire Nova + Chain Lightning на 3+ врагах
+            if WB_S.Magma~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) then local _,_,_,fd=GetTotemInfo(1) if not fd or fd==0 then Cast(58734) return end end
+            if WB_S.FN~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and HD('target',8050) and IR(61657) then Cast(61657) return end
+            if WB_S.CL_aoe~=false and (WB_NCET or 0)>=(WB_AEMIN or 2) and IR(421) then Cast(421) return end
             if WB_S.TnL~=false and IR(51490) then Cast(51490) return end
-            if WB_S.CL~=false and IR(421) then Cast(421) return end
+            -- Chain Lightning как single-target филлер (опционально — включается WB_S.CL_ST=true)
+            if WB_S.CL_ST==true and IR(421) then Cast(421) return end
             if WB_S.LB~=false then Cast(403) end
         else
             -- ENHANCEMENT (EJ 3.3.5a приоритет)
@@ -1088,7 +1123,7 @@ public static class AllRotations
         -- [МЕТА] Immolation Aura (в мете, ближний бой)
         if WB_S.ImmoAura~=false and HasBuffById(47241) and IR(50589) and CheckInteractDistance('target',3) then Cast(50589) return end
         -- [AOE] Семя порчи — спам если врагов >= порог из ползунка
-        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) then Cast(27243) return end
+        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and not HD('target',27243) and IR(27243) then Cast(27243) return end
         -- [ПРОКЛЯТИЕ] только на боссах
         if WB_S.CoA==true and IsBoss() and not HD('target',980) then Cast(980) return end
         if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end

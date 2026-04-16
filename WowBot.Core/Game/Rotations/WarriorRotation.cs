@@ -22,18 +22,25 @@ public class WarriorRotation : ICombatRotation
         if WB_S.Reck~=false and IR(1719) then Cast(1719) return end
         if WB_S.Execute~=false and THP()<0.2 and IR(5308) then Cast(5308) return end
         if WB_S.Rend~=false and not HD('target',772) then Cast(772) return end
+        -- AoE: Sweeping Strikes (Arms talent) + Bladestorm (Arms 51-point talent)
+        if WB_S.SweepStr~=false and (WB_NCET or 0)>=(WB_AEMIN or 2) and not HB(12328) and IR(12328) then Cast(12328) return end
+        if WB_S.Bladestorm~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(46924) then Cast(46924) return end
         if WB_S.MS~=false and IR(12294) then Cast(12294) return end
         if WB_S.OP~=false and IR(7384) then Cast(7384) return end
         if WB_S.Slam~=false and HB(46916) then Cast(1464) return end
-        if WB_S.Cleave~=false then Cast(845) return end
+        -- Cleave как AoE замена Heroic Strike (on-next-swing)
+        if WB_S.Cleave~=false and (WB_NCET or 0)>=(WB_AEMIN or 2) then Cast(845) return end
         Cast(47449)
     elseif t2>=t1 and t2>=t3 then
         -- FURY
         if WB_S.Reck~=false and IR(1719) then Cast(1719) return end
         if WB_S.Execute~=false and THP()<0.2 and IR(5308) then Cast(5308) return end
         if WB_S.BT~=false and IR(23881) then Cast(23881) return end
+        -- AoE: Whirlwind как основной AoE (fury имеет его в ротации и так, но тут явно на AoE)
         if WB_S.WW~=false and IR(1680) then Cast(1680) return end
         if WB_S.Slam~=false and HB(46916) then Cast(1464) return end
+        -- Cleave как AoE замена Heroic Strike на 2+ целях
+        if WB_S.Cleave~=false and (WB_NCET or 0)>=(WB_AEMIN or 2) then Cast(845) return end
         Cast(47449)
     else
         -- PROT

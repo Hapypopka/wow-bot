@@ -53,6 +53,10 @@ public class BotEngine : IDisposable
     public bool UseMindSear { get => _useMindSear; set => _useMindSear = value; }
     public int MindSearTargets { get => _mindSearTargets; set => _mindSearTargets = value; }
 
+    // Threat management (DPS throttling when about to overaggro tank)
+    public bool ThreatCapEnabled { get; set; } = false;
+    public int ThreatCapPercent { get; set; } = 90; // % от порога переагра (UnitDetailedThreatSituation.scaledPercent)
+
     // Buff settings
     private bool _buffsEnabled;
     private List<string> _enabledBuffs = new();
@@ -1308,7 +1312,9 @@ public class BotEngine : IDisposable
                 ? _combatHelper.CountEnemiesNearTarget(currentTarget, 10f)
                 : combatEnemies;
             string glovesLua = IsSpellEnabled("Gloves") ? "do local s,d=GetInventoryItemCooldown('player',10) if s==0 and UnitAffectingCombat('player') then UseInventoryItem(10) end end " : "";
-            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_NCET={enemiesNearTarget} WB_AEMIN={AoeMinEnemies} " + glovesLua;
+            // WB_THREAT_CAP: 0 = выключено, >0 = порог в % (scaledPercent) от переагра. Защита от переагра танка.
+            int threatCap = ThreatCapEnabled ? ThreatCapPercent : 0;
+            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_NCET={enemiesNearTarget} WB_AEMIN={AoeMinEnemies} WB_THREAT_CAP={threatCap} " + glovesLua;
 
             // BossEngine CLEU listener — ставится для всех (master/solo/slave) для Disrupting Shout и тактик
             if (player.InCombat && !BossEngine.IsActive)
