@@ -52,3 +52,30 @@
 - [ ] Слейвы долго появляются в панели мастера (~50 сек на 5 слейвов, WB_HIVE_REG хранит только последний)
 - [ ] ДК танк — выбор роли танк/дд в оверлее
 - [x] Щит земли, священный хпала — путается между танками (единая логика: МТ → фокус → 1 танк)
+
+
+петов не травят на новый таргет
+
+## Идеи из NPCBots (TrinityCore) — если чё
+- [ ] Engage Timer — DPS/хилы ждут 3-5с при пулле босса пока танк наберёт threat
+- [ ] Predictive Healing — прогноз HP через 2с (HPS-DPS tracking), не лечить если >95%, OH SHIT если <=0
+- [ ] Auto Dispel — парсить дебаффы группы, определять тип (Magic/Disease/Poison/Curse), кастить cure
+- [ ] Defensive CD по формуле — threshold = 30% + attackers*4% + boss*20%, не хардкод
+- [ ] Smart Interrupt — UnitCastingInfo() на враге, проверка immune, lockout школы магии
+- [ ] Threat Management — Feint/Fade/Salv при высоком threat (UnitThreatSituation >= 2)
+- [ ] Heal size decision — xphploss > spellHeal → big heal, иначе fast heal
+- [ ] DynamicObject AoE detection — сканировать лужи через ObjectManager
+- [ ] CC на аддов — маг/лок полиморфит/фирит не основную цель а адда
+- [ ] MoveBehind AoE check — не бежать за спину если там лужа
+- [ ] UI чекбокс "Бурсты только на боссах" — сейчас захардкожено IsBoss()
+- [ ] Координация хилов через Hivemind — чтобы 2 хила не кастили в одного
+- [ ] Beacon of Light — HPal хилить нонстоп, не-beacon цели приоритет
+
+## Идеи из TrinityCore данных (Spell.dbc, creature_template, mmaps)
+- [ ] Автогенерация ротаций — по SpellFamilyName + damage/mana ratio автоматически строить приоритет
+- [ ] Spell range из базы — не хардкод 28/40, а реальный рейнж каждого спелла из SpellRange.dbc
+- [ ] MechanicImmuneMask — не тратить CC на immune боссов (стан/фир/рут)
+- [ ] Предсказание урона босса — creature_classlevelstats + DamageMultiplier = DPS босса → хилер знает заранее
+- [ ] Предсказание способностей — creature_ai_scripts таймеры → разбежаться ДО каста, не после
+- [ ] spell_cone углы — точное уклонение от Cleave/Breath (53°/90°/120°), не строго за спину
+- [ ] mmaps из SPP — готовые навмеши для всех инстансов, патхфайндинг без столкновений

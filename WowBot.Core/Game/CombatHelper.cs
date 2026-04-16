@@ -23,6 +23,11 @@ public class CombatHelper
     private DateTime _aoeFleeUntil = DateTime.MinValue;
     public bool IsAoeFleeing => _aoeFleeUntil > DateTime.UtcNow;
 
+    // Блокировка Ground AoE пока канал идёт.
+    // На WoWCircle ChannelingSpellId не обновляется вовремя, поэтому после каста
+    // читаем реальное endTime канала через UnitChannelInfo — универсально для любой хасты.
+    private DateTime _groundAoECastUntil = DateTime.MinValue;
+
     /// <summary>Сбросить AoE flee</summary>
     public void ResetAoeFlee() => _aoeFleeUntil = DateTime.MinValue;
 
@@ -61,7 +66,8 @@ public class CombatHelper
         return count;
     }
 
-    /// <summary>Считает живых враждебных мобов в бою рядом с игроком</summary>
+    /// <summary>Считает живых враждебных мобов в бою рядом с игроком (для танков).
+    /// Строгая проверка: моб должен атаковать кого-то из группы.</summary>
     public int CountNearbyCombatEnemies(WowPlayer player, float range = 10f)
     {
         int count = 0;
@@ -72,6 +78,15 @@ public class CombatHelper
             if (!unit.IsAlive) continue;
             if (!unit.InCombat) continue;
             if (player.DistanceTo(unit) > range) continue;
+
+            // UnitFlags фильтр
+            if (unit.IsNotAttackable) continue;
+
+            // Owner chain фильтр — петы/тотемы/гули союзников
+            ulong owner = unit.OwnerGuid;
+            if (owner != 0 && friendlyGuids.Contains(owner)) continue;
+
+            // Должен атаковать кого-то из группы
             if (unit.TargetGuid == 0) continue;
             if (!friendlyGuids.Contains(unit.TargetGuid)) continue;
             count++;
@@ -79,7 +94,8 @@ public class CombatHelper
         return count;
     }
 
-    /// <summary>Считаем живых врагов рядом с таргетом (для AoE решений)</summary>
+    /// <summary>Считаем живых врагов рядом с таргетом (для AoE решений).
+    /// Hybrid подход: fast-path через память (UnitFlags + OwnerGUID + TargetGuid).</summary>
     public int CountEnemiesNearTarget(WowUnit target, float range = 10f)
     {
         int count = 0;
@@ -88,7 +104,24 @@ public class CombatHelper
         {
             if (!unit.IsAlive) continue;
             if (friendlyGuids.Contains(unit.Guid)) continue;
-            if (unit.TargetGuid != 0 && !friendlyGuids.Contains(unit.TargetGuid)) continue;
+
+            // 1. UnitFlags фильтр — critters, квестодатели, неуязвимые
+            if (unit.IsNotAttackable) continue;
+
+            // 2. Owner chain фильтр — свой/союзный пет/тотем/гуль
+            ulong owner = unit.OwnerGuid;
+            if (owner != 0 && friendlyGuids.Contains(owner)) continue;
+
+            // 3. Поведенческий фильтр — не считаем мирных мобов с TargetGuid=0
+            if (unit.TargetGuid == 0)
+            {
+                if (!unit.InCombat) continue; // стоит мирно — не враг
+            }
+            else if (!friendlyGuids.Contains(unit.TargetGuid))
+            {
+                continue; // атакует кого-то не из нашей группы
+            }
+
             float dx = unit.X - target.X;
             float dy = unit.Y - target.Y;
             float dz = unit.Z - target.Z;
@@ -150,6 +183,9 @@ public class CombatHelper
         if (player.IsCasting) return false;
         if (player.ChannelingSpellId != 0) return false;
 
+        // Канал ещё идёт (знаем реальное endTime от прошлого каста)
+        if (DateTime.UtcNow < _groundAoECastUntil) return false;
+
         int nearTarget = CountEnemiesNearTarget(target, 10f);
         if (nearTarget < aoeMinEnemies) return false;
 
@@ -170,7 +206,25 @@ public class CombatHelper
             _hook.ExecuteLua($"CastSpellByName('{aoeSpell}')", 200);
         System.Threading.Thread.Sleep(100);
         bool ok = _hook.CastTerrainClick(target.X, target.Y, target.Z);
-        Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok={ok}");
+
+        if (ok)
+        {
+            // Ждём 200мс чтобы канал успел начаться, потом читаем реальное endTime из WoW
+            System.Threading.Thread.Sleep(200);
+            string? result = _hook.ExecuteLuaWithResult(
+                "local _,_,_,_,_,endTime = UnitChannelInfo('player') WB_R = tostring((((endTime or 0)/1000) - GetTime()))");
+            double remaining = 0;
+            double.TryParse(result, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out remaining);
+            if (remaining > 0)
+                _groundAoECastUntil = DateTime.UtcNow.AddSeconds(remaining);
+            else
+                _groundAoECastUntil = DateTime.UtcNow.AddSeconds(8); // fallback если Lua не ответил
+            Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok=True channel={remaining:F1}s");
+        }
+        else
+        {
+            Logger.Log(LogCat.AoE, $"GroundAoE: {aoeSpell} → ({target.X:F0},{target.Y:F0},{target.Z:F0}) enemies={nearTarget} ok=False");
+        }
         return ok;
     }
 
@@ -192,6 +246,7 @@ public class CombatHelper
 
         foreach (var dyn in _objectManager.DynObjects)
         {
+            if (dyn.Caster == player.Guid) continue; // своё заклинание (Hurricane, Volley, DnD, Consecration) — не убегаем
             if (!playerDebuffs.Contains(dyn.SpellId)) continue;
             if (SafeAoeDebuffs.Contains(dyn.SpellId)) continue;
 

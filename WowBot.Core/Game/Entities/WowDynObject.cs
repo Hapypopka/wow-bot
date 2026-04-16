@@ -18,9 +18,15 @@ public class WowDynObject : WowObject, IWowDynObject
         Y = memory.ReadFloat(baseAddress + 0xEC);
         Z = memory.ReadFloat(baseAddress + 0xF0);
 
-        // Descriptor: Caster(8) + Bytes(4) + SpellId(4) + Radius(4)
+        // Descriptor (WoWCircle 3.3.5a, проверено по dump):
+        // +0x00 (8b): DynObject's own GUID (not Caster!)
+        // +0x08 (4b): Bytes
+        // +0x0C (4b): SpellId
+        // +0x10 (4b): Radius
+        // +0x14 (4b): ???
+        // +0x18 (8b): Caster GUID — real owner of the AoE zone
         uint desc = DescriptorBase;
-        Caster = memory.ReadUInt64(desc);
+        Caster = memory.ReadUInt64(desc + 0x18);
         SpellId = memory.ReadInt32(desc + 0x0C);
         float rawRadius = memory.ReadFloat(desc + 0x10);
         // WoWCircle: Radius в дескрипторе = 1.0 (неверно). Используем фикс по SpellId

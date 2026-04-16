@@ -1302,8 +1302,13 @@ public class BotEngine : IDisposable
             // Считаем мобов рядом для AoE (Залп охотника и т.п.)
             int nearbyEnemies = CountNearbyEnemies(player);
             int combatEnemies = CountNearbyCombatEnemies(player);
+            // WB_NCET: мобы рядом с таргетом (для рейнж DPS, которые стоят далеко от мобов)
+            var currentTarget = _objectManager.GetTarget();
+            int enemiesNearTarget = currentTarget != null && currentTarget.IsAlive
+                ? _combatHelper.CountEnemiesNearTarget(currentTarget, 10f)
+                : combatEnemies;
             string glovesLua = IsSpellEnabled("Gloves") ? "do local s,d=GetInventoryItemCooldown('player',10) if s==0 and UnitAffectingCombat('player') then UseInventoryItem(10) end end " : "";
-            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_AEMIN={AoeMinEnemies} " + glovesLua;
+            string enemyCountLua = $"WB_NE={nearbyEnemies} WB_NCE={combatEnemies} WB_NCET={enemiesNearTarget} WB_AEMIN={AoeMinEnemies} " + glovesLua;
 
             // BossEngine CLEU listener — ставится для всех (master/solo/slave) для Disrupting Shout и тактик
             if (player.InCombat && !BossEngine.IsActive)

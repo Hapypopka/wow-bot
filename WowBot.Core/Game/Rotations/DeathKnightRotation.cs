@@ -64,14 +64,14 @@ public class DeathKnightRotation : ICombatRotation
         -- UNHOLY
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
-        if WB_S.Pest~=false and hasFF and hasBP and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
+        if WB_S.Pest~=false and hasFF and hasBP and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
         if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end
         if WB_S.Gargoyle~=false and IR(49206) then Cast(49206) return end
         if WB_S.UB~=false and IR(49194) then Cast(49194) return end
         if WB_S.SS~=false and IR(55090) then Cast(55090) return end
         if WB_S.BT~=false and IR(45529) then Cast(45529) return end
         if WB_S.BS~=false and IR(45902) then Cast(45902) return end
-        if WB_S.DnD~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
         if WB_S.ERW~=false and IR(47568) then Cast(47568) return end
         if WB_S.DC~=false and IR(47541) then Cast(47541) end
     end

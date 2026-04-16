@@ -26,6 +26,9 @@ public static class Offsets
 
     // --- Дескрипторы юнита (индекс, НЕ умноженный на 4) ---
     // WoWCircle 3.3.5a - оффсеты отличаются от стандартного 12340
+    public const uint UnitFieldCharmedBy = 0x0C;  // idx=12,13 (GUID = 2 слота) — кто очаровал
+    public const uint UnitFieldSummonedBy = 0x0E; // idx=14,15 (GUID = 2 слота) — кто призвал (пет, элементаль)
+    public const uint UnitFieldCreatedBy = 0x10;  // idx=16,17 (GUID = 2 слота) — кто создал (тотем, гуль)
     public const uint UnitFieldTarget = 0x12;   // idx=18,19 (GUID = 2 слота)
     public const uint UnitFieldHealth = 0x18;    // idx=24  = 30414
     public const uint UnitFieldPower1 = 0x19;    // idx=25  = 6664 (Mana)

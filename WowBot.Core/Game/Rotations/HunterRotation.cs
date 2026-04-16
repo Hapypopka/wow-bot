@@ -54,7 +54,7 @@ public class HunterRotation : ICombatRotation
         if WB_S.Steady~=false then Cast(56641) end
     elseif t2>=t1 and t2>=t3 then
         if WB_S.Dragonhawk~=false and not HB(61847) and MP()>0.3 then Cast(61847) return end
-        if WB_S.MultiShot~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
+        if WB_S.MultiShot~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
         if WB_S.Rapid~=false and IR(3045) and THP()>0.5 and (GetUnitSpeed('player') or 0)==0 then Cast(3045) end
         if WB_S.Kill2~=false and IR(34026) then Cast(34026) end
         if UnitExists('pet') and not UnitIsDead('pet') then for i=1,10 do local n=GetPetActionInfo(i) if n then if n=='Раж' or n=='Неистовый вой' or n=='Зов дикой природы' then local _,_,_,_,_,cd=GetPetActionCooldown(i) if cd==0 then CastPetAction(i) end end end end end

@@ -20,8 +20,8 @@ public class WarlockRotation : ICombatRotation
         if WB_S.Haunt~=false and IR(48181) then Cast(48181) return end
         if WB_S.UA~=false and NR('target',30108) then Cast(30108) return end
         if WB_S.Corruption~=false and NR('target',172) then Cast(172) return end
-        if WB_S.CoA==true and NR('target',980) then Cast(980) return end
-        if WB_S.CoE==true and NR('target',1490) then Cast(1490) return end
+        if WB_S.CoA==true and IsBoss() and NR('target',980) then Cast(980) return end
+        if WB_S.CoE==true and IsBoss() and NR('target',1490) then Cast(1490) return end
         if WB_S.Immolate~=false and NR('target',348) then Cast(348) return end
         if WB_S.DF~=false and IR(30283) then Cast(30283) return end
         if WB_S.LTGlyph==true and not HB(63321) then Cast(1454) return end
@@ -43,10 +43,10 @@ public class WarlockRotation : ICombatRotation
         if WB_S.Meta~=false and not HasBuffById(47241) and IR(47241) then Cast(47241) return end
         if WB_S.DemonEmpower~=false and UnitExists('pet') and IR(47193) then Cast(47193) return end
         if WB_S.ImmoAura~=false and HasBuffById(47241) and IR(50589) and CheckInteractDistance('target',3) then Cast(50589) return end
-        if WB_S.SeedOfC~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) then Cast(27243) return end
-        if WB_S.CoA==true and not HD('target',980) then Cast(980) return end
-        if WB_S.CoD==true and not HD('target',603) then Cast(603) return end
-        if WB_S.CoE==true and not HD('target',1490) then Cast(1490) return end
+        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) then Cast(27243) return end
+        if WB_S.CoA==true and IsBoss() and not HD('target',980) then Cast(980) return end
+        if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end
+        if WB_S.CoE==true and IsBoss() and not HD('target',1490) then Cast(1490) return end
         if WB_S.Corruption~=false and NR('target',172) and (not WB_CORR or GetTime()-WB_CORR>2) then WB_CORR=GetTime() Cast(172) return end
         if WB_S.Immolate~=false and NR('target',348) and (not WB_IMMO or GetTime()-WB_IMMO>2) then WB_IMMO=GetTime() Cast(348) return end
         if WB_S.SoulFire~=false and HB(63167) and IR(6353) then Cast(6353) return end
@@ -61,8 +61,8 @@ public class WarlockRotation : ICombatRotation
         if WB_S.Chaos~=false and IR(50796) then Cast(50796) return end
         if WB_S.Conflag~=false and IR(17962) then Cast(17962) return end
         if WB_S.Corruption~=false and not HD('target',172) then Cast(172) return end
-        if WB_S.CoD==true and not HD('target',603) then Cast(603) return end
-        if WB_S.CoE==true and not HD('target',1490) then Cast(1490) return end
+        if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end
+        if WB_S.CoE==true and IsBoss() and not HD('target',1490) then Cast(1490) return end
         if WB_S.LTGlyph==true and not HB(63321) then Cast(1454) return end
         if WB_S.LifeTap~=false and MP()<0.3 then Cast(1454) return end
         if WB_S.Incinerate~=false then Cast(29722) end

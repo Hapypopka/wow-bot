@@ -25,6 +25,24 @@ public class WowUnit : WowObject, IWowUnit
 
     public ulong TargetGuid => ReadDescriptorGuid(Offsets.UnitFieldTarget);
 
+    /// <summary>Owner chain для петов/тотемов/гулей/элементалей</summary>
+    public ulong CharmedBy => ReadDescriptorGuid(Offsets.UnitFieldCharmedBy);
+    public ulong SummonedBy => ReadDescriptorGuid(Offsets.UnitFieldSummonedBy);
+    public ulong CreatedBy => ReadDescriptorGuid(Offsets.UnitFieldCreatedBy);
+
+    /// <summary>GUID хозяина юнита (пет/тотем/гуль) — 0 если нет</summary>
+    public ulong OwnerGuid
+    {
+        get
+        {
+            ulong g = SummonedBy;
+            if (g != 0) return g;
+            g = CreatedBy;
+            if (g != 0) return g;
+            return CharmedBy;
+        }
+    }
+
     public bool IsAlive => Health > 0;
     public bool IsDead => Health <= 0;
 
@@ -32,6 +50,16 @@ public class WowUnit : WowObject, IWowUnit
     public int NpcId => ReadDescriptorInt(0x06);
     public int UnitFlags => ReadDescriptorInt(Offsets.UnitFieldFlags);
     public bool InCombat => (UnitFlags & 0x80000) != 0; // UNIT_FLAG_IN_COMBAT = 0x80000
+
+    // --- UnitFlags флаги атакуемости ---
+    public const uint UNIT_FLAG_NON_ATTACKABLE    = 0x00000002;
+    public const uint UNIT_FLAG_NOT_ATTACKABLE_1  = 0x00000080;
+    public const uint UNIT_FLAG_PACIFIED          = 0x00020000;
+    public const uint UNIT_FLAG_NOT_SELECTABLE    = 0x02000000;
+
+    /// <summary>Юнит не может быть атакован (critter, NPC-квестодатель, неуязвимый)</summary>
+    public bool IsNotAttackable =>
+        ((uint)UnitFlags & (UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_NOT_SELECTABLE)) != 0;
 
     // --- Хитбокс ---
     public float BoundingRadius => ReadDescriptorFloat(Offsets.UnitFieldBoundingRadius);

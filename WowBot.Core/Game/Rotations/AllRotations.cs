@@ -619,7 +619,7 @@ public static class AllRotations
         if WB_S.Dragonhawk~=false and not HB(61847) and MP()>0.3 then Cast(61847) return end
         -- Volley: через ground AoE (TerrainClick) в BotEngine (приоритет)
         -- Multi-Shot: только если стоим (не на бегу)
-        if WB_S.MultiShot~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
+        if WB_S.MultiShot~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and (GetUnitSpeed('player') or 0)==0 and not UnitCastingInfo('player') and IR(2643) then Cast(2643) return end
         -- CDs: Rapid Fire + Kill Command + pet abilities (off-GCD)
         -- Быстрая стрельба: только на жирных и не на бегу
         if WB_S.Rapid~=false and IR(3045) and THP()>0.5 and (GetUnitSpeed('player') or 0)==0 then Cast(3045) end
@@ -848,7 +848,7 @@ public static class AllRotations
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
         -- 3. Мор только в AoE (нет символа мора)
-        if WB_S.Pest~=false and hasFF and hasBP and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
+        if WB_S.Pest~=false and hasFF and hasBP and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
         -- 4. Лик смерти — сброс RP при >80 (не копить в потолок)
         if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end
         -- 5. Бурсты (только босс)
@@ -862,7 +862,7 @@ public static class AllRotations
         if WB_S.BT~=false and IR(45529) then Cast(45529) return end
         if WB_S.BS~=false and IR(45902) then Cast(45902) return end
         -- 8. DnD (AoE)
-        if WB_S.DnD~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
         -- 9. Усиление рунического оружия — если руны на КД
         if WB_S.ERW~=false and IR(47568) then Cast(47568) return end
         -- 10. Лик смерти — дамп остатков RP
@@ -982,7 +982,7 @@ public static class AllRotations
             if WB_S.LS~=false and not HB(324) then Cast(324) return end
             -- 2. Maelstrom 5 стаков: Chain Lightning (AoE) или Lightning Bolt (сингл)
             if WB_S.LB_MW~=false and BS(53817)>=5 then
-                if WB_S.CL~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(421) then Cast(421) return end
+                if WB_S.CL~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(421) then Cast(421) return end
                 Cast(403) return
             end
             -- 3. Magma Totem — если нет огненного и Fire Elemental не активен
@@ -1048,8 +1048,8 @@ public static class AllRotations
         if WB_S.Haunt~=false and IR(48181) then Cast(48181) return end
         if WB_S.UA~=false and NR('target',30108) then Cast(30108) return end
         if WB_S.Corruption~=false and NR('target',172) then Cast(172) return end
-        if WB_S.CoA==true and NR('target',980) then Cast(980) return end
-        if WB_S.CoE==true and NR('target',1490) then Cast(1490) return end
+        if WB_S.CoA==true and IsBoss() and NR('target',980) then Cast(980) return end
+        if WB_S.CoE==true and IsBoss() and NR('target',1490) then Cast(1490) return end
         if WB_S.Immolate~=false and NR('target',348) then Cast(348) return end
         if WB_S.DF~=false and IR(30283) then Cast(30283) return end
         if WB_S.LTGlyph==true and not HB(63321) then Cast(1454) return end
@@ -1088,11 +1088,11 @@ public static class AllRotations
         -- [МЕТА] Immolation Aura (в мете, ближний бой)
         if WB_S.ImmoAura~=false and HasBuffById(47241) and IR(50589) and CheckInteractDistance('target',3) then Cast(50589) return end
         -- [AOE] Семя порчи — спам если врагов >= порог из ползунка
-        if WB_S.SeedOfC~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) then Cast(27243) return end
-        -- [ПРОКЛЯТИЕ] всегда навешиваем если нет
-        if WB_S.CoA==true and not HD('target',980) then Cast(980) return end
-        if WB_S.CoD==true and not HD('target',603) then Cast(603) return end
-        if WB_S.CoE==true and not HD('target',1490) then Cast(1490) return end
+        if WB_S.SeedOfC~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) then Cast(27243) return end
+        -- [ПРОКЛЯТИЕ] только на боссах
+        if WB_S.CoA==true and IsBoss() and not HD('target',980) then Cast(980) return end
+        if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end
+        if WB_S.CoE==true and IsBoss() and not HD('target',1490) then Cast(1490) return end
         -- [ДОТЫ] навешиваем/обновляем если нет или скоро кончится (castTime precast)
         if WB_S.Corruption~=false and NR('target',172) and (not WB_CORR or GetTime()-WB_CORR>2) then WB_CORR=GetTime() Cast(172) return end
         if WB_S.Immolate~=false and NR('target',348) and (not WB_IMMO or GetTime()-WB_IMMO>2) then WB_IMMO=GetTime() Cast(348) return end
@@ -1113,8 +1113,8 @@ public static class AllRotations
         if WB_S.Chaos~=false and IR(50796) then Cast(50796) return end
         if WB_S.Conflag~=false and IR(17962) then Cast(17962) return end
         if WB_S.Corruption~=false and not HD('target',172) then Cast(172) return end
-        if WB_S.CoD==true and not HD('target',603) then Cast(603) return end
-        if WB_S.CoE==true and not HD('target',1490) then Cast(1490) return end
+        if WB_S.CoD==true and IsBoss() and not HD('target',603) then Cast(603) return end
+        if WB_S.CoE==true and IsBoss() and not HD('target',1490) then Cast(1490) return end
         if WB_S.LTGlyph==true and not HB(63321) then Cast(1454) return end
         if WB_S.LifeTap~=false and MP()<0.3 then Cast(1454) return end
         if WB_S.Incinerate~=false then Cast(29722) end
@@ -1143,7 +1143,7 @@ public static class AllRotations
         if WB_S.Innervate~=false and MP()<0.3 and IR(29166) then Cast(29166) return end
         if WB_S.Starfall~=false and IsBoss() and IR(48505) then Cast(48505) return end
         if WB_S.Treants~=false and IsBoss() and IR(33831) then Cast(33831) return end
-        if WB_S.FF~=false and not HD('target',770) then Cast(770) return end
+        if WB_S.FF~=false and IsBoss() and not HD('target',770) then Cast(770) return end
         if WB_S.IS~=false and not HD('target',5570) then Cast(5570) return end
         if WB_S.MF_d~=false and not HD('target',8921) then Cast(8921) return end
         if not WB_ECL then WB_ECL=0 end
@@ -1187,10 +1187,10 @@ public static class AllRotations
                 if WB_S.FB~=false and (THP()<0.25 or (roarLeft>10 and ripLeft>10)) then Cast(22568) return end
             end
             -- === AoE: Размах (кот) если врагов >= порог ===
-            if WB_S.SwipeCat~=false and (WB_NCE or 0)>=(WB_AEMIN or 3) and IR(62078) then Cast(62078) return end
+            if WB_S.SwipeCat~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(62078) then Cast(62078) return end
             -- === БИЛДЕРЫ ===
             -- Волшебный огонь — бесплатно
-            if WB_S.FF_cat~=false and not HD('target',16857) and IR(16857) then Cast(16857) return end
+            if WB_S.FF_cat~=false and IsBoss() and not HD('target',16857) and IR(16857) then Cast(16857) return end
             -- Увечье — поддерживать дебафф
             if WB_S.Mangle~=false and not hasMangle then Cast(33876) return end
             -- Растерзать — поддерживать ДоТ
@@ -1208,7 +1208,7 @@ public static class AllRotations
             -- [ТАНК] AoE угроза: Swipe если 2+ врагов
             if WB_S.AoEThreat~=false and (WB_NCE or 0)>=2 and IR(779) then Cast(779) return end
             if WB_S.Maul~=false and UnitMana('player')>15 then Cast(6807) end
-            if WB_S.FF_bear~=false and not HD('target',16857) and IR(16857) then Cast(16857) return end
+            if WB_S.FF_bear~=false and IsBoss() and not HD('target',16857) and IR(16857) then Cast(16857) return end
             if WB_S.Mangle_b~=false and IR(33878) then Cast(33878) return end
             if WB_S.Lacerate~=false then Cast(33745) return end
             if WB_S.Swipe~=false and IR(779) then Cast(779) return end
@@ -1393,7 +1393,7 @@ local function WB_Inst()
     {
         "DRUID" => @"
     if IR(48505) then Cast(48505) return end
-    if not HD('target',770) then Cast(770) return end
+    if IsBoss() and not HD('target',770) then Cast(770) return end
     if not HD('target',5570) then Cast(5570) return end
     if not HD('target',8921) then Cast(8921) return end",
         "PRIEST" => @"

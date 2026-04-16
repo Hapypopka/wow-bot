@@ -1,89 +1,99 @@
-# GM команды для тестирования бота (TrinityCore / SPP)
+# GM команды для тестирования бота (CMaNGOS / SPP)
 
 ## Первый запуск
-В консоли worldserver:
+В консоли mangosd.exe:
 ```
-.account create test test
-.account set gmlevel test 3 -1
+account create test test
+account set gm test 3
 ```
 
 ## Основные команды (в чат WoW с точкой)
 
-### Персонаж
+### Стартовая настройка персонажа
 ```
-.god on/off          — бессмертие
-.levelup 80          — уровень 80
-.modify speed 5      — скорость x5
-.modify hp 100000    — установить HP
-.cooldown            — сбросить все КД
-.additem <id> <кол>  — дать предмет
-.learn <spellId>     — выучить спелл
+.gm on                    — включить GM режим
+.levelup 80               — уровень 80
+.learn all_myclass         — выучить все спеллы класса
+.modify money 999999999    — золото (~99999г)
+.modify maxhp 99999999     — огромное HP (= бессмертие)
+.modify hp 99999999        — восстановить HP
+.modify speed 5            — скорость x5
+.cooldown                  — сбросить все КД
 ```
 
 ### Телепорт
 ```
-.tele <name>         — телепорт (список: .lookup tele <name>)
-.go xyz X Y Z [map]  — телепорт по координатам
-.gps                 — показать текущие координаты
+.tele <name>               — телепорт по имени
+.lookup tele <name>        — найти телепорт
+.gps                       — текущие координаты
 ```
 
 Полезные телепорты:
 ```
 .tele dalaran
-.tele icecrown_citadel
-.tele ulduar
-.tele naxxramas
 .tele orgrimmar
+.tele stormwind
 ```
 
-### Спавн мобов и боссов
+### Спавн мобов
 ```
-.npc add <id>        — заспавнить NPC (постоянно)
-.npc add temp <id>   — заспавнить временно
-.npc delete          — удалить таргетнутого NPC
-.respawn             — респавнить ближайших мобов
+.npc add <id>              — заспавнить NPC
+.npc delete                — удалить таргетнутого NPC
+.respawn                   — респавнить ближайших мобов
+.lookup creature <name>    — найти ID моба по имени
 ```
 
 Полезные ID:
 ```
+36612  — Lord Marrowgar (ICC)
 36597  — Lich King (ICC)
 33288  — Yogg-Saron (Ulduar)
 15990  — Kel'Thuzad (Naxx)
 31125  — Archavon (VoA)
-Тренировочный манекен — .lookup creature training dummy
+2674   — Training Dummy (тренировочный манекен)
 ```
 
 ### Спеллы и эффекты
 ```
-.cast <spellId>                  — кастануть спелл
-.cast target <spellId>           — кастануть на таргет
-.aura <spellId>                  — повесить ауру
-.unaura <spellId>                — снять ауру
+.cast <spellId>            — кастануть спелл
+.aura <spellId>            — повесить ауру (бафф)
+.unaura <spellId>          — снять ауру
+.unaura all                — снять все ауры
 ```
 
-### Тестирование AoE Avoidance
+### Полезные ауры
 ```
-.cast 72762          — Defile (лужа Лича)
-.cast 69576          — Malleable Goo (ICC Festergut)
-.cast 72273          — Vile Gas (ICC Festergut)
+.aura 18798                — неуязвимость
 ```
 
-### Тестирование группы
+### Управление мобами
 ```
-.npc add temp <id>   — заспавнить несколько мобов
-.damage <amount>     — нанести урон таргету (для теста хила)
-.die                 — убить таргет
-.revive              — воскресить
+.damage <amount>           — нанести урон таргету
+.die                       — убить таргет
+.revive                    — воскресить таргет
+```
+
+### Предметы
+```
+.additem <id>              — дать предмет
+.additemset <id>           — дать сет целиком
+.lookup item <name>        — найти ID предмета
 ```
 
 ### Поиск
 ```
-.lookup creature <name>  — найти ID моба по имени
-.lookup spell <name>     — найти ID спелла
-.lookup item <name>      — найти ID предмета
-.lookup tele <name>      — найти телепорт
+.lookup creature <name>    — найти ID моба
+.lookup spell <name>       — найти ID спелла
+.lookup item <name>        — найти ID предмета
+.lookup tele <name>        — найти телепорт
+```
+
+### Рес из консоли (если умер и не можешь писать в чат)
+В окне mangosd.exe:
+```
+revive ИмяПерсонажа
 ```
 
 ## Переключение серверов
-- `switch_to_local.bat` — играть на локальном TC
-- `switch_to_wowcircle.bat` — вернуться на WoWCircle
+- `D:\Games\Вов\switch_to_local.bat` — играть на локальном сервере
+- `D:\Games\Вов\switch_to_wowcircle.bat` — вернуться на WoWCircle

@@ -31,6 +31,37 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qiE '\\.cs\"' && cd /c/Проекты/wow-bot && dotnet build WowBot.sln 2>&1 | tail -5 || exit 0"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '=== CRITICAL RULES (re-injected after compact) === | 1. Spell ID через GetSpellInfo(id), НЕ русские названия | 2. Боевые фичи → CombatExecutor, НЕ BotEngine.Tick() | 3. Баффы → BuffManager | 4. ё → е (клиент WoWCircle) | 5. GetLocalizedText КРАШИТ WoW — НЕ использовать | 6. Solo и slave — один путь через CombatExecutor | 7. Логи в файл wowbot_{CharName}.log, НЕ в чат WoW | 8. Никаких костылей — корень проблемы, не симптом'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '=== TASK COMPLETE CHECKLIST === | Проверь: | - TODO.md обновлён? (✅ у выполненных пунктов) | - Документация актуальна? (CLAUDE.md, docs/) | - Диагностические логи добавлены? | - Если новая фича — описана в docs/GM_TESTING_CHEATSHEET.md?'"
+          }
+        ]
+      }
     ]
   }
 }
