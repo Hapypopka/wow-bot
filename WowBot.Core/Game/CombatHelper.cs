@@ -1,4 +1,5 @@
 using WowBot.Core.Game.Entities;
+using WowBot.Core.Game.Generated;
 
 namespace WowBot.Core.Game;
 
@@ -11,6 +12,7 @@ public class CombatHelper
     private readonly ObjectManager _objectManager;
     private readonly EndSceneHook _hook;
     private readonly ClickToMove _ctm;
+    private readonly EnemyCastObserver _castObserver;
 
     // Таунт кулдаун (тики)
     private int _smartTauntTick;
@@ -46,7 +48,10 @@ public class CombatHelper
         _objectManager = objectManager;
         _hook = hook;
         _ctm = ctm;
+        _castObserver = new EnemyCastObserver(hook);
     }
+
+    public EnemyCastObserver CastObserver => _castObserver;
 
     private HashSet<ulong> RefreshFriendlyGuids()
     {
@@ -338,5 +343,130 @@ public class CombatHelper
         _aoeFleeUntil = DateTime.UtcNow.AddSeconds(2);
         Logger.Log(LogCat.AoE, $"AoE Flee: {count} DynObj, flee=({fleeX:F0},{fleeY:F0})");
         return true;
+    }
+
+    // ========== Proactive AoE Avoidance ==========
+    // Слой 2 защиты: реагируем на вражеские касты ДО импакта.
+    // Source: EnemyCastObserver (combat log SPELL_CAST_START)
+    // DB: DangerousSpellTable (3865+ спеллов из DBC)
+    // Решение: по AoETargetMode решаем куда уклоняться.
+
+    private DateTime _proactiveFleeUntil = DateTime.MinValue;
+    private const float ProactiveSafetyMargin = 4f; // +4y за край радиуса
+    public bool IsProactiveFleeing => _proactiveFleeUntil > DateTime.UtcNow;
+
+    /// <summary>
+    /// Проверить активные вражеские касты и уклониться если игрок в зоне удара.
+    /// Вызывать каждый тик перед позиционированием/ротацией.
+    /// </summary>
+    public bool TryProactiveAvoidance(WowPlayer player)
+    {
+        _castObserver.Tick();
+        if (_castObserver.ActiveCasts.Count == 0) return false;
+
+        foreach (var cast in _castObserver.ActiveCasts)
+        {
+            if (!DangerousSpellTable.TryGet(cast.SpellId, out var spell))
+                continue;
+
+            var caster = _objectManager.GetUnitByGuid(cast.CasterGuid);
+            if (caster == null || !caster.IsAlive) continue;
+
+            float distToCaster = player.DistanceTo(caster);
+            float dangerRadius = spell.Radius + ProactiveSafetyMargin;
+
+            switch (spell.Mode)
+            {
+                case AoETargetMode.AroundCaster:
+                    // Вокруг кастера — бежать радиально от него, пока мы ближе чем radius.
+                    if (distToCaster < dangerRadius)
+                    {
+                        FleeRadially(player, caster, dangerRadius, cast.SpellId, spell.Name);
+                        return true;
+                    }
+                    break;
+
+                case AoETargetMode.AroundTarget:
+                    // Вокруг цели каста. Если цель — мы, бежать от кастера.
+                    // Если цель — другой игрок рядом, тоже уходим (splash damage).
+                    if (cast.TargetGuid == player.Guid && distToCaster < dangerRadius)
+                    {
+                        FleeRadially(player, caster, dangerRadius, cast.SpellId, spell.Name);
+                        return true;
+                    }
+                    break;
+
+                case AoETargetMode.GroundTargeted:
+                    // Лужа падает в точку (часто под игроком или в его позицию).
+                    // Стратегия: страйф перпендикулярно от кастера на radius + margin.
+                    // Работает для Blizzard, Flamestrike, Defile-паттернов.
+                    if (distToCaster < 45f) // только если кастер в реалистичном диапазоне
+                    {
+                        StrafeFromCaster(player, caster, spell.Radius + ProactiveSafetyMargin, cast.SpellId, spell.Name);
+                        return true;
+                    }
+                    break;
+
+                case AoETargetMode.Cone:
+                case AoETargetMode.Frontal:
+                    // Конус/фронт — страйф вбок от линии между нами и кастером.
+                    if (distToCaster < dangerRadius)
+                    {
+                        StrafeFromCaster(player, caster, spell.Radius + ProactiveSafetyMargin, cast.SpellId, spell.Name);
+                        return true;
+                    }
+                    break;
+
+                case AoETargetMode.Unknown:
+                    // Неизвестный тип AoE — осторожность: страйф если близко.
+                    if (distToCaster < dangerRadius)
+                    {
+                        StrafeFromCaster(player, caster, spell.Radius + ProactiveSafetyMargin, cast.SpellId, spell.Name);
+                        return true;
+                    }
+                    break;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Бежать РАДИАЛЬНО от кастера (для AroundCaster/AroundTarget).</summary>
+    private void FleeRadially(WowPlayer player, WowUnit caster, float targetDist, int spellId, string spellName)
+    {
+        float dx = player.X - caster.X;
+        float dy = player.Y - caster.Y;
+        float len = MathF.Sqrt(dx * dx + dy * dy);
+        if (len < 0.1f) { dx = 1; dy = 0; len = 1; }
+        float fleeX = caster.X + (dx / len) * targetDist;
+        float fleeY = caster.Y + (dy / len) * targetDist;
+
+        try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
+        _ctm.MoveTo(fleeX, fleeY, player.Z, 1.2f);
+        _proactiveFleeUntil = DateTime.UtcNow.AddSeconds(2);
+        Logger.Log(LogCat.AoE, $"Proactive flee radial: sid={spellId} '{spellName}' caster={caster.Name} → ({fleeX:F0},{fleeY:F0})");
+    }
+
+    /// <summary>
+    /// Страйф перпендикулярно от линии кастер→игрок (для GroundTargeted/Cone).
+    /// Отходим в сторону на radius+margin, остаёмся на той же дистанции от кастера.
+    /// </summary>
+    private void StrafeFromCaster(WowPlayer player, WowUnit caster, float strafeDist, int spellId, string spellName)
+    {
+        // Направление кастер→игрок
+        float dx = player.X - caster.X;
+        float dy = player.Y - caster.Y;
+        float len = MathF.Sqrt(dx * dx + dy * dy);
+        if (len < 0.1f) { dx = 1; dy = 0; len = 1; }
+        // Перпендикуляр (левый)
+        float perpX = -dy / len;
+        float perpY = dx / len;
+
+        float strafeX = player.X + perpX * strafeDist;
+        float strafeY = player.Y + perpY * strafeDist;
+
+        try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
+        _ctm.MoveTo(strafeX, strafeY, player.Z, 1.2f);
+        _proactiveFleeUntil = DateTime.UtcNow.AddSeconds(1.5);
+        Logger.Log(LogCat.AoE, $"Proactive strafe: sid={spellId} '{spellName}' caster={caster.Name} → ({strafeX:F0},{strafeY:F0})");
     }
 }

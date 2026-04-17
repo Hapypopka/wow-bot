@@ -47,6 +47,11 @@ public class CombatExecutor
         if (target == null || !target.IsAlive || !target.InCombat) return false;
         if (player.IsCasting) return false;
 
+        // 0. Proactive AoE Avoidance — уклониться от вражеского каста ДО импакта.
+        // Высший приоритет: если двигаемся, прерываем ротацию.
+        if (_combatHelper.TryProactiveAvoidance(player))
+            return true;
+
         // 1. Позиционирование (MoveBehind / RangedPos) — ЕДИНЫЙ для solo и slave
         _combatPositioning.IsMelee = options.IsMeleeSpec;
         _combatPositioning.IsTank = options.IsTankSpec;
