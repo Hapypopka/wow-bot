@@ -21,6 +21,10 @@ public class CombatHelper
     // AoE Avoidance
     private int _aoeTick;
     private DateTime _aoeFleeUntil = DateTime.MinValue;
+
+    // AoE Avoidance margins (безопасные константы, а не данные спеллов)
+    private const float AoEFleeTriggerMargin = 2f;  // начинаем убегать за 2y до края
+    private const float AoEFleeEscapeMargin = 5f;   // убегаем на 5y за край
     public bool IsAoeFleeing => _aoeFleeUntil > DateTime.UtcNow;
 
     // Блокировка Ground AoE пока канал идёт.
@@ -311,7 +315,7 @@ public class CombatHelper
             float dy = player.Y - dyn.Y;
             float dist = MathF.Sqrt(dx * dx + dy * dy);
 
-            if (dist < dyn.Radius + 2f)
+            if (dist < dyn.Radius + AoEFleeTriggerMargin)
             {
                 sumX += dyn.X;
                 sumY += dyn.Y;
@@ -325,7 +329,7 @@ public class CombatHelper
         float meanX = sumX / count;
         float meanY = sumY / count;
         float escapeAngle = MathF.Atan2(player.Y - meanY, player.X - meanX);
-        float escapeDist = maxRadius + 5f;
+        float escapeDist = maxRadius + AoEFleeEscapeMargin;
         float fleeX = meanX + escapeDist * MathF.Cos(escapeAngle);
         float fleeY = meanY + escapeDist * MathF.Sin(escapeAngle);
 

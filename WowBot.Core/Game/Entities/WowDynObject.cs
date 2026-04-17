@@ -1,5 +1,6 @@
 using System.Linq;
 using WowBot.Abstractions.Entities;
+using WowBot.Core.Game.Generated;
 using WowBot.Core.Memory;
 
 namespace WowBot.Core.Game.Entities;
@@ -48,15 +49,15 @@ public class WowDynObject : WowObject, IWowDynObject
     public float Radius { get; }
     public string RawDump { get; }
 
-    /// <summary>Дефолтный радиус по spell ID (WoWCircle не записывает Radius в дескриптор)</summary>
-    private static float GetDefaultRadius(int spellId) => spellId switch
+    /// <summary>
+    /// Дефолтный радиус по spell ID.
+    /// WoWCircle не записывает Radius в дескриптор (всегда 1.0), поэтому берём из сгенерированной
+    /// таблицы SpellRadiusTable (построена из Spell.dbc + SpellRadius.dbc).
+    /// Fallback 8y для спеллов вне таблицы (редкие кастомные боссовские AoE).
+    /// </summary>
+    private static float GetDefaultRadius(int spellId)
     {
-        43265 or 49936 or 49937 or 49938 or 52212 => 10f, // Death and Decay
-        26573 or 48818 or 48819 => 8f,                     // Consecration
-        2121 or 8422 or 8423 or 10215 or 10216 or 27086 or 42925 or 42926 => 8f, // Flamestrike
-        10 or 42208 or 42209 or 42210 or 42211 or 42212 or 42213 or 42198 => 8f, // Blizzard
-        5740 or 42218 or 42223 or 42224 or 42225 or 42226 => 8f, // Rain of Fire
-        16914 or 48295 => 10f,  // Hurricane
-        _ => 8f                 // дефолт 8 ярдов для неизвестных
-    };
+        var r = SpellRadiusTable.Get(spellId);
+        return r > 0 ? r : 8f;
+    }
 }
