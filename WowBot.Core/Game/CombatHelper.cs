@@ -355,6 +355,10 @@ public class CombatHelper
     private const float ProactiveSafetyMargin = 4f; // +4y за край радиуса
     public bool IsProactiveFleeing => _proactiveFleeUntil > DateTime.UtcNow;
 
+    // Диагностика: логируем впервые увиденные вражеские касты (раз в X, не спамим).
+    private readonly HashSet<int> _loggedUnknownCasts = new();
+    private readonly HashSet<int> _loggedKnownCasts = new();
+
     /// <summary>
     /// Проверить активные вражеские касты и уклониться если игрок в зоне удара.
     /// Вызывать каждый тик перед позиционированием/ротацией.
@@ -367,7 +371,19 @@ public class CombatHelper
         foreach (var cast in _castObserver.ActiveCasts)
         {
             if (!DangerousSpellTable.TryGet(cast.SpellId, out var spell))
+            {
+                // Непокрытый кастер — логируем раз на spell_id для диагностики.
+                // Потом можно посмотреть какие boss-спеллы пропускает наша DBC таблица.
+                if (_loggedUnknownCasts.Add(cast.SpellId))
+                {
+                    var c = _objectManager.GetUnitByGuid(cast.CasterGuid);
+                    Logger.Log(LogCat.AoE, $"Proactive: UNKNOWN hostile cast sid={cast.SpellId} caster={c?.Name ?? "?"}");
+                }
                 continue;
+            }
+
+            if (_loggedKnownCasts.Add(cast.SpellId))
+                Logger.Log(LogCat.AoE, $"Proactive: KNOWN hostile cast sid={cast.SpellId} '{spell.Name}' r={spell.Radius}y mode={spell.Mode}");
 
             var caster = _objectManager.GetUnitByGuid(cast.CasterGuid);
             if (caster == null || !caster.IsAlive) continue;
