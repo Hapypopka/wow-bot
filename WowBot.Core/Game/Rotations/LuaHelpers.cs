@@ -26,7 +26,7 @@ local function CP() return GetComboPoints('player','target') or 0 end
 local function CDLeft(name) local s,d=GetSpellCooldown(name) if not s or s==0 then return 0 end return s+d-GetTime() end
 local function CastOn(u,id) local n=SN(id) if n and u then RunMacroText('/cast [@'..u..'] '..n) end end
 local function HasBuffById(id) for i=1,40 do local n,_,_,_,_,_,_,_,_,_,sId=UnitBuff('player',i) if not n then return false end if sId==id then return true end end return false end
-local function IsBoss() return UnitClassification('target')=='worldboss' end
+local function IsBoss() local c=UnitClassification('target') if c=='worldboss' or c=='rareelite' then return true end if c=='elite' and (UnitLevel('target') or 0)>=82 then return true end return false end
 ";
 
     /// <summary>Pre-checks для DPS ротаций</summary>

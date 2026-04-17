@@ -99,7 +99,7 @@ public static class AllRotations
         return false
     end
     local function CastOn(u,id) local n=SN(id) if n and u then RunMacroText('/cast [@'..u..'] '..n) end end
-    local function IsBoss() return UnitClassification('target')=='worldboss' end
+    local function IsBoss() local c=UnitClassification('target') if c=='worldboss' or c=='rareelite' then return true end if c=='elite' and (UnitLevel('target') or 0)>=82 then return true end return false end
     local function IsTankUnit(u) for i=1,40 do local n,_,_,_,_,_,_,_,_,_,id=UnitBuff(u,i) if not n then return false end if id==48263 or id==25780 or id==5487 or id==9634 then return true end end return false end
     if not WB_RES then WB_RES={} end
     local function TryRes(spellId)
@@ -1179,8 +1179,8 @@ public static class AllRotations
         if WB_S.Starfall~=false and IsBoss() and IR(48505) then Cast(48505) return end
         if WB_S.Treants~=false and IsBoss() and IR(33831) then Cast(33831) return end
         if WB_S.FF~=false and IsBoss() and not HD('target',770) then Cast(770) return end
-        if WB_S.IS~=false and not HD('target',5570) then Cast(5570) return end
-        if WB_S.MF_d~=false and not HD('target',8921) then Cast(8921) return end
+        if WB_S.IS~=false and IsBoss() and not HD('target',5570) then Cast(5570) return end
+        if WB_S.MF_d~=false and IsBoss() and not HD('target',8921) then Cast(8921) return end
         if not WB_ECL then WB_ECL=0 end
         if HasBuffById(48518) and WB_ECL~=1 then WB_ECL=1 end
         if HasBuffById(48517) and WB_ECL~=2 then WB_ECL=2 end
@@ -1429,8 +1429,8 @@ local function WB_Inst()
         "DRUID" => @"
     if IR(48505) then Cast(48505) return end
     if IsBoss() and not HD('target',770) then Cast(770) return end
-    if not HD('target',5570) then Cast(5570) return end
-    if not HD('target',8921) then Cast(8921) return end",
+    if IsBoss() and not HD('target',5570) then Cast(5570) return end
+    if IsBoss() and not HD('target',8921) then Cast(8921) return end",
         "PRIEST" => @"
     if not HD('target',2944) then Cast(2944) return end
     if not HD('target',589) then Cast(589) return end",

@@ -916,11 +916,16 @@ public class BotEngine : IDisposable
             MakeCombatOptions(enemyCountLua, needApproach: true, noCombatCheck: true));
     }
 
-    /// <summary>Follow/GoToPoint: SlaveCtrl двигает, бьём на ходу instants, стоя — полная ротация</summary>
+    /// <summary>Follow/GoToPoint: SlaveCtrl двигает, бьём на ходу instants, стоя — полная ротация.
+    /// Приоритет follow: AssistUnit подхватывает цель мастера, но follow НЕ прерывается для approach.</summary>
     private void SlaveFollowCombatTick(WowPlayer player, string enemyCountLua)
     {
+        // AssistUnit: получаем цель мастера (как в Auto), чтобы автоматом бить что он бьёт
+        if (Hivemind.CurrentRole == Hivemind.Role.Slave && !string.IsNullOrEmpty(Hivemind.MasterName))
+            Hivemind.SlaveAutoTick();
+
         var fTarget = _objectManager.GetTarget();
-        bool fHasTarget = fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player && fTarget.InCombat;
+        bool fHasTarget = fTarget != null && fTarget.IsAlive && fTarget.Type != WowObjectType.Player;
         if (!fHasTarget) return;
 
         bool standing = _navigation.IsPlayerStanding(player);
@@ -964,9 +969,6 @@ public class BotEngine : IDisposable
         if (playerInCombat || hasAutoTarget)
             _lastCombatTime = DateTime.UtcNow;
 
-        // Кулдаун: не фолловить 3 сек после боя (InCombat сбрасывается мгновенно между мобами)
-        bool recentCombat = (DateTime.UtcNow - _lastCombatTime).TotalSeconds < 3.0;
-
         if (hasAutoTarget)
         {
             if (HivemindFollowing)
@@ -977,9 +979,10 @@ public class BotEngine : IDisposable
             }
             SlaveAttackTick(player, enemyCountLua);
         }
-        else if ((playerInCombat || recentCombat) && !Hivemind.AutoPauseAttack)
+        else if (_combatHelper.CountNearbyCombatEnemies(player, 30f) > 0 && !Hivemind.AutoPauseAttack)
         {
-            // В бою или недавно был в бою — ждём AssistUnit, НЕ фолловить
+            // Реальный враг в бою с группой рядом — AssistUnit подхватит, не фолловим.
+            // InCombat НЕ используем — оно держится 5 сек после убийства, а мы хотим follow сразу.
         }
         else
         {

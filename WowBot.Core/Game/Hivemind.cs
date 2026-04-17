@@ -722,7 +722,9 @@ public class Hivemind
     /// </summary>
     public void SlaveAutoTick()
     {
-        if (Mode != SlaveMode.Auto || string.IsNullOrEmpty(MasterName)) return;
+        // AssistUnit работает в Auto и Following (follow-приоритет, но бьём цель мастера)
+        if (Mode != SlaveMode.Auto && Mode != SlaveMode.Following) return;
+        if (string.IsNullOrEmpty(MasterName)) return;
 
         _autoAssistTick++;
         if (_autoAssistTick < 7) return; // каждые ~1 сек
