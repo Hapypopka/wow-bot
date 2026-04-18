@@ -104,6 +104,22 @@ public class BotEngine : IDisposable
     public string SelectedPet { get; set; } = "";
     public bool AoeSealSwap { get; set; } = false;
     public bool AutoPveEnabled { get; set; } = false;
+    /// <summary>Режим "Во фрейм": слейвы стоят на краю хитбокса таргета мастера (кольцо вокруг цели).</summary>
+    public bool InFrameEnabled { get; set; } = false;
+    private DateTime _inFrameBroadcastNext = DateTime.MinValue;
+
+    /// <summary>Угол "прямо за спиной цели" — все слейвы встают в одной точке центр-сзади.
+    /// Сектор разброса = 0, чтобы все были ровно сзади (без +/- 60° как раньше).</summary>
+    private float ComputeInFrameAngleFromMaster()
+    {
+        var target = _objectManager.GetTarget();
+        if (target == null) return 0f;
+        return target.Facing + MathF.PI;
+    }
+
+    /// <summary>ДЕБАГ: бить цели даже если UnitIsDeadOrGhost=true (feign death, permanent immune).
+    /// По умолчанию ON для тестов. Выключить после завершения тестов позиционирования.</summary>
+    public bool DebugIgnoreDeadTarget { get; set; } = true;
     public BossTactics BossTactics { get; private set; }
     public BossEngine BossEngine { get; private set; }
     private int _autoPveTick;
@@ -744,7 +760,17 @@ public class BotEngine : IDisposable
             .Replace("not UnitAffectingCombat('player') and not UnitAffectingCombat('target')", "false")
             .Replace("not UnitAffectingCombat('target')", "false")
             .Replace("not UnitAffectingCombat('player')", "false");
+        // ДЕБАГ версии: игнорируем UnitIsDeadOrGhost('target') — для тестов на feign death целях
+        _fullScriptDebugAlive = _fullScript
+            .Replace("UnitIsDeadOrGhost('target')", "false")
+            .Replace("UnitIsDead('target')", "false");
+        _fullScriptNoCombatCheckDebugAlive = _fullScriptNoCombatCheck
+            .Replace("UnitIsDeadOrGhost('target')", "false")
+            .Replace("UnitIsDead('target')", "false");
     }
+
+    private string _fullScriptDebugAlive = "";
+    private string _fullScriptNoCombatCheckDebugAlive = "";
 
     /// <summary>Перечитать скрипты (hot-reload: C# ротация или Lua с диска)</summary>
     public void ReloadScripts()
@@ -862,7 +888,13 @@ public class BotEngine : IDisposable
     {
         return new CombatOptions
         {
-            RotationScript = noCombatCheck ? _fullScriptNoCombatCheck : _fullScript,
+            RotationScript = (noCombatCheck, DebugIgnoreDeadTarget) switch
+            {
+                (true, true) => _fullScriptNoCombatCheckDebugAlive,
+                (true, false) => _fullScriptNoCombatCheck,
+                (false, true) => _fullScriptDebugAlive,
+                _ => _fullScript,
+            },
             EnemyCountLua = enemyCountLua,
             SpellFlagsLua = SpellFlagsLua,
             PlayerClass = PlayerClass,
@@ -876,14 +908,20 @@ public class BotEngine : IDisposable
             AoeMinEnemies = AoeMinEnemies,
             AutoFace = _autoFace,
             NeedApproach = needApproach,
+            NoCombatCheck = noCombatCheck,
+            // InFrame только для слейвов — мастер не должен сам в себя становиться в круг.
+            InFrameMode = InFrameEnabled && Hivemind.CurrentRole == Hivemind.Role.Slave,
+            InFrameAngle = ComputeInFrameAngleFromMaster(),
         };
     }
+
 
     /// <summary>Слейв: подбег к таргету + ротация. Используется в Attacking и Auto.</summary>
     private int _slaveAttackLogTick;
     private void SlaveAttackTick(Entities.WowPlayer player, string enemyCountLua)
     {
-        if (AoeAvoidEnabled && IsAoeFleeing) return;
+        // AoE: всегда вызываем TryAoEAvoidance — она сама решает бежать, продолжать или выйти.
+        // Нельзя проверять IsAoeFleeing ДО вызова: _fleeDestination сбрасывается ТОЛЬКО внутри TryAoEAvoidance.
         if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
 
         var slaveTarget = _objectManager.GetTarget();
@@ -904,8 +942,10 @@ public class BotEngine : IDisposable
             }
         }
 
-        bool isAttackingMode = Hivemind.Mode == Hivemind.SlaveMode.Attacking;
-        if (slaveTarget == null || !slaveTarget.IsAlive || (!isAttackingMode && !slaveTarget.InCombat))
+        // Гейт по InCombat убран: слейв бьёт любого атакуемого юнита в таргете
+        // (Bone Spike / стоящие мобы на пулле / осознанно выделенная цель мастером).
+        // ExecuteCombatTick внутри получает NoCombatCheck=true и не падает на `!InCombat`.
+        if (slaveTarget == null || !slaveTarget.IsAlive)
         {
             _combatExecutor.StopApproach();
             return;
@@ -960,9 +1000,13 @@ public class BotEngine : IDisposable
             Hivemind.SlaveAutoTick();
 
         var autoTarget = _objectManager.GetTarget();
+        // В Auto режиме бьём любого атакуемого юнита в таргете мастера (AssistUnit уже синхронизировал).
+        // IsNotAttackable фильтрует квестодателей/мирных/критеров, НО цель в бою мы продолжаем бить
+        // даже с флагом NOT_ATTACKABLE (feign death, immune phase и т.п.) — раз уже агрила группу.
         bool hasAutoTarget = !Hivemind.AutoPauseAttack &&
             autoTarget != null && autoTarget.IsAlive &&
-            autoTarget.Type != WowObjectType.Player && autoTarget.InCombat;
+            autoTarget.Type != WowObjectType.Player &&
+            (!autoTarget.IsNotAttackable || autoTarget.InCombat);
         bool playerInCombat = player.InCombat;
 
         // Запоминаем время последнего боя
@@ -1298,9 +1342,9 @@ public class BotEngine : IDisposable
                 return;
             }
 
-            // AoE Avoidance: ПРИОРИТЕТ НАД ВСЕМ — выбежать из лужи
-            // Если flee активен — пропускаем ВСЁ (follow, rotation, hivemind) на 2 секунды
-            if (IsAoeFleeing) return;
+            // AoE Avoidance: ПРИОРИТЕТ НАД ВСЕМ — выбежать из лужи.
+            // Всегда вызываем TryAoEAvoidance: она сама решает бежать/продолжать/выйти.
+            // Нельзя делать `if (IsAoeFleeing) return;` ДО вызова — _fleeDestination сбрасывается ТОЛЬКО внутри.
             if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
 
             // Глобальный декремент кулдаунов
@@ -1342,28 +1386,46 @@ public class BotEngine : IDisposable
                 var autoTarget = _objectManager.GetTarget();
                 bool isAttacking = Hivemind.Mode == Hivemind.SlaveMode.Attacking;
                 bool hasAutoTarget = autoTarget != null && autoTarget.IsAlive &&
-                    autoTarget.Type != WowObjectType.Player && (autoTarget.InCombat || isAttacking);
+                    autoTarget.Type != WowObjectType.Player && (autoTarget.InCombat || isAttacking || InFrameEnabled);
 
-                // В бою (авто или атака): позиционируемся как ДПС (HPal=мили, остальные=рейнж)
-                if ((inAutoMode || isAttacking) && (inCombat || hasAutoTarget))
+                // В бою (авто или атака) ИЛИ в режиме "Во фрейм": позиционируемся как ДПС.
+                if ((inAutoMode || isAttacking) && (inCombat || hasAutoTarget || InFrameEnabled))
                 {
                     var healTarget = _objectManager.GetTarget();
-                    if (healTarget != null && healTarget.IsAlive && healTarget.InCombat &&
-                        healTarget.Type != WowObjectType.Player)
+                    if (healTarget != null && healTarget.IsAlive &&
+                        healTarget.Type != WowObjectType.Player &&
+                        (healTarget.InCombat || InFrameEnabled))
                     {
-                        bool isMeleeHealer = PlayerClass == "PALADIN"; // HPal = мили хилер
-                        // Approach: HPal → мили рейндж, остальные хилы → 28 ярдов
-                        float meleeRange = MathF.Max(healTarget.CombatReach + player.CombatReach + 4f / 3f, 5f);
-                        float maxDist = isMeleeHealer ? meleeRange : 28f;
-                        float dist = player.DistanceTo(healTarget);
-                        if (dist > maxDist)
+                        if (InFrameEnabled)
                         {
-                            float angle = MathF.Atan2(player.Y - healTarget.Y, player.X - healTarget.X);
-                            float stopDist = isMeleeHealer ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
-                            float destX = healTarget.X + stopDist * MathF.Cos(angle);
-                            float destY = healTarget.Y + stopDist * MathF.Sin(angle);
-                            _navigation.FaceInstant(player, healTarget);
-                            _ctm.MoveTo(destX, destY, healTarget.Z, 1.5f);
+                            // Режим "Во фрейм": хил ровно сзади цели, радиус как у ДПС.
+                            float ringRadius = MathF.Max(healTarget.BoundingRadius + 4f, 8f);
+                            float angle = ComputeInFrameAngleFromMaster();
+                            float destX = healTarget.X + ringRadius * MathF.Cos(angle);
+                            float destY = healTarget.Y + ringRadius * MathF.Sin(angle);
+                            float distToSpot = MathF.Sqrt((player.X - destX) * (player.X - destX) + (player.Y - destY) * (player.Y - destY));
+                            if (distToSpot > 1.5f)
+                            {
+                                _navigation.FaceInstant(player, healTarget);
+                                _ctm.MoveTo(destX, destY, healTarget.Z, 1.5f);
+                            }
+                        }
+                        else
+                        {
+                            bool isMeleeHealer = PlayerClass == "PALADIN"; // HPal = мили хилер
+                            // Approach: HPal → мили рейндж, остальные хилы → 28 ярдов
+                            float meleeRange = MathF.Max(healTarget.CombatReach + player.CombatReach + 4f / 3f, 5f);
+                            float maxDist = isMeleeHealer ? meleeRange : 28f;
+                            float dist = player.DistanceTo(healTarget);
+                            if (dist > maxDist)
+                            {
+                                float angle = MathF.Atan2(player.Y - healTarget.Y, player.X - healTarget.X);
+                                float stopDist = isMeleeHealer ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
+                                float destX = healTarget.X + stopDist * MathF.Cos(angle);
+                                float destY = healTarget.Y + stopDist * MathF.Sin(angle);
+                                _navigation.FaceInstant(player, healTarget);
+                                _ctm.MoveTo(destX, destY, healTarget.Z, 1.5f);
+                            }
                         }
                     }
                 }
@@ -1443,6 +1505,16 @@ public class BotEngine : IDisposable
             // Баффы solo обрабатываются в BuffTick() выше
 
 
+
+            // InFrame heartbeat: мастер периодически пересылает состояние.
+            // SendAddonMessage + ACK перезаписывается следующей командой (CmdAuto сразу после CmdInFrame)
+            // → первый bcast может потеряться у части слейвов. Heartbeat гарантирует eventual consistency.
+            if (InFrameEnabled && Hivemind.CurrentRole == Hivemind.Role.Master &&
+                DateTime.UtcNow >= _inFrameBroadcastNext)
+            {
+                _inFrameBroadcastNext = DateTime.UtcNow.AddSeconds(2.5);
+                Hivemind.CmdInFrame(true);
+            }
 
             // BossEngine для master — детект боссов + announcement. Делаем ДО return guard
             // чтобы работало даже без rotation/follow (AutoPve — независимая функция).

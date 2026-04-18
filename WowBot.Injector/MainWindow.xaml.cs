@@ -179,6 +179,16 @@ public partial class MainWindow : Window
                     _botEngine.AutoPveEnabled = false;
                     hive.CmdAutoPve(false);
                     break;
+                case "inframe:on":
+                    _botEngine.InFrameEnabled = true;
+                    hive.CmdInFrame(true);
+                    // Автоматом включаем Auto — слейвы должны быть в Auto/Attack чтобы approach сработал.
+                    hive.CmdAuto();
+                    break;
+                case "inframe:off":
+                    _botEngine.InFrameEnabled = false;
+                    hive.CmdInFrame(false);
+                    break;
                 case "wipe": hive.CmdWipe(); break;
                 case "refreshguid":
                     foreach (var s in hive.ConnectedSlaves) s.FollowTargetName = "";

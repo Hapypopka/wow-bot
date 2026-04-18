@@ -20,14 +20,19 @@ public class CombatHelper
     // Кэш friendly GUIDs (переиспользуется между вызовами)
     private readonly HashSet<ulong> _friendlyGuids = new();
 
-    // AoE Avoidance
-    private int _aoeTick;
-    private DateTime _aoeFleeUntil = DateTime.MinValue;
+    // AoE Avoidance (grid safe spot + prediction)
+    private (float X, float Y)? _fleeDestination;
+    private DateTime _fleeFallbackUntil = DateTime.MinValue;
 
     // AoE Avoidance margins (безопасные константы, а не данные спеллов)
     private const float AoEFleeTriggerMargin = 2f;  // начинаем убегать за 2y до края
-    private const float AoEFleeEscapeMargin = 5f;   // убегаем на 5y за край
-    public bool IsAoeFleeing => _aoeFleeUntil > DateTime.UtcNow;
+    private const float AoESafetyCap = 6f;          // score потолок: 6y от края уже безопасно, дальше бежать незачем
+    private const float AoEGridRingRadius = 8f;     // кольцо кандидатов вокруг игрока
+    private const int AoEGridCandidates = 24;       // точек по окружности (шаг 15°)
+    private const float AoEPredictSeconds = 0.5f;   // предсказание движения DynObject
+    private const float AoEMovingDynSpeed = 6f;     // Coldflame/Coldflame-like ползут ~6y/s
+    private const float AoEHysteresisMargin = 2f;   // не меняем destination если score хуже на <2y
+    public bool IsAoeFleeing => _fleeDestination != null || _fleeFallbackUntil > DateTime.UtcNow;
 
     // Блокировка Ground AoE пока канал идёт.
     // На WoWCircle ChannelingSpellId не обновляется вовремя, поэтому после каста
@@ -35,7 +40,12 @@ public class CombatHelper
     private DateTime _groundAoECastUntil = DateTime.MinValue;
 
     /// <summary>Сбросить AoE flee</summary>
-    public void ResetAoeFlee() => _aoeFleeUntil = DateTime.MinValue;
+    public void ResetAoeFlee() { _fleeDestination = null; _fleeFallbackUntil = DateTime.MinValue; }
+
+    private struct DangerZone
+    {
+        public float X, Y, VX, VY, Radius;
+    }
 
     // Безопасные AoE дебафы (слоу/баффы без урона) — не бежим
     private static readonly HashSet<int> SafeAoeDebuffs = new()
@@ -294,55 +304,153 @@ public class CombatHelper
         return ok;
     }
 
-    /// <summary>AoE Avoidance — убегаем из лужи</summary>
+    /// <summary>
+    /// AoE Avoidance — grid-based safe spot с предиктом движения лужи.
+    ///
+    /// Идея: каждый тик собираем DangerZones (вражеские DynObjects с предсказанной позицией через 0.5с).
+    /// Генерим 24 кандидата на кольце 10y вокруг игрока, считаем score = min(dist до любой зоны).
+    /// Бежим в точку с max score. Гистерезис: пока старая destination близка к лучшей — не меняем.
+    /// Выход из flee state — когда все зоны дают player > triggerMargin.
+    /// </summary>
     public bool TryAoEAvoidance(WowPlayer player)
     {
-        _aoeTick++;
-        if (_aoeTick < 3) return false;
-        _aoeTick = 0;
-
         int dynCount = _objectManager.DynObjects.Count;
-        if (dynCount == 0) return false;
+        if (dynCount == 0)
+        {
+            if (_fleeDestination != null)
+            {
+                _fleeDestination = null;
+                Logger.Log(LogCat.AoE, "AoE Flee: all clear, resuming");
+            }
+            return false;
+        }
 
-        var playerDebuffs = new HashSet<int>(player.GetAuraSpellIds());
-
-        float sumX = 0, sumY = 0;
-        int count = 0;
-        float maxRadius = 0;
+        var friendlyGuids = RefreshFriendlyGuids();
+        var dangers = new List<DangerZone>();
 
         foreach (var dyn in _objectManager.DynObjects)
         {
-            if (dyn.Caster == player.Guid) continue; // своё заклинание (Hurricane, Volley, DnD, Consecration) — не убегаем
-            if (!playerDebuffs.Contains(dyn.SpellId)) continue;
+            if (friendlyGuids.Contains(dyn.Caster)) continue; // своя/союзная зона
             if (SafeAoeDebuffs.Contains(dyn.SpellId)) continue;
 
-            float dx = player.X - dyn.X;
-            float dy = player.Y - dyn.Y;
-            float dist = MathF.Sqrt(dx * dx + dy * dy);
-
-            if (dist < dyn.Radius + AoEFleeTriggerMargin)
+            // Предикт движения: лужи типа Coldflame ползут радиально от кастера.
+            // Для статичных (Consecration, DnD) vx/vy = 0 — зона не двигается.
+            float vx = 0, vy = 0;
+            var casterUnit = _objectManager.GetUnitByGuid(dyn.Caster);
+            if (casterUnit != null)
             {
-                sumX += dyn.X;
-                sumY += dyn.Y;
-                count++;
-                if (dyn.Radius > maxRadius) maxRadius = dyn.Radius;
+                float dirX = dyn.X - casterUnit.X;
+                float dirY = dyn.Y - casterUnit.Y;
+                float len = MathF.Sqrt(dirX * dirX + dirY * dirY);
+                // Если DynObject далеко от кастера (>3y) — считаем что он ползёт наружу.
+                if (len > 3f)
+                {
+                    vx = dirX / len * AoEMovingDynSpeed;
+                    vy = dirY / len * AoEMovingDynSpeed;
+                }
+            }
+
+            dangers.Add(new DangerZone { X = dyn.X, Y = dyn.Y, VX = vx, VY = vy, Radius = dyn.Radius });
+        }
+
+        if (dangers.Count == 0)
+        {
+            if (_fleeDestination != null)
+            {
+                _fleeDestination = null;
+                Logger.Log(LogCat.AoE, "AoE Flee: all clear, resuming");
+            }
+            return false;
+        }
+
+        // Проверяем опасность для текущей позиции игрока (сейчас ИЛИ через 0.5с).
+        float currentScore = ScoreSpot(player.X, player.Y, dangers);
+        bool inDanger = currentScore < AoEFleeTriggerMargin;
+
+        // Если стоим безопасно и не бежали — ничего не делаем.
+        if (!inDanger && _fleeDestination == null) return false;
+
+        // Если игрок уже в безопасной зоне (≥ AoESafetyCap до края) — выходим,
+        // даже если ещё не дошли до destination. Не надо убегать "ещё дальше ещё безопаснее".
+        if (currentScore >= AoESafetyCap)
+        {
+            if (_fleeDestination != null)
+            {
+                _fleeDestination = null;
+                Logger.Log(LogCat.AoE, $"AoE Flee: safe (pScore={currentScore:F1}≥{AoESafetyCap}), resuming");
+            }
+            return false;
+        }
+
+        // Ищем лучшую точку на кольце вокруг игрока.
+        var best = FindSafeSpot(player, dangers);
+
+        // Гистерезис: если старая destination всё ещё "почти лучшая" — не дёргаемся.
+        if (_fleeDestination.HasValue)
+        {
+            float oldScore = ScoreSpot(_fleeDestination.Value.X, _fleeDestination.Value.Y, dangers);
+            if (oldScore > AoEFleeTriggerMargin && oldScore > best.Score - AoEHysteresisMargin)
+            {
+                best = (_fleeDestination.Value.X, _fleeDestination.Value.Y, oldScore);
             }
         }
 
-        if (count == 0) return false;
+        // Если мы уже в безопасной точке и стоим там — выходим.
+        float distToBest = MathF.Sqrt((player.X - best.X) * (player.X - best.X) + (player.Y - best.Y) * (player.Y - best.Y));
+        if (!inDanger && distToBest < 1.5f)
+        {
+            _fleeDestination = null;
+            return false;
+        }
 
-        float meanX = sumX / count;
-        float meanY = sumY / count;
-        float escapeAngle = MathF.Atan2(player.Y - meanY, player.X - meanX);
-        float escapeDist = maxRadius + AoEFleeEscapeMargin;
-        float fleeX = meanX + escapeDist * MathF.Cos(escapeAngle);
-        float fleeY = meanY + escapeDist * MathF.Sin(escapeAngle);
-
+        _fleeDestination = (best.X, best.Y);
+        _fleeFallbackUntil = DateTime.UtcNow.AddSeconds(0.5); // fallback timer на случай если что-то зависло
         try { _hook.ExecuteLua("MoveForwardStop() WB_FWD=nil", 50); } catch { }
-        _ctm.MoveTo(fleeX, fleeY, player.Z, 1.0f);
-        _aoeFleeUntil = DateTime.UtcNow.AddSeconds(2);
-        Logger.Log(LogCat.AoE, $"AoE Flee: {count} DynObj, flee=({fleeX:F0},{fleeY:F0})");
+        _ctm.MoveTo(best.X, best.Y, player.Z, 1.0f);
+        Logger.Log(LogCat.AoE, $"AoE Flee: zones={dangers.Count} pScore={currentScore:F1} → ({best.X:F0},{best.Y:F0}) score={best.Score:F1}");
         return true;
+    }
+
+    /// <summary>Генерит 24 кандидата на кольце вокруг игрока и возвращает точку с максимальным score.</summary>
+    private (float X, float Y, float Score) FindSafeSpot(WowPlayer player, List<DangerZone> dangers)
+    {
+        float bestScore = float.MinValue;
+        float bestX = player.X;
+        float bestY = player.Y;
+
+        for (int i = 0; i < AoEGridCandidates; i++)
+        {
+            float angle = (float)i / AoEGridCandidates * MathF.PI * 2f;
+            float x = player.X + MathF.Cos(angle) * AoEGridRingRadius;
+            float y = player.Y + MathF.Sin(angle) * AoEGridRingRadius;
+            float score = ScoreSpot(x, y, dangers);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestX = x;
+                bestY = y;
+            }
+        }
+
+        return (bestX, bestY, bestScore);
+    }
+
+    /// <summary>Score точки = min(dist до края любой зоны), с учётом движения через AoEPredictSeconds.
+    /// Ограничиваем потолком AoESafetyCap: точка в 50y от всего = то же что в 6y. Иначе грид
+    /// всегда выбирал бы самую далёкую точку и гистерезис фиксировал бы её навечно (бот бежал за горизонт).</summary>
+    private static float ScoreSpot(float x, float y, List<DangerZone> dangers)
+    {
+        float minDist = float.MaxValue;
+        foreach (var d in dangers)
+        {
+            float distNow = MathF.Sqrt((x - d.X) * (x - d.X) + (y - d.Y) * (y - d.Y)) - d.Radius;
+            float px = d.X + d.VX * AoEPredictSeconds;
+            float py = d.Y + d.VY * AoEPredictSeconds;
+            float distPred = MathF.Sqrt((x - px) * (x - px) + (y - py) * (y - py)) - d.Radius;
+            float dist = MathF.Min(distNow, distPred);
+            if (dist < minDist) minDist = dist;
+        }
+        return MathF.Min(minDist, AoESafetyCap);
     }
 
     // ========== Proactive AoE Avoidance ==========

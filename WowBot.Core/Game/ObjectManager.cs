@@ -42,17 +42,30 @@ public class ObjectManager : IObjectManager
     /// </summary>
     public void Update()
     {
-        Units.Clear();
-        Players.Clear();
-        DynObjects.Clear();
-        Objects.Clear();
+        // Строим в локальных списках и присваиваем ссылку атомарно в конце.
+        // Это защищает UI-поток от race condition при Units.ToList() / Players.ToList()
+        // (раньше было Clear+Add — UI мог поймать список в промежуточном состоянии).
+        var newUnits = new List<WowUnit>(128);
+        var newPlayers = new List<WowPlayer>(32);
+        var newDynObjects = new List<WowDynObject>(16);
+        var newObjects = new List<WowObject>(64);
         WowPlayer? localPlayer = null;
 
         uint clientConnection = _memory.ReadUInt32(Offsets.ClientConnection);
-        if (clientConnection == 0) { LocalPlayer = null; return; }
+        if (clientConnection == 0)
+        {
+            Units = newUnits; Players = newPlayers; DynObjects = newDynObjects; Objects = newObjects;
+            LocalPlayer = null;
+            return;
+        }
 
         uint objectManagerBase = _memory.ReadUInt32(clientConnection + Offsets.ObjectManagerOffset);
-        if (objectManagerBase == 0) { LocalPlayer = null; return; }
+        if (objectManagerBase == 0)
+        {
+            Units = newUnits; Players = newPlayers; DynObjects = newDynObjects; Objects = newObjects;
+            LocalPlayer = null;
+            return;
+        }
 
         LocalPlayerGuid = _memory.ReadUInt64(objectManagerBase + Offsets.LocalPlayerGuid);
 
@@ -73,13 +86,13 @@ public class ObjectManager : IObjectManager
                 case WowObjectType.Unit:
                 {
                     var unit = new WowUnit(_memory, currentObject);
-                    Units.Add(unit);
+                    newUnits.Add(unit);
                     break;
                 }
                 case WowObjectType.Player:
                 {
                     var player = new WowPlayer(_memory, currentObject);
-                    Players.Add(player);
+                    newPlayers.Add(player);
 
                     if (player.Guid == LocalPlayerGuid)
                         localPlayer = player;
@@ -90,7 +103,7 @@ public class ObjectManager : IObjectManager
                     try
                     {
                         var dynObj = new WowDynObject(_memory, currentObject);
-                        DynObjects.Add(dynObj);
+                        newDynObjects.Add(dynObj);
                     }
                     catch (Exception ex) { Logger.Log(LogCat.Error, $"DynObject parse failed at 0x{currentObject:X}: {ex.Message}", "ERR"); }
                     break;
@@ -98,7 +111,7 @@ public class ObjectManager : IObjectManager
                 default:
                 {
                     var obj = new WowObject(_memory, currentObject);
-                    Objects.Add(obj);
+                    newObjects.Add(obj);
                     break;
                 }
             }
@@ -106,6 +119,11 @@ public class ObjectManager : IObjectManager
             currentObject = _memory.ReadUInt32(currentObject + Offsets.NextObject);
         }
 
+        // Атомарная замена ссылок — UI всегда видит консистентный список.
+        Units = newUnits;
+        Players = newPlayers;
+        DynObjects = newDynObjects;
+        Objects = newObjects;
         LocalPlayer = localPlayer;
 
         _updateCount++;

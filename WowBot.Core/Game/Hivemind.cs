@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp, AutoPve }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp, AutoPve, InFrame }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -414,6 +414,12 @@ public class Hivemind
     public void CmdAutoPve(bool on)
     {
         SendCommand(Command.AutoPve, on ? "on" : "off");
+    }
+
+    /// <summary>Мастер: вкл/выкл режим "Во фрейм" — слейвы стоят на краю хитбокса таргета мастера.</summary>
+    public void CmdInFrame(bool on)
+    {
+        SendCommand(Command.InFrame, on ? "on" : "off");
     }
 
     /// <summary>Мастер: слейвы обновляют GUID мастера</summary>
@@ -840,6 +846,7 @@ WB_HIVE_REG_Q = ''
             "CastHeroism" => Command.CastHeroism,
             "GuildTp" => Command.GuildTp,
             "AutoPve" => Command.AutoPve,
+            "InFrame" => Command.InFrame,
             _ => null
         };
 
@@ -1040,6 +1047,15 @@ WB_HIVE_REG_Q = ''
                     bool on = cleanedArg == "on";
                     _botEngine.AutoPveEnabled = on;
                     Logger.Info($"SLAVE: AutoPve → {(on ? "ON" : "OFF")} (from master)");
+                }
+                break;
+
+            case Command.InFrame:
+                if (_botEngine != null)
+                {
+                    bool on = cleanedArg == "on";
+                    _botEngine.InFrameEnabled = on;
+                    Logger.Info($"SLAVE: InFrame → {(on ? "ON" : "OFF")} (from master)");
                 }
                 break;
 

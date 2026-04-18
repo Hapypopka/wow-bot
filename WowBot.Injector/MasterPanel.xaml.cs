@@ -103,6 +103,15 @@ public partial class MasterPanel : Window
         OnCommand?.Invoke(_autoPveOn ? "autopve:on" : "autopve:off");
     }
 
+    private bool _inFrameOn;
+    private void BtnInFrame_Click(object sender, RoutedEventArgs e)
+    {
+        _inFrameOn = !_inFrameOn;
+        BtnInFrame.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_inFrameOn ? "#4a6741" : "#1a1a28"));
+        BtnInFrame.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_inFrameOn ? "#fff" : "#888"));
+        OnCommand?.Invoke(_inFrameOn ? "inframe:on" : "inframe:off");
+    }
+
     private string _activeGlobalCmd = "";
 
     private void SendCommand(string cmd)

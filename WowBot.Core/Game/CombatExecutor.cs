@@ -24,6 +24,7 @@ public class CombatExecutor
 
     // Slave approach state
     private bool _slaveApproaching;
+    private int _inFrameLogTick;
 
     public CombatExecutor(EndSceneHook hook, Navigation navigation,
         CombatPositioning combatPositioning, CombatHelper combatHelper, ClickToMove ctm)
@@ -44,7 +45,9 @@ public class CombatExecutor
     /// <returns>true если что-то сделали (каст, движение)</returns>
     public bool ExecuteCombatTick(WowPlayer player, WowUnit? target, CombatOptions options)
     {
-        if (target == null || !target.IsAlive || !target.InCombat) return false;
+        if (target == null || !target.IsAlive) return false;
+        // Слейв в Attacking/Auto режиме бьёт даже если таргет не в бою (Bone Spike, стоящие мобы).
+        if (!options.NoCombatCheck && !target.InCombat) return false;
         if (player.IsCasting) return false;
 
         // 0. Proactive AoE Avoidance — уклониться от вражеского каста ДО импакта.
@@ -60,7 +63,8 @@ public class CombatExecutor
         _combatPositioning.SpecName = options.SpecName;
 
         bool movingBehind = false;
-        if (options.MoveBehindEnabled)
+        // В режиме "Во фрейм" MoveBehind отключён — каждый слейв стоит на своей точке кольца.
+        if (options.MoveBehindEnabled && !options.InFrameMode)
         {
             if (_combatPositioning.TryMoveBehind(player, target))
                 movingBehind = true;
@@ -89,25 +93,56 @@ public class CombatExecutor
         // 4. Approach для slave (C# CTM) — учитываем хитбокс
         if (options.NeedApproach)
         {
-            bool isMelee = options.IsMeleeSpec;
-            float meleeRange = MathF.Max(target.CombatReach + player.CombatReach + 4f / 3f, 5f);
-            float maxDist = isMelee ? meleeRange : 28f;
-            float dist = player.DistanceTo(target);
-            if (dist > maxDist)
+            if (options.InFrameMode)
             {
-                // Мили: внутрь мили рейнджа с запасом. Рейнж: на 25 ярдов
-                float angle = MathF.Atan2(player.Y - target.Y, player.X - target.X);
-                float stopDist = isMelee ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
-                float destX = target.X + stopDist * MathF.Cos(angle);
-                float destY = target.Y + stopDist * MathF.Sin(angle);
-                _navigation.FaceInstant(player, target);
-                _ctm.MoveTo(destX, destY, target.Z, 1.5f);
-                _slaveApproaching = true;
-                return true;
+                // Режим "Во фрейм": угол уже вычислен в BotEngine (относительно позиции мастера,
+                // т.к. target.Facing у feign death мобов не обновляется).
+                float ringRadius = MathF.Max(target.BoundingRadius + 4f, 8f);
+                float angle = options.InFrameAngle;
+                float destX = target.X + ringRadius * MathF.Cos(angle);
+                float destY = target.Y + ringRadius * MathF.Sin(angle);
+                float distToSpot = MathF.Sqrt((player.X - destX) * (player.X - destX) + (player.Y - destY) * (player.Y - destY));
+                _inFrameLogTick++;
+                if (_inFrameLogTick >= 20) // ~3с
+                {
+                    _inFrameLogTick = 0;
+                    int slot = (int)(player.Guid % 8);
+                    Logger.Log(LogCat.General, $"InFrame: slot={slot} tF={target.Facing:F2} ang={angle:F2} R={ringRadius:F1} dest=({destX:F0},{destY:F0}) pos=({player.X:F0},{player.Y:F0}) distSpot={distToSpot:F1}");
+                }
+                if (distToSpot > 1.5f)
+                {
+                    _navigation.FaceInstant(player, target);
+                    _ctm.MoveTo(destX, destY, target.Z, 1.5f);
+                    _slaveApproaching = true;
+                    return true;
+                }
+                else if (_slaveApproaching)
+                {
+                    StopApproach();
+                }
             }
-            else if (_slaveApproaching)
+            else
             {
-                StopApproach();
+                bool isMelee = options.IsMeleeSpec;
+                float meleeRange = MathF.Max(target.CombatReach + player.CombatReach + 4f / 3f, 5f);
+                float maxDist = isMelee ? meleeRange : 28f;
+                float dist = player.DistanceTo(target);
+                if (dist > maxDist)
+                {
+                    // Мили: внутрь мили рейнджа с запасом. Рейнж: на 25 ярдов
+                    float angle = MathF.Atan2(player.Y - target.Y, player.X - target.X);
+                    float stopDist = isMelee ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
+                    float destX = target.X + stopDist * MathF.Cos(angle);
+                    float destY = target.Y + stopDist * MathF.Sin(angle);
+                    _navigation.FaceInstant(player, target);
+                    _ctm.MoveTo(destX, destY, target.Z, 1.5f);
+                    _slaveApproaching = true;
+                    return true;
+                }
+                else if (_slaveApproaching)
+                {
+                    StopApproach();
+                }
             }
         }
 
@@ -150,6 +185,12 @@ public record CombatOptions
     public bool IsTankSpec { get; init; }
     public bool IsHealer { get; init; }
     public bool PlayerInCombat { get; init; }
+    /// <summary>true → игнорируем `target.InCombat` (для слейвов: Attacking/Auto бьют даже не-боевые цели).</summary>
+    public bool NoCombatCheck { get; init; }
+    /// <summary>Режим "Во фрейм": approach ставит слейва на кольцо `max(BR+4,8)` от центра цели по своему углу.
+    /// Угол вычисляется в BotEngine по GUID игрока, чтобы слейвы разошлись по кругу и не толпились.</summary>
+    public bool InFrameMode { get; init; }
+    public float InFrameAngle { get; init; }
 
     // Настройки
     public bool MoveBehindEnabled { get; init; }

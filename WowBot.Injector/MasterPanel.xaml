@@ -59,6 +59,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Button x:Name="BtnRefreshGuid" Content="🔄" FontSize="14" Grid.Column="0"
                         Click="BtnRefreshGuid_Click" Style="{x:Null}"
@@ -77,15 +78,19 @@
                         Click="BtnAutoPve_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
                         Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Авто-тактики на боссах" Padding="0"/>
-                <Button x:Name="BtnInteract" Content="🤝" FontSize="14" Grid.Column="5"
+                <Button x:Name="BtnInFrame" Content="◎" FontSize="14" Grid.Column="5"
+                        Click="BtnInFrame_Click" Style="{x:Null}"
+                        Background="#1a1a28" Foreground="#888" BorderThickness="0"
+                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Во фрейм — слейвы в кольце вокруг таргета" Padding="0"/>
+                <Button x:Name="BtnInteract" Content="🤝" FontSize="14" Grid.Column="6"
                         Click="BtnInteract_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
                         Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Interact с таргетом" Padding="0"/>
-                <Button x:Name="BtnHeroism" Content="⚡" FontSize="16" Grid.Column="6"
+                <Button x:Name="BtnHeroism" Content="⚡" FontSize="16" Grid.Column="7"
                         Click="BtnHeroism_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#e8c840" BorderThickness="0"
                         Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Героизм (шаман-слейв)" Padding="0"/>
-                <Button x:Name="BtnGuildTp" Content="🏠" FontSize="14" Grid.Column="7"
+                <Button x:Name="BtnGuildTp" Content="🏠" FontSize="14" Grid.Column="8"
                         Click="BtnGuildTp_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
                         Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Гильд ТП (/г .g t)" Padding="0"/>
