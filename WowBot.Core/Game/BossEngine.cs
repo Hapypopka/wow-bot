@@ -21,6 +21,9 @@ public class BossEngine
     private int _tick;
     private int _bossNpcId;
 
+    // Детект ещё-не-в-бою босса: SAY один раз за сессию на каждого NPC ID
+    private readonly HashSet<int> _announcedBosses = new();
+
     // Активная тактика
     private IBossTactic? _activeTactic;
 
@@ -45,8 +48,9 @@ public class BossEngine
         _navigation = navigation;
         Context = new BossContext(hook, objectManager, ctm, navigation);
 
-        // Регистрируем тактики
-        _tacticFactory[MarrowgarTactic.NPC_ID] = () => new MarrowgarTactic();
+        // Регистрируем тактики — Marrowgar во всех вариантах (нормал/героик/image)
+        foreach (int id in MarrowgarTactic.NPC_IDS)
+            _tacticFactory[id] = () => new MarrowgarTactic();
     }
 
     /// <summary>Установить Lua Combat Log Listener</summary>
@@ -148,23 +152,59 @@ end";
 
     private void DetectBoss()
     {
+        // 1) Быстрый путь: смотрим на таргет игрока. Если таргет — босс из списка, announce.
+        var target = _objectManager.GetTarget();
+        if (target != null)
+            Logger.Info($"BossEngine.Detect: target='{target.Name}' NpcId={target.NpcId} alive={target.IsAlive} inCombat={target.InCombat}");
+        else
+            Logger.Info("BossEngine.Detect: no target");
+
+        if (target != null && target.IsAlive && _tacticFactory.ContainsKey(target.NpcId))
+        {
+            TryAnnounceAndActivate(target);
+            if (_activeTactic != null) return;
+        }
+
+        // 2) Медленный путь: сканируем все видимые юниты (на случай когда таргет не босс).
+        int unitCount = 0;
         foreach (var unit in _objectManager.Units)
         {
-            if (!unit.IsAlive || !unit.InCombat) continue;
+            unitCount++;
+            if (!unit.IsAlive) continue;
             try
             {
-                if (_tacticFactory.ContainsKey(unit.NpcId))
-                {
-                    _bossNpcId = unit.NpcId;
-                    _activeTactic = _tacticFactory[unit.NpcId]();
-                    Context.Boss = unit;
-                    _activeTactic.OnCombatStart(Context);
-                    Logger.Info($"BossEngine: {_activeTactic.BossName} detected! NPC={unit.NpcId}");
-                    return;
-                }
+                if (!_tacticFactory.ContainsKey(unit.NpcId)) continue;
+                Logger.Info($"BossEngine.Detect: found boss in units — '{unit.Name}' NpcId={unit.NpcId}");
+                TryAnnounceAndActivate(unit);
+                if (_activeTactic != null) return;
             }
             catch { }
         }
+        if (target == null && unitCount < 5)
+            Logger.Info($"BossEngine.Detect: unitCount={unitCount}");
+    }
+
+    private void TryAnnounceAndActivate(WowUnit unit)
+    {
+        // Announcement один раз за сессию при первом появлении
+        if (!_announcedBosses.Contains(unit.NpcId))
+        {
+            _announcedBosses.Add(unit.NpcId);
+            var factoryBoss = _tacticFactory[unit.NpcId]();
+            string announce = $"Вижу {factoryBoss.BossName}!";
+            _hook.ExecuteLua($"SendChatMessage('{announce}','SAY')", 150);
+            Logger.Info($"BossEngine: {factoryBoss.BossName} detected (target/visible)");
+        }
+
+        // Активация тактики только когда босс в бою
+        if (!unit.InCombat) return;
+
+        _bossNpcId = unit.NpcId;
+        _activeTactic = _tacticFactory[unit.NpcId]();
+        Context.Boss = unit;
+        _activeTactic.OnCombatStart(Context);
+        _hook.ExecuteLua($"SendChatMessage('Бой на {_activeTactic.BossName}!','SAY')", 150);
+        Logger.Info($"BossEngine: {_activeTactic.BossName} combat started! NPC={unit.NpcId}");
     }
 
     private WowUnit? FindBossUnit(int npcId)

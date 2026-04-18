@@ -171,8 +171,14 @@ public partial class MainWindow : Window
                 case "follow": hive.CmdFollow(); break;
                 case "stop": hive.CmdStop(); break;
                 case "auto": hive.CmdAuto(); break;
-                case "autopve:on": _botEngine.AutoPveEnabled = true; break;
-                case "autopve:off": _botEngine.AutoPveEnabled = false; break;
+                case "autopve:on":
+                    _botEngine.AutoPveEnabled = true;
+                    hive.CmdAutoPve(true);
+                    break;
+                case "autopve:off":
+                    _botEngine.AutoPveEnabled = false;
+                    hive.CmdAutoPve(false);
+                    break;
                 case "wipe": hive.CmdWipe(); break;
                 case "refreshguid":
                     foreach (var s in hive.ConnectedSlaves) s.FollowTargetName = "";

@@ -19,6 +19,8 @@ using WowBot.Core.Game.Entities;
 public class MarrowgarTactic : IBossTactic
 {
     public const int NPC_ID = 36612;
+    // Все варианты (normal 10/25 + heroic 10/25 = image/difficulty copies)
+    public static readonly int[] NPC_IDS = { 36612, 37864, 37957, 37958, 37959 };
     public string BossName => "Lord Marrowgar";
 
     // NPC IDs для Bone Spike (3 варианта)

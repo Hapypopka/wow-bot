@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp, AutoPve }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -409,6 +409,12 @@ public class Hivemind
     /// <summary>Мастер: задать бафф слейвам (blessing=BoM, aura=AuRet)</summary>
     /// <summary>Мастер: хилы стоп хилить (вайп)</summary>
     public void CmdWipe() => SendCommand(Command.Wipe);
+
+    /// <summary>Мастер: вкл/выкл AutoPve тактики у всех слейвов (+ локально).</summary>
+    public void CmdAutoPve(bool on)
+    {
+        SendCommand(Command.AutoPve, on ? "on" : "off");
+    }
 
     /// <summary>Мастер: слейвы обновляют GUID мастера</summary>
     public void CmdRefreshGuid()
@@ -833,6 +839,7 @@ WB_HIVE_REG_Q = ''
             "GossipAccept" => Command.GossipAccept,
             "CastHeroism" => Command.CastHeroism,
             "GuildTp" => Command.GuildTp,
+            "AutoPve" => Command.AutoPve,
             _ => null
         };
 
@@ -1027,6 +1034,15 @@ WB_HIVE_REG_Q = ''
         // Команды со специфичной логикой (пока остаются здесь)
         switch (cmd)
         {
+            case Command.AutoPve:
+                if (_botEngine != null)
+                {
+                    bool on = cleanedArg == "on";
+                    _botEngine.AutoPveEnabled = on;
+                    Logger.Info($"SLAVE: AutoPve → {(on ? "ON" : "OFF")} (from master)");
+                }
+                break;
+
             case Command.StackMA:
                 // К наводчику: бежим к MAINASSIST, потом стоим и бьём
                 try

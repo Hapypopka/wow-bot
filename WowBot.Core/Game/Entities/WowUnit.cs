@@ -46,8 +46,8 @@ public class WowUnit : WowObject, IWowUnit
     public bool IsAlive => Health > 0;
     public bool IsDead => Health <= 0;
 
-    /// <summary>NPC ID (OBJECT_FIELD_ENTRY, дескриптор 0x06)</summary>
-    public int NpcId => ReadDescriptorInt(0x06);
+    /// <summary>NPC ID (OBJECT_FIELD_ENTRY — индекс 3 в дескрипторе: GUID[0-1], TYPE[2], ENTRY[3])</summary>
+    public int NpcId => ReadDescriptorInt(3);
     public int UnitFlags => ReadDescriptorInt(Offsets.UnitFieldFlags);
     public bool InCombat => (UnitFlags & 0x80000) != 0; // UNIT_FLAG_IN_COMBAT = 0x80000
 

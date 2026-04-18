@@ -1444,6 +1444,17 @@ public class BotEngine : IDisposable
 
 
 
+            // BossEngine для master — детект боссов + announcement. Делаем ДО return guard
+            // чтобы работало даже без rotation/follow (AutoPve — независимая функция).
+            if (AutoPveEnabled && Hivemind.CurrentRole == Hivemind.Role.Master)
+            {
+                if (!BossEngine.IsActive) BossEngine.InstallListener();
+                BossEngine.IsMelee = IsMeleeSpec;
+                BossEngine.IsHealer = IsHealer;
+                BossEngine.IsTank = IsTankSpec;
+                BossEngine.Tick(player, "", SpellFlagsLua, _fullScript);
+            }
+
             if (!_followEnabled && !_rotationEnabled && !HivemindFollowing) return;
             if (_logTick == 0) Logger.Log(LogCat.Follow, $"Tick: follow={_followEnabled} rot={_rotationEnabled} hiveFollow={HivemindFollowing}");
 
