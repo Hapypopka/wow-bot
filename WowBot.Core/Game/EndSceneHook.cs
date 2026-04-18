@@ -17,6 +17,7 @@ public class EndSceneHook : IDisposable, IGameHook
     private uint _returnPtrAddr;       // сюда запишем указатель на результат
     private uint _terrainClickAddr;    // структура TerrainClick (24 байт: GUID8 + XYZ12 + btn4)
     private uint _ctmCallAddr;          // структура CTM call (20 байт: clickType4 + GUID8 + XYZ12 + precision4)
+    private uint _ctmStopAddr;          // playerBase (4 байт) для thiscall PlayerClickToMoveStop
     private uint _endSceneAddr;
     private byte[] _originalBytes = Array.Empty<byte>();
     private int _stolenByteCount;
@@ -217,6 +218,7 @@ public class EndSceneHook : IDisposable, IGameHook
 
         _terrainClickAddr = _returnPtrAddr + 4;     // 24 байт: GUID(8) + X(4) + Y(4) + Z(4) + btn(4)
         _ctmCallAddr = _terrainClickAddr + 24;       // 28 байт: clickType(4) + GUID(8) + X(4) + Y(4) + Z(4) + precision(4)
+        _ctmStopAddr = _ctmCallAddr + 32;             // 4 байт: playerBase для PlayerClickToMoveStop
 
         _memory.WriteString(_botStringAddr, "bot");
         _memory.WriteString(_varNameAddr, "WB_R");
@@ -271,6 +273,11 @@ public class EndSceneHook : IDisposable, IGameHook
         // --- Проверка flag == 6 (CTM call — CGPlayer_C__ClickToMove) ---
         asm.Add(0x83); asm.Add(0xF8); asm.Add(0x06); // cmp eax, 6
         int jeCtmCallPos = asm.Count;
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
+
+        // --- Проверка flag == 7 (native CTM Stop — force server position sync) ---
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x07); // cmp eax, 7
+        int jeCtmStopPos = asm.Count;
         asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
 
         // --- Ничего не делаем → skip (rel32) ---
@@ -413,6 +420,26 @@ public class EndSceneHook : IDisposable, IGameHook
 
         EmitSetFlag(asm, 2);
 
+        // jmp to skip
+        int jmpSkip6Pos = asm.Count;
+        asm.Add(0xE9); asm.AddRange(new byte[4]);
+
+        // === flag==7: PlayerClickToMoveStop (thiscall, только ECX=playerBase) ===
+        // Native WoW функция. Принудительно шлёт серверу MSG_MOVE_STOP с актуальной позицией.
+        // Используется после выхода из AoE зоны — aura на сервере сразу видит что игрок вышел.
+        int ctmStopLabel = asm.Count;
+        { int off = ctmStopLabel - jeCtmStopPos - 6;
+          asm[jeCtmStopPos+2]=(byte)(off&0xFF); asm[jeCtmStopPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeCtmStopPos+4]=(byte)((off>>16)&0xFF); asm[jeCtmStopPos+5]=(byte)((off>>24)&0xFF); }
+
+        // mov ecx, [_ctmStopAddr] — playerBase
+        asm.Add(0x8B); asm.Add(0x0D); asm.AddRange(BitConverter.GetBytes(_ctmStopAddr));
+        // call PlayerClickToMoveStop (0x0072B3A0)
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes((uint)0x0072B3A0));
+        asm.Add(0xFF); asm.Add(0xD0); // call eax
+
+        EmitSetFlag(asm, 2);
+
         // === skip label — patch jmp rel32 ===
         int skipLabel = asm.Count;
         { // jmpSkipPos (E9 rel32)
@@ -449,6 +476,13 @@ public class EndSceneHook : IDisposable, IGameHook
             asm[jmpSkip5Pos + 2] = (byte)((off >> 8) & 0xFF);
             asm[jmpSkip5Pos + 3] = (byte)((off >> 16) & 0xFF);
             asm[jmpSkip5Pos + 4] = (byte)((off >> 24) & 0xFF);
+        }
+        { // jmpSkip6Pos (E9 rel32) — ctm stop
+            int off = skipLabel - jmpSkip6Pos - 5;
+            asm[jmpSkip6Pos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkip6Pos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkip6Pos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkip6Pos + 4] = (byte)((off >> 24) & 0xFF);
         }
 
         // popfd / popad
@@ -539,6 +573,19 @@ public class EndSceneHook : IDisposable, IGameHook
         _memory.WriteFloat(_ctmCallAddr + 24, precision);
         _memory.WriteUInt32(_ctmCallAddr + 28, playerBase);
         _memory.WriteUInt32(_flagAddr, 6);
+        return WaitForCompletion(timeoutMs);
+    }
+
+    /// <summary>
+    /// Вызывает native PlayerClickToMoveStop (0x0072B3A0) через EndScene (flag=7).
+    /// Корректно останавливает CTM движение + шлёт серверу MSG_MOVE_STOP с актуальной позицией.
+    /// Используется после AoE flee чтобы сервер сразу увидел что игрок вышел из зоны.
+    /// </summary>
+    public bool CallClickToMoveStop(uint playerBase, int timeoutMs = 200)
+    {
+        if (!_isHooked) return false;
+        _memory.WriteUInt32(_ctmStopAddr, playerBase);
+        _memory.WriteUInt32(_flagAddr, 7);
         return WaitForCompletion(timeoutMs);
     }
 

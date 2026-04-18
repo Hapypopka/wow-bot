@@ -94,6 +94,24 @@ public class ClickToMove
     }
 
     /// <summary>
+    /// Native остановка через PlayerClickToMoveStop (0x0072B3A0). В отличие от Stop() (только память),
+    /// эта версия шлёт серверу MSG_MOVE_STOP с актуальной позицией — aura/зоны на сервере сразу
+    /// увидят что игрок вышел. Нужна после AoE flee чтобы тики урона прекратились мгновенно.
+    /// </summary>
+    public void NativeStop()
+    {
+        if (_hook != null && _hook.IsHooked && _playerBase != 0)
+        {
+            _hook.CallClickToMoveStop(_playerBase, timeoutMs: 150);
+        }
+        else
+        {
+            // Fallback — прямая запись если хук недоступен
+            _memory.WriteInt32(CTM_Action, ActionStop);
+        }
+    }
+
+    /// <summary>
     /// Жёсткая остановка: записывает текущие координаты как цель + Stop
     /// </summary>
     public void StopAt(float x, float y, float z)

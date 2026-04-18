@@ -25,8 +25,8 @@ public class CombatHelper
     private DateTime _fleeFallbackUntil = DateTime.MinValue;
 
     // AoE Avoidance margins (безопасные константы, а не данные спеллов)
-    private const float AoEFleeTriggerMargin = 2f;  // начинаем убегать за 2y до края
-    private const float AoESafetyCap = 6f;          // score потолок: 6y от края уже безопасно, дальше бежать незачем
+    private const float AoEFleeTriggerMargin = 1f;  // триггер: меньше 1y от края = опасно
+    private const float AoESafetyCap = 2.5f;        // стоп: 2.5y от края уже безопасно — не бежим дальше (гистерезис 1.5y)
     private const float AoEGridRingRadius = 8f;     // кольцо кандидатов вокруг игрока
     private const int AoEGridCandidates = 24;       // точек по окружности (шаг 15°)
     private const float AoEPredictSeconds = 0.5f;   // предсказание движения DynObject
@@ -327,11 +327,21 @@ public class CombatHelper
 
         var friendlyGuids = RefreshFriendlyGuids();
         var dangers = new List<DangerZone>();
+        HashSet<int>? playerDebuffs = null;
 
         foreach (var dyn in _objectManager.DynObjects)
         {
-            if (friendlyGuids.Contains(dyn.Caster)) continue; // своя/союзная зона
+            if (dyn.Caster == player.Guid) continue; // своё заклинание — не бежим от себя
             if (SafeAoeDebuffs.Contains(dyn.SpellId)) continue;
+
+            // Дружественный кастер (Consecration/DnD партии) — бежим ТОЛЬКО если реально получаем
+            // дебафф от этой зоны (PvP дуэль, misfired кросс-зона). Иначе мили-DPS будет убегать
+            // от своего же танка.
+            if (friendlyGuids.Contains(dyn.Caster))
+            {
+                playerDebuffs ??= new HashSet<int>(player.GetAuraSpellIds());
+                if (!playerDebuffs.Contains(dyn.SpellId)) continue;
+            }
 
             // Предикт движения: лужи типа Coldflame ползут радиально от кастера.
             // Для статичных (Consecration, DnD) vx/vy = 0 — зона не двигается.
@@ -358,7 +368,8 @@ public class CombatHelper
             if (_fleeDestination != null)
             {
                 _fleeDestination = null;
-                Logger.Log(LogCat.AoE, "AoE Flee: all clear, resuming");
+                _ctm.NativeStop(); // force server sync — aura сразу увидит что игрок вне зоны
+                Logger.Log(LogCat.AoE, "AoE Flee: all clear, resuming (native stop)");
             }
             return false;
         }
@@ -377,13 +388,21 @@ public class CombatHelper
             if (_fleeDestination != null)
             {
                 _fleeDestination = null;
-                Logger.Log(LogCat.AoE, $"AoE Flee: safe (pScore={currentScore:F1}≥{AoESafetyCap}), resuming");
+                _ctm.NativeStop(); // force server sync — aura сразу увидит что игрок вне зоны
+                Logger.Log(LogCat.AoE, $"AoE Flee: safe (pScore={currentScore:F1}≥{AoESafetyCap}), resuming (native stop)");
             }
             return false;
         }
 
+        // Адаптивный радиус кольца: если лужа большая — ищем точки за её краем.
+        // Иначе при касте по центру крупной зоны (DnD 10y, Void Zone 15y) все 8-y кандидаты оказываются
+        // внутри зоны, бот не видит "чистой земли" и выбирает середняка → не выходит до края.
+        float maxDangerRadius = 0;
+        foreach (var d in dangers) if (d.Radius > maxDangerRadius) maxDangerRadius = d.Radius;
+        float ringRadius = MathF.Max(AoEGridRingRadius, maxDangerRadius + 3f);
+
         // Ищем лучшую точку на кольце вокруг игрока.
-        var best = FindSafeSpot(player, dangers);
+        var best = FindSafeSpot(player, dangers, ringRadius);
 
         // Гистерезис: если старая destination всё ещё "почти лучшая" — не дёргаемся.
         if (_fleeDestination.HasValue)
@@ -412,7 +431,7 @@ public class CombatHelper
     }
 
     /// <summary>Генерит 24 кандидата на кольце вокруг игрока и возвращает точку с максимальным score.</summary>
-    private (float X, float Y, float Score) FindSafeSpot(WowPlayer player, List<DangerZone> dangers)
+    private (float X, float Y, float Score) FindSafeSpot(WowPlayer player, List<DangerZone> dangers, float ringRadius)
     {
         float bestScore = float.MinValue;
         float bestX = player.X;
@@ -421,8 +440,8 @@ public class CombatHelper
         for (int i = 0; i < AoEGridCandidates; i++)
         {
             float angle = (float)i / AoEGridCandidates * MathF.PI * 2f;
-            float x = player.X + MathF.Cos(angle) * AoEGridRingRadius;
-            float y = player.Y + MathF.Sin(angle) * AoEGridRingRadius;
+            float x = player.X + MathF.Cos(angle) * ringRadius;
+            float y = player.Y + MathF.Sin(angle) * ringRadius;
             float score = ScoreSpot(x, y, dangers);
             if (score > bestScore)
             {
