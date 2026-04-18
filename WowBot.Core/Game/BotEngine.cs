@@ -106,16 +106,11 @@ public class BotEngine : IDisposable
     public bool AutoPveEnabled { get; set; } = false;
     /// <summary>Режим "Во фрейм": слейвы стоят на краю хитбокса таргета мастера (кольцо вокруг цели).</summary>
     public bool InFrameEnabled { get; set; } = false;
+    /// <summary>Зафиксированная точка куда встать в режиме InFrame. Вычисляется ОДИН раз при включении,
+    /// дальше слейв стоит там независимо от движения/поворота цели. null = режим выкл или ещё не вычислено.</summary>
+    public (float X, float Y, float Z)? InFrameLockedPos { get; set; }
     private DateTime _inFrameBroadcastNext = DateTime.MinValue;
 
-    /// <summary>Угол "прямо за спиной цели" — все слейвы встают в одной точке центр-сзади.
-    /// Сектор разброса = 0, чтобы все были ровно сзади (без +/- 60° как раньше).</summary>
-    private float ComputeInFrameAngleFromMaster()
-    {
-        var target = _objectManager.GetTarget();
-        if (target == null) return 0f;
-        return target.Facing + MathF.PI;
-    }
 
     /// <summary>ДЕБАГ: бить цели даже если UnitIsDeadOrGhost=true (feign death, permanent immune).
     /// По умолчанию ON для тестов. Выключить после завершения тестов позиционирования.</summary>
@@ -911,7 +906,7 @@ public class BotEngine : IDisposable
             NoCombatCheck = noCombatCheck,
             // InFrame только для слейвов — мастер не должен сам в себя становиться в круг.
             InFrameMode = InFrameEnabled && Hivemind.CurrentRole == Hivemind.Role.Slave,
-            InFrameAngle = ComputeInFrameAngleFromMaster(),
+            InFrameLockedPos = InFrameLockedPos,
         };
     }
 
@@ -1396,18 +1391,15 @@ public class BotEngine : IDisposable
                         healTarget.Type != WowObjectType.Player &&
                         (healTarget.InCombat || InFrameEnabled))
                     {
-                        if (InFrameEnabled)
+                        if (InFrameEnabled && InFrameLockedPos.HasValue)
                         {
-                            // Режим "Во фрейм": хил ровно сзади цели, радиус как у ДПС.
-                            float ringRadius = MathF.Max(healTarget.BoundingRadius + 4f, 8f);
-                            float angle = ComputeInFrameAngleFromMaster();
-                            float destX = healTarget.X + ringRadius * MathF.Cos(angle);
-                            float destY = healTarget.Y + ringRadius * MathF.Sin(angle);
-                            float distToSpot = MathF.Sqrt((player.X - destX) * (player.X - destX) + (player.Y - destY) * (player.Y - destY));
+                            // Зафиксированная точка InFrame — одна на все случаи.
+                            var lp = InFrameLockedPos.Value;
+                            float distToSpot = MathF.Sqrt((player.X - lp.X) * (player.X - lp.X) + (player.Y - lp.Y) * (player.Y - lp.Y));
                             if (distToSpot > 1.5f)
                             {
                                 _navigation.FaceInstant(player, healTarget);
-                                _ctm.MoveTo(destX, destY, healTarget.Z, 1.5f);
+                                _ctm.MoveTo(lp.X, lp.Y, lp.Z, 1.5f);
                             }
                         }
                         else
@@ -1505,16 +1497,6 @@ public class BotEngine : IDisposable
             // Баффы solo обрабатываются в BuffTick() выше
 
 
-
-            // InFrame heartbeat: мастер периодически пересылает состояние.
-            // SendAddonMessage + ACK перезаписывается следующей командой (CmdAuto сразу после CmdInFrame)
-            // → первый bcast может потеряться у части слейвов. Heartbeat гарантирует eventual consistency.
-            if (InFrameEnabled && Hivemind.CurrentRole == Hivemind.Role.Master &&
-                DateTime.UtcNow >= _inFrameBroadcastNext)
-            {
-                _inFrameBroadcastNext = DateTime.UtcNow.AddSeconds(2.5);
-                Hivemind.CmdInFrame(true);
-            }
 
             // BossEngine для master — детект боссов + announcement. Делаем ДО return guard
             // чтобы работало даже без rotation/follow (AutoPve — независимая функция).

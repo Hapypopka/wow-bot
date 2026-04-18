@@ -24,7 +24,6 @@ public class CombatExecutor
 
     // Slave approach state
     private bool _slaveApproaching;
-    private int _inFrameLogTick;
 
     public CombatExecutor(EndSceneHook hook, Navigation navigation,
         CombatPositioning combatPositioning, CombatHelper combatHelper, ClickToMove ctm)
@@ -93,26 +92,15 @@ public class CombatExecutor
         // 4. Approach для slave (C# CTM) — учитываем хитбокс
         if (options.NeedApproach)
         {
-            if (options.InFrameMode)
+            if (options.InFrameMode && options.InFrameLockedPos.HasValue)
             {
-                // Режим "Во фрейм": угол уже вычислен в BotEngine (относительно позиции мастера,
-                // т.к. target.Facing у feign death мобов не обновляется).
-                float ringRadius = MathF.Max(target.BoundingRadius + 4f, 8f);
-                float angle = options.InFrameAngle;
-                float destX = target.X + ringRadius * MathF.Cos(angle);
-                float destY = target.Y + ringRadius * MathF.Sin(angle);
-                float distToSpot = MathF.Sqrt((player.X - destX) * (player.X - destX) + (player.Y - destY) * (player.Y - destY));
-                _inFrameLogTick++;
-                if (_inFrameLogTick >= 20) // ~3с
-                {
-                    _inFrameLogTick = 0;
-                    int slot = (int)(player.Guid % 8);
-                    Logger.Log(LogCat.General, $"InFrame: slot={slot} tF={target.Facing:F2} ang={angle:F2} R={ringRadius:F1} dest=({destX:F0},{destY:F0}) pos=({player.X:F0},{player.Y:F0}) distSpot={distToSpot:F1}");
-                }
+                // Зафиксированная точка — один раз вычислена при включении, больше не пересчитывается.
+                var lp = options.InFrameLockedPos.Value;
+                float distToSpot = MathF.Sqrt((player.X - lp.X) * (player.X - lp.X) + (player.Y - lp.Y) * (player.Y - lp.Y));
                 if (distToSpot > 1.5f)
                 {
                     _navigation.FaceInstant(player, target);
-                    _ctm.MoveTo(destX, destY, target.Z, 1.5f);
+                    _ctm.MoveTo(lp.X, lp.Y, lp.Z, 1.5f);
                     _slaveApproaching = true;
                     return true;
                 }
@@ -187,10 +175,10 @@ public record CombatOptions
     public bool PlayerInCombat { get; init; }
     /// <summary>true → игнорируем `target.InCombat` (для слейвов: Attacking/Auto бьют даже не-боевые цели).</summary>
     public bool NoCombatCheck { get; init; }
-    /// <summary>Режим "Во фрейм": approach ставит слейва на кольцо `max(BR+4,8)` от центра цели по своему углу.
-    /// Угол вычисляется в BotEngine по GUID игрока, чтобы слейвы разошлись по кругу и не толпились.</summary>
+    /// <summary>Режим "Во фрейм": approach ведёт слейва в зафиксированную точку (считается ОДИН раз при
+    /// включении режима, потом слейв стоит там независимо от движений цели).</summary>
     public bool InFrameMode { get; init; }
-    public float InFrameAngle { get; init; }
+    public (float X, float Y, float Z)? InFrameLockedPos { get; init; }
 
     // Настройки
     public bool MoveBehindEnabled { get; init; }

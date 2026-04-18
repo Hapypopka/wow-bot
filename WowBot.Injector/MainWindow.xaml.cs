@@ -179,15 +179,9 @@ public partial class MainWindow : Window
                     _botEngine.AutoPveEnabled = false;
                     hive.CmdAutoPve(false);
                     break;
-                case "inframe:on":
-                    _botEngine.InFrameEnabled = true;
+                case "inframe:trigger":
+                    // Нажатие InFrame → одна команда слейвам. Каждый клик = новая фиксация позиции.
                     hive.CmdInFrame(true);
-                    // Автоматом включаем Auto — слейвы должны быть в Auto/Attack чтобы approach сработал.
-                    hive.CmdAuto();
-                    break;
-                case "inframe:off":
-                    _botEngine.InFrameEnabled = false;
-                    hive.CmdInFrame(false);
                     break;
                 case "wipe": hive.CmdWipe(); break;
                 case "refreshguid":

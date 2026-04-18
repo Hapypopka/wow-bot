@@ -204,10 +204,12 @@ public class Hivemind
         string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
         _hook.ExecuteLua(lua, 200);
 
-        // ACK tracking: служебные команды (SetBuff, Wipe и т.д.) не требуют ACK
+        // ACK tracking: служебные команды (SetBuff, Wipe, InFrame и т.д.) не требуют ACK,
+        // и не должны переписывать ActiveCommand в UI (Авто/Атака остаются активными).
         bool needsAck = cmd != Command.SetBuff && cmd != Command.Wipe &&
             cmd != Command.Interact && cmd != Command.GossipSelect && cmd != Command.GossipAccept &&
-            cmd != Command.AutoToggleFollow && cmd != Command.AutoToggleAttack && cmd != Command.Ping;
+            cmd != Command.AutoToggleFollow && cmd != Command.AutoToggleAttack && cmd != Command.Ping &&
+            cmd != Command.InFrame;
         if (needsAck)
         {
             _pendingSeq = _cmdSeq;
@@ -1014,8 +1016,16 @@ WB_HIVE_REG_Q = ''
         LastCommandArg = cleanArg;
         ForceIdle = false; // новая команда — снять полный стоп
 
-        // Один раз — найти GUID мастера (при первой команде)
-        if (!string.IsNullOrEmpty(cleanArg) && cmd != Command.Stop && cmd != Command.Scatter)
+        // Любая новая команда (кроме InFrame) снимает InFrame-lock — слейв возвращается к штатному поведению.
+        if (cmd != Command.InFrame && _botEngine != null && _botEngine.InFrameEnabled)
+        {
+            _botEngine.InFrameEnabled = false;
+            _botEngine.InFrameLockedPos = null;
+            Logger.Info($"SLAVE: InFrame cleared by {cmd}");
+        }
+
+        // Один раз — найти GUID мастера (при первой команде). InFrame не содержит имя мастера в arg.
+        if (!string.IsNullOrEmpty(cleanArg) && cmd != Command.Stop && cmd != Command.Scatter && cmd != Command.InFrame)
             _botEngine?.SlaveCtrl.InitMasterGuid(cleanArg);
 
         // v2: все команды через BotEngine.ProcessCommand (единый обработчик)
@@ -1053,9 +1063,22 @@ WB_HIVE_REG_Q = ''
             case Command.InFrame:
                 if (_botEngine != null)
                 {
-                    bool on = cleanedArg == "on";
-                    _botEngine.InFrameEnabled = on;
-                    Logger.Info($"SLAVE: InFrame → {(on ? "ON" : "OFF")} (from master)");
+                    // Каждый клик мастера = новая фиксация позиции. Trigger-команда (не toggle).
+                    var tgt = _objectManager.GetTarget();
+                    if (tgt != null && tgt.IsAlive && tgt.Type != WowObjectType.Player)
+                    {
+                        float angle = tgt.Facing + MathF.PI;
+                        float r = MathF.Max(tgt.BoundingRadius + 4f, 8f);
+                        float fx = tgt.X + r * MathF.Cos(angle);
+                        float fy = tgt.Y + r * MathF.Sin(angle);
+                        _botEngine.InFrameEnabled = true;
+                        _botEngine.InFrameLockedPos = (fx, fy, tgt.Z);
+                        Logger.Info($"SLAVE: InFrame locked at ({fx:F0},{fy:F0},{tgt.Z:F0}) target='{tgt.Name}'");
+                    }
+                    else
+                    {
+                        Logger.Info("SLAVE: InFrame ignored — no valid target");
+                    }
                 }
                 break;
 
