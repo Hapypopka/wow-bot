@@ -21,10 +21,16 @@ STAT_MULTIPLIER = 10
 # Слейв-персонажи: (guid, class_id, spec_name)
 SLAVES = [
     (5007, 6,  'blood_dk_tank'),
-    (5003, 7,  'resto_shaman'),
+    (5010, 7,  'resto_shaman'),
     (5008, 11, 'balance_druid'),
     (5005, 5,  'shadow_priest'),
     (5009, 2,  'ret_paladin'),
+]
+
+# Дополнительные слейвы с lookup guid по имени (для свежесозданных через create_slaves.py).
+# Формат: (name, class_id, spec_name)
+SLAVES_BY_NAME = [
+    ('Ршамка', 7, 'resto_shaman'),
 ]
 
 # ItemMod (stat_type) константы WotLK 3.3.5
@@ -367,9 +373,20 @@ def equip_slave(char_guid, class_id, spec):
     update_equipment_cache(char_guid)
 
 
+def lookup_guid_by_name(name):
+    rows = sql(f"SELECT guid FROM wotlkcharacters.characters WHERE name='{name}';", fetch=True)
+    return int(rows[0][0]) if rows else None
+
+
 def main():
     os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     for guid, class_id, spec in SLAVES:
+        equip_slave(guid, class_id, spec)
+    for name, class_id, spec in SLAVES_BY_NAME:
+        guid = lookup_guid_by_name(name)
+        if guid is None:
+            print(f'\n[!] {name} не найден в БД — пропускаю (запусти create_slaves.py)')
+            continue
         equip_slave(guid, class_id, spec)
     print('\n[OK] Готово. Заходи в игру и проверяй.')
 

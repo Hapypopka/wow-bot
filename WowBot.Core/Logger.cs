@@ -24,7 +24,7 @@ public enum LogCat
 
     // Пресеты
     All = ~0,
-    Default = General | Rotation | Heal | Tank | AoE | Combat | Buffs | Error,
+    Default = General | Rotation | Heal | Tank | AoE | Combat | Buffs | Follow | Position | Error,
     Minimal = General | Error,
     Debug = All,
 }
@@ -33,9 +33,13 @@ public static class Logger
 {
     private static string _logPath = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory, "wowbot.log");
+    private static string _markPath = Path.Combine(
+        AppDomain.CurrentDomain.BaseDirectory, "wowbot_mark.log");
     private static readonly object Lock = new();
     private static string _charName = "";
     private static StreamWriter? _writer;
+    private static StreamWriter? _markWriter;
+    public static bool IsMarkActive => _markWriter != null;
 
     // Фильтр — какие категории логировать (по дефолту Default)
     public static LogCat EnabledCategories { get; set; } = LogCat.Default;
@@ -48,7 +52,43 @@ public static class Logger
     {
         _charName = name ?? "";
         if (!string.IsNullOrEmpty(_charName))
+        {
             _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"wowbot_{_charName}.log");
+            _markPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"wowbot_{_charName}_mark.log");
+        }
+    }
+
+    /// <summary>Открывает mark-файл (труncate). Все последующие записи Log() дублируются туда
+    /// до StopMark(). Используется для пометки интересных интервалов юзером.</summary>
+    public static void StartMark()
+    {
+        lock (Lock)
+        {
+            try { _markWriter?.Dispose(); } catch { }
+            _markWriter = null;
+            try
+            {
+                _markWriter = new StreamWriter(_markPath, append: false) { AutoFlush = true };
+                _markWriter.WriteLine($"=== MARK START [{_charName}] — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+            }
+            catch { _markWriter = null; }
+        }
+        Log(LogCat.General, "USER MARK: started");
+    }
+
+    public static void StopMark()
+    {
+        Log(LogCat.General, "USER MARK: stopped");
+        lock (Lock)
+        {
+            try
+            {
+                _markWriter?.WriteLine($"=== MARK END — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+                _markWriter?.Dispose();
+            }
+            catch { }
+            _markWriter = null;
+        }
     }
 
     public static void Init()
@@ -84,6 +124,11 @@ public static class Logger
                     _writer.WriteLine(line);
                 else
                     File.AppendAllText(_logPath, line + "\n");
+                // Дублируем в mark-файл если активен
+                if (_markWriter != null)
+                {
+                    try { _markWriter.WriteLine(line); } catch { }
+                }
             }
         }
         catch (Exception ex)
@@ -116,6 +161,9 @@ public static class Logger
         {
             _writer?.Dispose();
             _writer = null;
+            try { _markWriter?.WriteLine($"=== MARK END (Dispose) — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ==="); } catch { }
+            _markWriter?.Dispose();
+            _markWriter = null;
         }
     }
 }

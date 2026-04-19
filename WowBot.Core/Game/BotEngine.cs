@@ -163,6 +163,30 @@ public class BotEngine : IDisposable
         SlaveCtrl = new SlaveController(navigation, hook, objectManager, ctm);
         BossTactics = new BossTactics(hook, objectManager, ctm, navigation);
         BossEngine = new BossEngine(hook, objectManager, ctm, navigation);
+        // Тактика может устанавливать/снимать InFrame-lock (для Marrowgar и других боссов).
+        BossEngine.Context.LockInFrame = (x, y, z) =>
+        {
+            InFrameEnabled = true;
+            InFrameLockedPos = (x, y, z);
+            Logger.Info($"BossTactic: InFrame locked at ({x:F0},{y:F0},{z:F0})");
+        };
+        BossEngine.Context.UnlockInFrame = () =>
+        {
+            InFrameEnabled = false;
+            InFrameLockedPos = null;
+            Logger.Info("BossTactic: InFrame unlocked");
+        };
+        BossEngine.Context.GetAoeAvoid = () => AoeAvoidEnabled;
+        BossEngine.Context.SetAoeAvoid = (on) =>
+        {
+            AoeAvoidTacticOverride = on;
+            Logger.Info($"BossTactic: AoE avoid override → {(on ? "ON" : "OFF")}");
+        };
+        BossEngine.Context.ClearAoeAvoid = () =>
+        {
+            AoeAvoidTacticOverride = null;
+            Logger.Info($"BossTactic: AoE avoid override cleared (UI={AoeAvoidUiEnabled})");
+        };
         _combatPositioning = new CombatPositioning(ctm);
         _buffManager = new BuffManager();
         Hivemind.OnBuffChanged += (key, value) =>
@@ -410,7 +434,15 @@ public class BotEngine : IDisposable
     public bool MoveBehindEnabled { get; set; }
     public bool? MoveBehindSavedState { get; private set; } // сохранённое состояние перед Follow
 
-    public bool AoeAvoidEnabled { get; set; } = true;
+    // ВРЕМЕННО: AoE avoidance выключен для тестов на SPP локальном сервере.
+    // Coldflame скрипт там кривой (следует за игроком вместо 8 лучей от босса) — убегать бесполезно.
+    // TODO: вернуть в true когда будем играть на Warmane/оффе.
+    // AoeAvoidUiEnabled — то что в чекбоксе оверлея (юзер).
+    // AoeAvoidTacticOverride — null=нет навязывания тактикой, true/false=тактика принудительно решает.
+    // AoeAvoidEnabled = override ?? UI — итоговое значение которое читает боевой код.
+    public bool AoeAvoidUiEnabled { get; set; } = false;
+    public bool? AoeAvoidTacticOverride { get; set; } = null;
+    public bool AoeAvoidEnabled => AoeAvoidTacticOverride ?? AoeAvoidUiEnabled;
 
     // Auto-mode: кулдаун на follow после боя (не фолловить сразу когда InCombat сбросился)
     private DateTime _lastCombatTime = DateTime.MinValue;
@@ -977,15 +1009,19 @@ public class BotEngine : IDisposable
         }
     }
 
-    /// <summary>BossEngine тик (общий для Attacking и Auto)</summary>
+    /// <summary>BossEngine тик (общий для Attacking и Auto) — только для slave.</summary>
     private bool TryBossEngineTick(WowPlayer player, string enemyCountLua)
     {
         if (!AutoPveEnabled) return false;
         BossEngine.IsMelee = IsMeleeSpec;
         BossEngine.IsHealer = IsHealer;
         BossEngine.IsTank = IsTankSpec;
+        BossEngine.IsMaster = false; // slave путь
         if (!BossEngine.IsActive) BossEngine.InstallListener();
-        return BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, _fullScript);
+        // Slave использует NoCombatCheck-вариант скрипта (без UnitAffectingCombat проверок),
+        // чтобы RotateAndAttack action работал на целях вне boss combat (Bone Spike и т.п.).
+        string script = DebugIgnoreDeadTarget ? _fullScriptNoCombatCheckDebugAlive : _fullScriptNoCombatCheck;
+        return BossEngine.Tick(player, enemyCountLua, SpellFlagsLua, script);
     }
 
     /// <summary>Auto mode: в бою → attack, вне боя → follow</summary>
@@ -1371,12 +1407,20 @@ public class BotEngine : IDisposable
             // === HIVEMIND SLAVE: хилер всегда хилит (если не Wipe) ===
             if (Hivemind.CurrentRole == Hivemind.Role.Slave && IsHealer && !Hivemind.WipeMode)
             {
+                // AoE avoidance — приоритет над хил-логикой
+                if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
+
                 bool inAutoMode = Hivemind.Mode == Hivemind.SlaveMode.Auto;
                 bool inCombat = player.InCombat;
 
                 // AssistUnit ВСЕГДА в авто — чтобы хил получил таргет мастера
                 if (inAutoMode && !Hivemind.AutoPauseAttack)
                     Hivemind.SlaveAutoTick();
+
+                // BossEngine тактика — для Bone Spike свича и установки InFrame lock.
+                // InFrame позиция устанавливается через InFrameLockedPos (тактика вызывает callback),
+                // хил-approach ниже сам читает lock и идёт туда, параллельно хилит.
+                TryBossEngineTick(player, enemyCountLua);
 
                 var autoTarget = _objectManager.GetTarget();
                 bool isAttacking = Hivemind.Mode == Hivemind.SlaveMode.Attacking;
@@ -1451,6 +1495,19 @@ public class BotEngine : IDisposable
             {
                 SlaveCtrl.FollowDistance = _followDistance;
 
+                // Диагностический лог состояния каждые ~1с — для разбора кружений
+                if (_logTick == 0)
+                {
+                    int ctmAct = _ctm.GetCurrentAction();
+                    float cx = _ctm.ReadX(), cy = _ctm.ReadY();
+                    string lock_ = InFrameLockedPos.HasValue ? $"({InFrameLockedPos.Value.X:F0},{InFrameLockedPos.Value.Y:F0})" : "null";
+                    Logger.Log(LogCat.Follow, $"STATE: InFrame={InFrameEnabled} lock={lock_} aoeAvoid={AoeAvoidEnabled} fleeing={_combatHelper.IsAoeFleeing} approach={_combatExecutor.IsApproaching} mode={Hivemind.Mode} ctm={ctmAct} ctmXY=({cx:F0},{cy:F0}) pos=({player.X:F0},{player.Y:F0})");
+                }
+
+                // AoE avoidance — ПРИОРИТЕТ НАД ВСЕМ (тактика, approach, ротация). Если бежим от лужи —
+                // не даём SlaveAttackTick / BossEngine / прочему перезаписать CTM на движение к боссу.
+                if (AoeAvoidEnabled && TryAoEAvoidance(player)) return;
+
                 // Если вышли из боевого режима — остановить Lua approach
                 if (Hivemind.Mode != Hivemind.SlaveMode.Attacking && Hivemind.Mode != Hivemind.SlaveMode.Auto && _combatExecutor.IsApproaching)
                 {
@@ -1498,14 +1555,15 @@ public class BotEngine : IDisposable
 
 
 
-            // BossEngine для master — детект боссов + announcement. Делаем ДО return guard
-            // чтобы работало даже без rotation/follow (AutoPve — независимая функция).
+            // BossEngine для master — детект боссов + announcement в чат.
+            // IsMaster=true → тактики возвращают DoNothing, мастер сам играет руками.
             if (AutoPveEnabled && Hivemind.CurrentRole == Hivemind.Role.Master)
             {
                 if (!BossEngine.IsActive) BossEngine.InstallListener();
                 BossEngine.IsMelee = IsMeleeSpec;
                 BossEngine.IsHealer = IsHealer;
                 BossEngine.IsTank = IsTankSpec;
+                BossEngine.IsMaster = true;
                 BossEngine.Tick(player, "", SpellFlagsLua, _fullScript);
             }
 

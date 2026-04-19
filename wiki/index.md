@@ -27,7 +27,9 @@
 - [[priest]] — Shadow/Disc/Holy. AoE: Shadow MultiDot, Holy Circle of Healing
 
 ## Концепции
-- [[aoe-system]] — подсчёт врагов (WB_NCE/WB_NCET), ground AoE, avoidance
+- [[aoe-system]] — подсчёт врагов (WB_NCE/WB_NCET), ground AoE, avoidance (grid safe spot + native stop)
+- [[in-frame-mode]] — кнопка "Во фрейм": слейвы встают сзади таргета мастера (Marrowgar-style)
+- [[mark-logs]] — пометка интервалов в логе (кнопка start/stop), `wowbot_<Char>_mark.log`
 - [[spell-ids]] — система Spell ID, WB_S.* флаги
 - [[lua-helpers]] — LuaHelpers (Cast/IR/HB/HD/SN), wrappers (WrapDPS/WrapHealer)
 - [[wowcircle-quirks]] — специфика WoWCircle (ё→е, GetLocalizedText крашит, оффсеты)

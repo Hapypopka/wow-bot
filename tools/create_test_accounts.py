@@ -61,7 +61,7 @@ def run_sql(sql: str):
 
 def main():
     accounts = [('SLAVE1', 'test123'), ('SLAVE2', 'test123'), ('SLAVE3', 'test123'),
-                ('SLAVE4', 'test123'), ('SLAVE5', 'test123')]
+                ('SLAVE4', 'test123'), ('SLAVE5', 'test123'), ('SLAVE6', 'test123')]
 
     for username, password in accounts:
         # Проверка существования

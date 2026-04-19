@@ -95,13 +95,22 @@ public class Navigation
     /// Поворот к цели через CGPlayer_C__ClickToMove.
     /// Пробуем все face clickTypes: 1=FaceTarget(GUID), 2=Face(point).
     /// </summary>
+    private int _faceLogTick;
     public bool FaceInstant(WowUnit player, WowUnit target)
     {
-        if (IsFacing(player, target)) return true;
+        float needed = GetAngleTo(player, target);
+        float diff = MathF.Abs(needed - player.Facing);
+        if (diff > MathF.PI) diff = MathF.PI * 2 - diff;
+        bool alreadyFacing = diff < 0.5f;
+        _faceLogTick++;
+        if (_faceLogTick % 10 == 0)
+            Logger.Log(LogCat.Follow, $"FaceInstant: needed={needed:F2} cur={player.Facing:F2} diff={diff:F2} alreadyFacing={alreadyFacing} casting={player.IsCasting} tgt={target.Name}");
+
+        if (alreadyFacing) return true;
         if (player.IsCasting) return false;
 
-        _hook.CallClickToMove(target.X, target.Y, target.Z, player.BaseAddress,
-            clickType: 1, precision: 0.1f, timeoutMs: 200, targetGuid: target.Guid);
+        // Native CGUnit_C::SetFacing (0x72EA50) — специальная функция поворота с сетевым синком.
+        _hook.CallSetFacing(player.BaseAddress, needed, timeoutMs: 200);
         return false;
     }
 

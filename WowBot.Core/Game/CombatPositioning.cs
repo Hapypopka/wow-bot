@@ -67,6 +67,9 @@ public class CombatPositioning
     /// </summary>
     public bool IsMovingBehind { get; private set; }
 
+    /// <summary>Сбросить флаг MoveBehind извне (нужно при переключении в InFrame-режим).</summary>
+    public void ResetMoveBehind() { IsMovingBehind = false; }
+
     private int _logTick;
 
     public bool TryMoveBehind(WowPlayer player, WowUnit target)

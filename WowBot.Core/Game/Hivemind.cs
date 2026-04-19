@@ -18,7 +18,7 @@ public class Hivemind
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
-    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp, AutoPve, InFrame }
+    public enum Command { Follow, Attack, Stop, Auto, AutoToggleFollow, AutoToggleAttack, Scatter, Stack, StackMA, Ping, Goto, Register, SetBuff, Wipe, RefreshGuid, Interact, GossipSelect, GossipAccept, CastHeroism, TauntMT, TauntOT, GuildTp, AutoPve, InFrame, MarkStart, MarkStop }
 
     /// <summary>Информация о подключённом слейве</summary>
     public class SlaveInfo
@@ -209,7 +209,7 @@ public class Hivemind
         bool needsAck = cmd != Command.SetBuff && cmd != Command.Wipe &&
             cmd != Command.Interact && cmd != Command.GossipSelect && cmd != Command.GossipAccept &&
             cmd != Command.AutoToggleFollow && cmd != Command.AutoToggleAttack && cmd != Command.Ping &&
-            cmd != Command.InFrame;
+            cmd != Command.InFrame && cmd != Command.MarkStart && cmd != Command.MarkStop;
         if (needsAck)
         {
             _pendingSeq = _cmdSeq;
@@ -411,6 +411,10 @@ public class Hivemind
     /// <summary>Мастер: задать бафф слейвам (blessing=BoM, aura=AuRet)</summary>
     /// <summary>Мастер: хилы стоп хилить (вайп)</summary>
     public void CmdWipe() => SendCommand(Command.Wipe);
+
+    /// <summary>Мастер: пометка интервала логов — все слейвы начинают писать дополнительный mark-файл.</summary>
+    public void CmdMarkStart() => SendCommand(Command.MarkStart);
+    public void CmdMarkStop() => SendCommand(Command.MarkStop);
 
     /// <summary>Мастер: вкл/выкл AutoPve тактики у всех слейвов (+ локально).</summary>
     public void CmdAutoPve(bool on)
@@ -849,6 +853,8 @@ WB_HIVE_REG_Q = ''
             "GuildTp" => Command.GuildTp,
             "AutoPve" => Command.AutoPve,
             "InFrame" => Command.InFrame,
+            "MarkStart" => Command.MarkStart,
+            "MarkStop" => Command.MarkStop,
             _ => null
         };
 
@@ -1177,6 +1183,14 @@ WB_HIVE_REG_Q = ''
             case Command.GuildTp:
                 _hook.ExecuteLua("SendChatMessage('.g t','GUILD')", 200);
                 Logger.Info("Hivemind: SLAVE guild tp");
+                break;
+
+            case Command.MarkStart:
+                Logger.StartMark();
+                break;
+
+            case Command.MarkStop:
+                Logger.StopMark();
                 break;
         }
 

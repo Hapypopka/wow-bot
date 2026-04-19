@@ -146,6 +146,20 @@ public partial class MasterPanel : Window
         BtnCollapse.ToolTip = collapsed ? "Развернуть" : "Свернуть";
     }
 
+    // --- Mark log button ---
+    private bool _markActive;
+    public event Action<bool>? OnMarkToggle; // true=start, false=stop
+
+    private void BtnMark_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _markActive = !_markActive;
+        BtnMark.Background = _markActive
+            ? new SolidColorBrush(Color.FromRgb(0xc4, 0x3a, 0x3a))
+            : new SolidColorBrush(Color.FromRgb(0x3a, 0x3d, 0x45));
+        OnMarkToggle?.Invoke(_markActive);
+    }
+
     // --- Settings toggle ---
     private void BtnSettings_Click(object sender, MouseButtonEventArgs e) => ToggleSettings();
     private void BtnSettings_BtnClick(object sender, RoutedEventArgs e) => ToggleSettings();

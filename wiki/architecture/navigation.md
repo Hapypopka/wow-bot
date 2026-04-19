@@ -1,6 +1,6 @@
 ---
 title: Navigation
-updated: 2025-04-15
+updated: 2026-04-19
 tags: [architecture, navigation, movement]
 ---
 
@@ -23,6 +23,25 @@ tags: [architecture, navigation, movement]
 ```
 
 **Приоритет:** EndSceneHook.CallClickToMove() → fallback на прямую запись в память.
+
+### Native функции клиента (через EndSceneHook)
+
+| Адрес | Функция | Flag | Использование |
+|-------|---------|------|---------------|
+| `0x00727400` | `CGPlayer_C__ClickToMove(clickType, guid, pos, precision)` | 6 | `_ctm.MoveTo` + `Navigation.FaceInstant` (clickType=1) |
+| `0x0072B3A0` | `PlayerClickToMoveStop(playerBase)` | 7 | `_ctm.NativeStop()` — шлёт MSG_MOVE_STOP серверу с актуальной позицией |
+
+**NativeStop важен** потому что прямая запись `CTM_Action=0xD` локальна — сервер не знает. Aura на сервере продолжает тикать по старой позиции. Native вызов отправляет пакет → server sync мгновенный. Используется в `TryAoEAvoidance` при выходе из зоны.
+
+### Потенциально полезные native функции (не используем)
+
+Из AmeisenBot offsets:
+- `0x7A3B70` — **Traceline** (raycast, LoS checks) — TODO: не пуллить через стены
+- `0x71B7F0` — IsOutdoors (для маунта/хартстоуна)
+- `0x731260` — UnitOnRightClick (native Interact, стабильнее Lua)
+- `0x711140` — GameobjectOnRightClick
+- `0x524BF0` — SetTarget (быстрее Lua TargetUnit)
+- `0x72EA50` — UnitSetFacing (альтернатива clickType=1)
 
 ## Navigation.cs — ключевые методы
 

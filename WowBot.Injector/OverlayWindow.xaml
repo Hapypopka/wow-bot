@@ -106,6 +106,12 @@
                 MouseLeftButtonDown="MainButton_Click" MouseMove="MainButton_MouseMove" MouseLeftButtonUp="MainButton_MouseUp">
             <DockPanel>
                 <TextBlock Text="WowBot" FontSize="12" FontWeight="Bold" Foreground="#c8aa6e"/>
+                <Border x:Name="BtnMark" DockPanel.Dock="Right" Width="12" Height="12"
+                        Background="#3a3d45" CornerRadius="6" Cursor="Hand"
+                        BorderBrush="#5a5d65" BorderThickness="1"
+                        VerticalAlignment="Center" Margin="6,0,0,0"
+                        ToolTip="Пометка лога — клик старт/стоп. На мастере отправит всем слейвам."
+                        MouseLeftButtonDown="BtnMark_Click"/>
                 <TextBlock x:Name="TxtSpec" Text="" FontSize="9" Foreground="#5a5d65"
                            VerticalAlignment="Center" Margin="8,0,0,0"/>
             </DockPanel>

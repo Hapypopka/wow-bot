@@ -1,6 +1,6 @@
 ---
 title: AoE System
-updated: 2025-04-15
+updated: 2026-04-19
 tags: [concept, aoe, combat]
 ---
 
@@ -46,13 +46,45 @@ tags: [concept, aoe, combat]
 
 ## AoE Avoidance (убегание из луж)
 
+### Алгоритм grid safe spot (v2 — с 2026-04-19)
+
 `CombatHelper.TryAoEAvoidance()`:
-- Сканирует DynObjects из ObjectManager
-- **Пропускает свои заклинания** (dyn.Caster == player.Guid) — чтобы не убегать из своих Hurricane/Volley/DnD/Consecration
-- Проверяет есть ли у игрока дебафф совпадающий со SpellId лужи
-- Фильтрует безопасные (Desecration — только слоу)
-- Считает среднюю позицию луж → вектор побега
-- Flee на 2 секунды, приоритет над всем
+
+**1. Сбор опасных зон (DangerZones):**
+- Проход по DynObjects из ObjectManager
+- Своя зона (`Caster == self`) → игнор
+- Безопасный дебафф (Desecration — только слоу) → игнор
+- **Дружественный caster (партия):** бежим только если реально получаем дебафф от зоны (дуэль/misfired)
+- **Враждебный caster:** всегда опасно (превентивно)
+
+**2. Предикт движения лужи:**
+- Coldflame-подобные ползущие зоны — вектор `caster→dyn`, скорость 6y/s
+- При расчёте учитываем текущую позицию И через 0.5с
+- Статичные (Consecration, DnD) — velocity=0
+
+**3. Score позиции:**
+- `score = min(dist до края каждой зоны сейчас ИЛИ через 0.5с)`
+- Потолок **`AoESafetyCap = 2.5y`** — не различаем "в 10y от лужи" и "в 2.5y", иначе грид бы бегал к самой далёкой точке
+- Score отрицательный = в луже
+- Score ≥ safetyCap = безопасно
+
+**4. Решение:**
+- `score < 1y` → в опасности, бежим
+- `score ≥ 2.5y` → безопасно, останов (`_fleeDestination=null`, `NativeStop()`)
+- Между 1 и 2.5 — гистерезис
+
+**5. Выбор destination (FindSafeSpot):**
+- 24 кандидата на кольце вокруг игрока
+- **Адаптивный `ringRadius = max(8, largestDangerRadius + 3)`** — для DnD 10y радиус 13y, для Void Zone 15y — 18y. Иначе при касте по центру крупной лужи все 8y кандидаты внутри неё, бот не видит "чистой земли".
+- Score каждого кандидата → выбираем max
+- **Гистерезис 2y:** если старый destination почти так же хорош — не меняем, чтоб не дёргаться
+
+**6. Выход:**
+- Native `_ctm.NativeStop()` через PlayerClickToMoveStop (0x72B3A0) — шлёт серверу MSG_MOVE_STOP с актуальной позицией → aura на сервере сразу видит что игрок вне зоны, тики прекращаются мгновенно. Без этого был movement desync: клиент уже выбежал, сервер ещё видит старую позицию.
+
+### Proactive AoE Avoidance (слой 2)
+
+`CombatHelper.TryProactiveAvoidance()` — уклонение по SPELL_CAST_START ДО создания DynObject. Смотрит `EnemyCastObserver`, сверяет с `DangerousSpellTable` (3865+ спеллов). По `AoETargetMode` выбирает стратегию: `AroundCaster` (flee радиально), `GroundTargeted` (strafe перпендикулярно), `Cone/Frontal` (strafe вбок).
 
 ## Что НЕ работает
 - Лужи без DynObject не детектятся (визуальные эффекты)

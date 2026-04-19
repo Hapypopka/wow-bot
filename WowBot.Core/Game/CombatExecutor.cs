@@ -24,6 +24,7 @@ public class CombatExecutor
 
     // Slave approach state
     private bool _slaveApproaching;
+    private int _cexLogTick;
 
     public CombatExecutor(EndSceneHook hook, Navigation navigation,
         CombatPositioning combatPositioning, CombatHelper combatHelper, ClickToMove ctm)
@@ -66,13 +67,23 @@ public class CombatExecutor
         if (options.MoveBehindEnabled && !options.InFrameMode)
         {
             if (_combatPositioning.TryMoveBehind(player, target))
+            {
                 movingBehind = true;
+                _cexLogTick++;
+                if (_cexLogTick % 7 == 0)
+                    Logger.Log(LogCat.Follow, $"CEX: MoveBehind active (InFrameMode={options.InFrameMode})");
+            }
             else if (_combatPositioning.TryRangedPosition(player, target))
                 _navigation.FaceInstant(player, target);
         }
+        else if (options.InFrameMode && _combatPositioning.IsMovingBehind)
+        {
+            // InFrame только что активирован — сбрасываем MoveBehind флаг иначе он блокирует approach
+            _combatPositioning.ResetMoveBehind();
+        }
 
-        // Если MoveBehind активно двигает — кастуем без approach
-        if (_combatPositioning.IsMovingBehind)
+        // Если MoveBehind активно двигает — кастуем без approach. Но только если InFrame не включён.
+        if (_combatPositioning.IsMovingBehind && !options.InFrameMode)
         {
             string dc = options.IsMeleeSpec ? "" :
                 "if WB_STOP_CAST and GetTime()<WB_STOP_CAST then SpellStopCasting() return end ";
@@ -92,15 +103,26 @@ public class CombatExecutor
         // 4. Approach для slave (C# CTM) — учитываем хитбокс
         if (options.NeedApproach)
         {
-            if (options.InFrameMode && options.InFrameLockedPos.HasValue)
+            // InFrame работает только если таргет в бою (босс с активной тактикой).
+            if (options.InFrameMode && options.InFrameLockedPos.HasValue && target.InCombat)
             {
-                // Зафиксированная точка — один раз вычислена при включении, больше не пересчитывается.
                 var lp = options.InFrameLockedPos.Value;
                 float distToSpot = MathF.Sqrt((player.X - lp.X) * (player.X - lp.X) + (player.Y - lp.Y) * (player.Y - lp.Y));
-                if (distToSpot > 1.5f)
+                if (_cexLogTick % 7 == 0)
+                    Logger.Log(LogCat.Follow, $"CEX: InFrame approach dist={distToSpot:F1} pos=({player.X:F0},{player.Y:F0}) lock=({lp.X:F0},{lp.Y:F0}) approaching={_slaveApproaching}");
+
+                // Единый порог 1y без гистерезиса. Больше 1y — идём. Меньше — "прибыл",
+                // освобождаем approach и даём сработать FaceInstant в блоке #5 ниже.
+                if (distToSpot > 1f)
                 {
-                    _navigation.FaceInstant(player, target);
-                    _ctm.MoveTo(lp.X, lp.Y, lp.Z, 1.5f);
+                    float ctmDx = lp.X - _ctm.ReadX();
+                    float ctmDy = lp.Y - _ctm.ReadY();
+                    float ctmDriftSq = ctmDx * ctmDx + ctmDy * ctmDy;
+                    int action = _ctm.GetCurrentAction();
+                    if (action != 4 || ctmDriftSq > 4f)
+                    {
+                        _ctm.MoveTo(lp.X, lp.Y, lp.Z, 1.0f);
+                    }
                     _slaveApproaching = true;
                     return true;
                 }
@@ -115,15 +137,22 @@ public class CombatExecutor
                 float meleeRange = MathF.Max(target.CombatReach + player.CombatReach + 4f / 3f, 5f);
                 float maxDist = isMelee ? meleeRange : 28f;
                 float dist = player.DistanceTo(target);
+                if (_cexLogTick % 7 == 0)
+                    Logger.Log(LogCat.Follow, $"CEX: Normal approach isMelee={isMelee} dist={dist:F1} maxDist={maxDist:F1}");
                 if (dist > maxDist)
                 {
-                    // Мили: внутрь мили рейнджа с запасом. Рейнж: на 25 ярдов
                     float angle = MathF.Atan2(player.Y - target.Y, player.X - target.X);
                     float stopDist = isMelee ? MathF.Max(meleeRange - 1.5f, 1.5f) : 25f;
                     float destX = target.X + stopDist * MathF.Cos(angle);
                     float destY = target.Y + stopDist * MathF.Sin(angle);
-                    _navigation.FaceInstant(player, target);
-                    _ctm.MoveTo(destX, destY, target.Z, 1.5f);
+                    // Face во время движения не нужен — CTM поворачивает в сторону destination.
+                    float ctmDx = destX - _ctm.ReadX();
+                    float ctmDy = destY - _ctm.ReadY();
+                    float driftSq = ctmDx * ctmDx + ctmDy * ctmDy;
+                    if (_ctm.GetCurrentAction() != 4 || driftSq > 4f)
+                    {
+                        _ctm.MoveTo(destX, destY, target.Z, 1.5f);
+                    }
                     _slaveApproaching = true;
                     return true;
                 }

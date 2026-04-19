@@ -26,6 +26,7 @@ public class BossEngine
 
     // Активная тактика
     private IBossTactic? _activeTactic;
+    private DateTime _bossLastSeen = DateTime.MinValue; // когда последний раз видели босса
 
     // Все зарегистрированные тактики
     private readonly Dictionary<int, Func<IBossTactic>> _tacticFactory = new();
@@ -39,6 +40,10 @@ public class BossEngine
     public bool IsMelee { get; set; }
     public bool IsHealer { get; set; }
     public bool IsTank { get; set; }
+    /// <summary>Мы мастер? Если да — тактики возвращают DoNothing (мастер играет руками).</summary>
+    public bool IsMaster { get; set; }
+    /// <summary>Имя мастера — чтобы слейв мог найти его в Players (нужно для InFrame расчёта).</summary>
+    public string MasterName { get; set; } = "";
 
     public BossEngine(EndSceneHook hook, ObjectManager objectManager, ClickToMove ctm, Navigation navigation)
     {
@@ -118,6 +123,7 @@ end";
         Context.IsMelee = IsMelee;
         Context.IsHealer = IsHealer;
         Context.IsTank = IsTank;
+        Context.IsMaster = IsMaster;
 
         // Каждые ~1с: ищем босса если нет активной тактики
         if (_tick % 7 == 0 && _activeTactic == null)
@@ -127,17 +133,28 @@ end";
 
         if (_activeTactic == null) return false;
 
-        // Обновляем контекст босса
+        // Обновляем контекст босса. Grace period 3 сек — если босс временно пропал из ObjectManager
+        // (Storm, range), не дезактивируем тактику сразу — иначе слейвы начинают follow к мастеру
+        // и получают кружение когда босс появится снова.
         var boss = FindBossUnit(_bossNpcId);
-        if (boss == null || !boss.IsAlive)
+        if (boss != null && boss.IsAlive)
         {
-            // Босс мёртв или не найден
-            Logger.Info($"BossEngine: {_activeTactic.BossName} dead or not found, deactivating");
-            _activeTactic.OnCombatEnd(Context);
-            _activeTactic = null;
-            return false;
+            _bossLastSeen = DateTime.UtcNow;
+            Context.Boss = boss;
         }
-        Context.Boss = boss;
+        else
+        {
+            var since = DateTime.UtcNow - _bossLastSeen;
+            if (since > TimeSpan.FromSeconds(3))
+            {
+                Logger.Info($"BossEngine: {_activeTactic.BossName} gone for >3s, deactivating");
+                _activeTactic.OnCombatEnd(Context);
+                _activeTactic = null;
+                return false;
+            }
+            // Используем прошлый Context.Boss (если ещё не null) — тактика кастует Attack
+            if (Context.Boss == null || !Context.Boss.IsAlive) return false;
+        }
 
         // Читаем последнее событие из Lua
         if (_tick % 2 == 0) // каждые ~300мс
@@ -202,6 +219,7 @@ end";
         _bossNpcId = unit.NpcId;
         _activeTactic = _tacticFactory[unit.NpcId]();
         Context.Boss = unit;
+        _bossLastSeen = DateTime.UtcNow;
         _activeTactic.OnCombatStart(Context);
         _hook.ExecuteLua($"SendChatMessage('Бой на {_activeTactic.BossName}!','SAY')", 150);
         Logger.Info($"BossEngine: {_activeTactic.BossName} combat started! NPC={unit.NpcId}");
@@ -255,12 +273,14 @@ end";
                 return false; // тактика не управляет — обычная ротация
 
             case ActionType.RotateAndAttack:
-                // Face target + полная ротация
+                // Face target + полная ротация. Не ждём подтверждения FaceInstant (возвращает false если
+                // нужно повернуться, но в процессе тика поворот уже применяется — кастуем сразу).
+                // InCombat не проверяем: нужен noCombatCheck вариант чтобы бить Bone Spike и feign death.
                 var target = _objectManager.GetTarget();
-                if (target != null && target.IsAlive && target.InCombat)
+                if (target != null && target.IsAlive)
                 {
-                    if (!_navigation.FaceInstant(player, target)) { }
-                    else _hook.ExecuteLua(enemyCountLua + spellFlagsLua + fullScript, 500);
+                    _navigation.FaceInstant(player, target);
+                    _hook.ExecuteLua(enemyCountLua + spellFlagsLua + fullScript, 500);
                 }
                 return true;
 
@@ -276,18 +296,18 @@ end";
                 return true;
 
             case ActionType.TargetSwitch:
-                // Сменить таргет на NPC
+                // Сменить таргет на NPC по имени (надёжнее чем парсинг GUID из nameplate).
                 if (action.TargetNpcId > 0)
                 {
                     foreach (var u in _objectManager.Units)
                     {
                         try
                         {
-                            if (u.IsAlive && u.NpcId == action.TargetNpcId)
+                            if (u.IsAlive && u.NpcId == action.TargetNpcId && !string.IsNullOrEmpty(u.Name))
                             {
-                                // Таргет через GUID
-                                _hook.ExecuteLua($"WB_R='' for i=1,40 do local u='nameplate'..i if UnitExists(u) then local g=UnitGUID(u) if g then local _,_,_,_,_,npcId=strsplit('-',g) if tonumber(npcId)=={action.TargetNpcId} then TargetUnit(u) break end end end end", 300);
-                                Logger.Info($"BossEngine: target switch → NPC {action.TargetNpcId}");
+                                string esc = u.Name.Replace("'", "\\'");
+                                _hook.ExecuteLua($"TargetUnit('{esc}')", 100);
+                                Logger.Info($"BossEngine: target switch → '{u.Name}' (NPC {action.TargetNpcId})");
                                 break;
                             }
                         }
@@ -335,6 +355,17 @@ public class BossContext
     public bool IsMelee { get; set; }
     public bool IsHealer { get; set; }
     public bool IsTank { get; set; }
+    public bool IsMaster { get; set; }
+    /// <summary>Callback для установки InFrame-позиции из тактики (пишет в BotEngine.InFrameLockedPos).
+    /// Хил и DPS approach сами используют lock. Если null — тактика не может установить.</summary>
+    public Action<float, float, float>? LockInFrame { get; set; }
+    /// <summary>Callback для снятия InFrame-lock (Bone Storm например — слейвы стоят где есть).</summary>
+    public Action? UnlockInFrame { get; set; }
+    /// <summary>Callbacks для управления AoE avoidance (тактика может временно включить на Bone Storm и т.п.).
+    /// SetAoeAvoid(bool) — принудительный override (затирает UI). ClearAoeAvoid — снимает override (возвращает UI).</summary>
+    public Func<bool>? GetAoeAvoid { get; set; }
+    public Action<bool>? SetAoeAvoid { get; set; }
+    public Action? ClearAoeAvoid { get; set; }
 
     public BossContext(EndSceneHook hook, ObjectManager objectManager, ClickToMove ctm, Navigation navigation)
     {

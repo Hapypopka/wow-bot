@@ -161,6 +161,17 @@ public partial class MainWindow : Window
     {
         if (_masterPanel != null) return;
         _masterPanel = new MasterPanel();
+        _masterPanel.OnMarkToggle += (active) =>
+        {
+            // Локально пишем mark всегда + broadcast всем слейвам (на мастере мы уже мастер по определению)
+            if (active) WowBot.Core.Logger.StartMark();
+            else WowBot.Core.Logger.StopMark();
+            if (_botEngine?.Hivemind?.CurrentRole == WowBot.Core.Game.Hivemind.Role.Master)
+            {
+                if (active) _botEngine.Hivemind.CmdMarkStart();
+                else _botEngine.Hivemind.CmdMarkStop();
+            }
+        };
         _masterPanel.OnCommand += (cmd) =>
         {
             if (_botEngine == null) return;
@@ -732,6 +743,17 @@ public partial class MainWindow : Window
                 if (_botEngine == null) return;
                 _botEngine.ToggleRotation();
                 _overlay.UpdateRotation(_botEngine.RotationEnabled);
+            };
+            _overlay.OnMarkToggle += (active) =>
+            {
+                // Локальный mark всегда. Если мы мастер — broadcast всем слейвам.
+                if (active) WowBot.Core.Logger.StartMark();
+                else WowBot.Core.Logger.StopMark();
+                if (_botEngine?.Hivemind?.CurrentRole == WowBot.Core.Game.Hivemind.Role.Master)
+                {
+                    if (active) _botEngine.Hivemind.CmdMarkStart();
+                    else _botEngine.Hivemind.CmdMarkStop();
+                }
             };
             _overlay.OnFollowToggle += () =>
             {
@@ -1387,7 +1409,7 @@ public partial class MainWindow : Window
                 _botEngine.AutoSelectTarget = _overlay.AutoSelectTarget;
                 if (_botEngine.MoveBehindSavedState == null) // не перезаписывать во время Follow
                     _botEngine.MoveBehindEnabled = _overlay.MoveBehindEnabled;
-                _botEngine.AoeAvoidEnabled = _overlay.AoeAvoidEnabled;
+                _botEngine.AoeAvoidUiEnabled = _overlay.AoeAvoidEnabled;
                 _botEngine.MaxTargetRange = _overlay.MaxTargetRange;
                 _botEngine.AoeEnabled = _overlay.AoeEnabled;
                 _botEngine.AoeMinEnemies = _overlay.AoeMinEnemies;

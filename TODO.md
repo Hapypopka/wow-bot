@@ -48,6 +48,11 @@
 ## Прочее
 - [ ] АоЕ починить на сове (Balance Druid)
 - [ ] Доделать рендж
+- [ ] **Traceline `0x7A3B70`** — native raycast LoS. Проверять line-of-sight перед кастом, не пуллить через стены, не кастовать в моба за колонной. Закрывает давний пункт "Raycast LoS".
+- [ ] **FunctionIsOutdoors `0x71B7F0`** — "я под небом?" для маунта/хартстоуна, заменить кривую Lua-проверку
+- [ ] **FunctionUnitOnRightClick `0x731260`** / **GameobjectOnRightClick `0x711140`** — native interact, стабильнее чем Lua `InteractUnit` (работает на трупах, flight master'ах, при gm on)
+- [ ] **FunctionSetTarget `0x524BF0`** — выбор таргета без Lua, быстрее и не ломается protected-функциями в бою
+- [ ] **DebugIgnoreDeadTarget** — временный дебаг-флаг в BotEngine=true, убрать/сделать чекбокс после тестов на feign death
 - [ ] Автоматическое принятие сделки
 - [ ] Слейвы долго появляются в панели мастера (~50 сек на 5 слейвов, WB_HIVE_REG хранит только последний)
 - [ ] ДК танк — выбор роли танк/дд в оверлее

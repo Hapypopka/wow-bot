@@ -766,6 +766,20 @@ public partial class OverlayWindow : Window
         InitializeComponent();
     }
 
+    // --- Mark log button: toggle start/stop, шлёт всем слейвам если мы мастер ---
+    private bool _markActive;
+    public event Action<bool>? OnMarkToggle; // true=start, false=stop
+
+    private void BtnMark_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true; // не открывать главное меню
+        _markActive = !_markActive;
+        BtnMark.Background = _markActive
+            ? new SolidColorBrush(Color.FromRgb(0xc4, 0x3a, 0x3a)) // красный — активно
+            : new SolidColorBrush(Color.FromRgb(0x3a, 0x3d, 0x45)); // серый — неактивно
+        OnMarkToggle?.Invoke(_markActive);
+    }
+
     // --- Main button: click = menu, drag = move ---
     private void MainButton_Click(object sender, MouseButtonEventArgs e)
     {

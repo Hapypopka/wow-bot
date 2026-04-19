@@ -18,6 +18,7 @@ public class EndSceneHook : IDisposable, IGameHook
     private uint _terrainClickAddr;    // структура TerrainClick (24 байт: GUID8 + XYZ12 + btn4)
     private uint _ctmCallAddr;          // структура CTM call (20 байт: clickType4 + GUID8 + XYZ12 + precision4)
     private uint _ctmStopAddr;          // playerBase (4 байт) для thiscall PlayerClickToMoveStop
+    private uint _setFacingAddr;        // 12 байт: playerBase(4) + angle(4) + tickCount(4) для UnitSetFacing
     private uint _endSceneAddr;
     private byte[] _originalBytes = Array.Empty<byte>();
     private int _stolenByteCount;
@@ -219,6 +220,7 @@ public class EndSceneHook : IDisposable, IGameHook
         _terrainClickAddr = _returnPtrAddr + 4;     // 24 байт: GUID(8) + X(4) + Y(4) + Z(4) + btn(4)
         _ctmCallAddr = _terrainClickAddr + 24;       // 28 байт: clickType(4) + GUID(8) + X(4) + Y(4) + Z(4) + precision(4)
         _ctmStopAddr = _ctmCallAddr + 32;             // 4 байт: playerBase для PlayerClickToMoveStop
+        _setFacingAddr = _ctmStopAddr + 4;             // 12 байт: playerBase + angle + tickCount
 
         _memory.WriteString(_botStringAddr, "bot");
         _memory.WriteString(_varNameAddr, "WB_R");
@@ -278,6 +280,11 @@ public class EndSceneHook : IDisposable, IGameHook
         // --- Проверка flag == 7 (native CTM Stop — force server position sync) ---
         asm.Add(0x83); asm.Add(0xF8); asm.Add(0x07); // cmp eax, 7
         int jeCtmStopPos = asm.Count;
+        asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
+
+        // --- Проверка flag == 8 (UnitSetFacing — thiscall с angle+tickCount) ---
+        asm.Add(0x83); asm.Add(0xF8); asm.Add(0x08); // cmp eax, 8
+        int jeSetFacingPos = asm.Count;
         asm.Add(0x0F); asm.Add(0x84); asm.AddRange(new byte[4]); // je rel32
 
         // --- Ничего не делаем → skip (rel32) ---
@@ -440,6 +447,31 @@ public class EndSceneHook : IDisposable, IGameHook
 
         EmitSetFlag(asm, 2);
 
+        // jmp to skip
+        int jmpSkip7Pos = asm.Count;
+        asm.Add(0xE9); asm.AddRange(new byte[4]);
+
+        // === flag==8: CGUnit_C::SetFacing — thiscall, порядок push как в AmeisenBot ===
+        // struct layout: playerBase(4) + angle(4) + tickCount(4)
+        // AmeisenBot делает: push angle, push tickCount (стек [tickCount, angle]).
+        // Значит сигнатура (this, tickCount, angle) или функция callerspec специфична.
+        int setFacingLabel = asm.Count;
+        { int off = setFacingLabel - jeSetFacingPos - 6;
+          asm[jeSetFacingPos+2]=(byte)(off&0xFF); asm[jeSetFacingPos+3]=(byte)((off>>8)&0xFF);
+          asm[jeSetFacingPos+4]=(byte)((off>>16)&0xFF); asm[jeSetFacingPos+5]=(byte)((off>>24)&0xFF); }
+
+        // push [_setFacingAddr + 4] — angle (первый push)
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(_setFacingAddr + 4));
+        // push [_setFacingAddr + 8] — tickCount (второй push)
+        asm.Add(0xFF); asm.Add(0x35); asm.AddRange(BitConverter.GetBytes(_setFacingAddr + 8));
+        // mov ecx, [_setFacingAddr + 0] — playerBase (this)
+        asm.Add(0x8B); asm.Add(0x0D); asm.AddRange(BitConverter.GetBytes(_setFacingAddr));
+        // call UnitSetFacing (0x0072EA50) — thiscall, callee cleanup (не чистим стек сами).
+        asm.Add(0xB8); asm.AddRange(BitConverter.GetBytes((uint)0x0072EA50));
+        asm.Add(0xFF); asm.Add(0xD0); // call eax
+
+        EmitSetFlag(asm, 2);
+
         // === skip label — patch jmp rel32 ===
         int skipLabel = asm.Count;
         { // jmpSkipPos (E9 rel32)
@@ -483,6 +515,13 @@ public class EndSceneHook : IDisposable, IGameHook
             asm[jmpSkip6Pos + 2] = (byte)((off >> 8) & 0xFF);
             asm[jmpSkip6Pos + 3] = (byte)((off >> 16) & 0xFF);
             asm[jmpSkip6Pos + 4] = (byte)((off >> 24) & 0xFF);
+        }
+        { // jmpSkip7Pos (E9 rel32) — set facing
+            int off = skipLabel - jmpSkip7Pos - 5;
+            asm[jmpSkip7Pos + 1] = (byte)(off & 0xFF);
+            asm[jmpSkip7Pos + 2] = (byte)((off >> 8) & 0xFF);
+            asm[jmpSkip7Pos + 3] = (byte)((off >> 16) & 0xFF);
+            asm[jmpSkip7Pos + 4] = (byte)((off >> 24) & 0xFF);
         }
 
         // popfd / popad
@@ -586,6 +625,21 @@ public class EndSceneHook : IDisposable, IGameHook
         if (!_isHooked) return false;
         _memory.WriteUInt32(_ctmStopAddr, playerBase);
         _memory.WriteUInt32(_flagAddr, 7);
+        return WaitForCompletion(timeoutMs);
+    }
+
+    /// <summary>
+    /// Вызывает native CGUnit_C::SetFacing(this, angle, tickCount) @ 0x0072EA50.
+    /// Поворачивает юнита на заданный угол с синком серверу (MSG_MOVE_SET_FACING).
+    /// В отличие от прямой записи Offsets.UnitRotation — видит сервер и корректно кастуются спеллы.
+    /// </summary>
+    public bool CallSetFacing(uint playerBase, float angle, int timeoutMs = 200)
+    {
+        if (!_isHooked) return false;
+        _memory.WriteUInt32(_setFacingAddr, playerBase);
+        _memory.WriteFloat(_setFacingAddr + 4, angle);
+        _memory.WriteInt32(_setFacingAddr + 8, Environment.TickCount);
+        _memory.WriteUInt32(_flagAddr, 8);
         return WaitForCompletion(timeoutMs);
     }
 

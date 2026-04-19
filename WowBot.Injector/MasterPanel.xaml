@@ -15,6 +15,11 @@
                 <TextBlock Text="Master" FontSize="11" FontWeight="Bold"
                            Foreground="#C8A84E" VerticalAlignment="Center"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Border x:Name="BtnMark" Width="12" Height="12" Background="#3a3d45" CornerRadius="6"
+                            BorderBrush="#5a5d65" BorderThickness="1" Cursor="Hand"
+                            VerticalAlignment="Center" Margin="0,0,8,0"
+                            ToolTip="Пометка лога — клик старт/стоп. Шлёт всем слейвам."
+                            MouseLeftButtonDown="BtnMark_Click"/>
                     <Button x:Name="BtnCollapse" Content="▬" FontSize="9" Foreground="#555"
                             Background="Transparent" BorderThickness="0" Width="22"
                             Cursor="Hand" Click="BtnCollapse_Click" ToolTip="Свернуть/развернуть"/>
@@ -48,53 +53,44 @@
                     Background="#1a1a28" Foreground="#C8A84E" BorderThickness="0"
                     Height="24" Margin="1,2,1,2" Cursor="Hand" ToolTip="Follow + авто-ассист в бою"/>
 
-            <!-- GUID + Wipe + AutoPve в одну линию -->
-            <Grid Margin="1,0,1,2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Button x:Name="BtnRefreshGuid" Content="🔄" FontSize="14" Grid.Column="0"
+            <!-- GUID / modes — 2 ряда по 5, иначе в 300px не помещается -->
+            <UniformGrid Columns="5" Margin="1,0,1,2">
+                <Button x:Name="BtnRefreshGuid" Content="🔄" FontSize="14"
                         Click="BtnRefreshGuid_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#555" BorderThickness="0"
-                        Height="32" Width="36" Cursor="Hand" ToolTip="GUID — слейвы перенаходят мастера" Padding="0"/>
-                <Button x:Name="BtnGuidByTarget" Content="🎯" FontSize="14" Grid.Column="1"
+                        Height="32" Margin="0,0,2,0" Cursor="Hand" ToolTip="GUID — слейвы перенаходят мастера" Padding="0"/>
+                <Button x:Name="BtnGuidByTarget" Content="🎯" FontSize="14"
                         Click="BtnGuidByTarget_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#555" BorderThickness="0"
-                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand"
+                        Height="32" Margin="0,0,2,0" Cursor="Hand"
                         ToolTip="GUID→таргет — слейвы следуют за таргетом мастера" Padding="0"/>
-                <Button x:Name="BtnWipe" Content="💀" FontSize="14" Grid.Column="3"
+                <Button x:Name="BtnWipe" Content="💀" FontSize="14"
                         Click="BtnWipe_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
-                        Height="32" Width="36" Cursor="Hand" ToolTip="Вайп — хилы стоп" Padding="0"/>
-                <Button x:Name="BtnAutoPve" Content="⚔" FontSize="14" Grid.Column="4"
+                        Height="32" Margin="0,0,2,0" Cursor="Hand" ToolTip="Вайп — хилы стоп" Padding="0"/>
+                <Button x:Name="BtnAutoPve" Content="⚔" FontSize="14"
                         Click="BtnAutoPve_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
-                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Авто-тактики на боссах" Padding="0"/>
-                <Button x:Name="BtnInFrame" Content="◎" FontSize="14" Grid.Column="5"
+                        Height="32" Margin="0,0,2,0" Cursor="Hand" ToolTip="Авто-тактики на боссах" Padding="0"/>
+                <Button x:Name="BtnInFrame" Content="◎" FontSize="14"
                         Click="BtnInFrame_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
-                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Во фрейм — слейвы в кольце вокруг таргета" Padding="0"/>
-                <Button x:Name="BtnInteract" Content="🤝" FontSize="14" Grid.Column="6"
+                        Height="32" Cursor="Hand" ToolTip="Во фрейм — слейвы в кольце вокруг таргета" Padding="0"/>
+            </UniformGrid>
+            <UniformGrid Columns="5" Margin="1,2,1,2">
+                <Button x:Name="BtnInteract" Content="🤝" FontSize="14"
                         Click="BtnInteract_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
-                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Interact с таргетом" Padding="0"/>
-                <Button x:Name="BtnHeroism" Content="⚡" FontSize="16" Grid.Column="7"
+                        Height="32" Margin="0,0,2,0" Cursor="Hand" ToolTip="Interact с таргетом" Padding="0"/>
+                <Button x:Name="BtnHeroism" Content="⚡" FontSize="16"
                         Click="BtnHeroism_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#e8c840" BorderThickness="0"
-                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Героизм (шаман-слейв)" Padding="0"/>
-                <Button x:Name="BtnGuildTp" Content="🏠" FontSize="14" Grid.Column="8"
+                        Height="32" Margin="0,0,2,0" Cursor="Hand" ToolTip="Героизм (шаман-слейв)" Padding="0"/>
+                <Button x:Name="BtnGuildTp" Content="🏠" FontSize="14"
                         Click="BtnGuildTp_Click" Style="{x:Null}"
                         Background="#1a1a28" Foreground="#888" BorderThickness="0"
-                        Height="32" Width="36" Margin="2,0,0,0" Cursor="Hand" ToolTip="Гильд ТП (/г .g t)" Padding="0"/>
-            </Grid>
+                        Height="32" Margin="0,0,2,0" Cursor="Hand" ToolTip="Гильд ТП (/г .g t)" Padding="0"/>
+            </UniformGrid>
 
             <!-- Slave panel -->
             <StackPanel x:Name="SlavePanel" Margin="0,4,0,0"/>

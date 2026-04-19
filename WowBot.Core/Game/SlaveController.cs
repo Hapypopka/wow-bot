@@ -183,7 +183,10 @@ public class SlaveController
         {
             if (_isFollowMoving)
             {
-                _ctm.Stop();
+                // Native stop: правильно тормозит клиент без инерции (слейв не проскакивает мастера).
+                // Прямая запись ActionStop=0xD в память визуально тормозит плохо — бот по инерции
+                // пробегает дальше если мастер резко останавливался.
+                _ctm.NativeStop();
                 NavEngine?.Stop();
                 _isFollowMoving = false;
                 Logger.Info($"SlaveCtrl: arrived (dist={dist:F1})");

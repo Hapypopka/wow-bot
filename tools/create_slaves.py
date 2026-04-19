@@ -1,5 +1,5 @@
 """
-Создаёт 5 тестовых персонажей для слейвов (аккаунты SLAVE1..5),
+Создаёт 6 тестовых персонажей для слейвов (аккаунты SLAVE1..6),
 клонируя данные из существующих RNDBOT'ов того же класса с нужной спекой.
 
 Классы/спеки:
@@ -8,6 +8,7 @@
   SLAVE3: Balance Druid    (Night Elf — Moonkin)
   SLAVE4: Shadow Priest    (Night Elf)
   SLAVE5: Retri Paladin    (Human)
+  SLAVE6: Resto Shaman hil (Draenei)  — резерв на случай поломки SLAVE2
 
 Экипировка RNDBOT'а УДАЛЯЕТСЯ (BIS будет отдельным шагом).
 
@@ -28,6 +29,7 @@ TARGETS = [
     ('Совабал', 'SLAVE3', 11, 0, 4),   # Balance Druid, Night Elf
     ('Шпшип',   'SLAVE4', 5, 2, 4),    # Shadow Priest, Night Elf
     ('Ретпал',  'SLAVE5', 2, 2, 1),    # Ret Paladin, Human
+    ('Ршамка',  'SLAVE6', 7, 2, 11),   # Resto Shaman, Draenei (копия Ршамхил)
 ]
 
 CLASS_MASK = {1: 0x1, 2: 0x2, 3: 0x4, 4: 0x8, 5: 0x10, 6: 0x20, 7: 0x40, 8: 0x80, 9: 0x100, 11: 0x400}
@@ -337,7 +339,7 @@ def main():
         SELECT c.guid, c.name, c.class, c.race, c.level, a.username
         FROM wotlkcharacters.characters c
         JOIN wotlkrealmd.account a ON c.account=a.id
-        WHERE a.username IN ('TEST','SLAVE1','SLAVE2','SLAVE3','SLAVE4','SLAVE5')
+        WHERE a.username IN ('TEST','SLAVE1','SLAVE2','SLAVE3','SLAVE4','SLAVE5','SLAVE6')
         ORDER BY a.id;
     """, fetch=True)
     for row in rows:
