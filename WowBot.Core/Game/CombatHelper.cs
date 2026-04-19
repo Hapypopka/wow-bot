@@ -213,6 +213,7 @@ public class CombatHelper
         string? aoeSpell = playerClass switch
         {
             "DRUID" when specName?.Contains("Balance") == true => hurricaneEnabled ? "Гроза" : null,
+            "DEATHKNIGHT" => spellFlagsLua?.Contains("DnD=true") == true ? "WB_DND" : null,
             "HUNTER" => spellFlagsLua?.Contains("Volley=true") == true ? "WB_VOLLEY" : null,
             "MAGE" when specName?.Contains("Fire") == true => spellFlagsLua?.Contains("Flamestrike=true") == true ? "WB_FLAMESTRIKE" : null,
             "MAGE" when specName?.Contains("Frost") == true => spellFlagsLua?.Contains("Blizzard=true") == true ? "WB_BLIZZARD" : null,
@@ -226,6 +227,7 @@ public class CombatHelper
         int checkSpellId = aoeSpell switch
         {
             "WB_VOLLEY" => 58433,       // Volley rank 6
+            "WB_DND" => 43265,          // Death and Decay (CastSpellByName возьмёт максимальный ранг)
             "WB_FLAMESTRIKE" => 42926,  // Flamestrike rank 9
             "WB_BLIZZARD" => 42940,     // Blizzard rank 8
             _ => 48467                   // Hurricane rank 6 (default Druid Balance)
@@ -267,6 +269,8 @@ public class CombatHelper
 
         if (aoeSpell == "WB_VOLLEY")
             _hook.ExecuteLua("local n=GetSpellInfo(1510) if n then CastSpellByName(n) end", 200);
+        else if (aoeSpell == "WB_DND")
+            _hook.ExecuteLua("local n=GetSpellInfo(43265) if n then CastSpellByName(n) end", 200);
         else if (aoeSpell == "WB_FLAMESTRIKE")
             _hook.ExecuteLua("local n=GetSpellInfo(42926) if n then CastSpellByName(n) end", 200);
         else if (aoeSpell == "WB_BLIZZARD")

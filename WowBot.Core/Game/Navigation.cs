@@ -92,6 +92,19 @@ public class Navigation
     private bool _turnPending;
 
     /// <summary>
+    /// Принудительный вызов native SetFacing (обход проверки alreadyFacing).
+    /// Нужен когда клиент-серверная ориентация рассинхронизирована — локально orientation
+    /// правильная, но сервер думает иначе (например после выхода из Bone Spike Impaled).
+    /// Шлёт серверу setfacing-пакет независимо от локального значения.
+    /// </summary>
+    public void ForceFaceSync(WowUnit player, WowUnit target)
+    {
+        float needed = GetAngleTo(player, target);
+        Logger.Log(LogCat.Follow, $"ForceFaceSync: needed={needed:F2} cur={player.Facing:F2} tgt={target.Name}");
+        _hook.CallSetFacing(player.BaseAddress, needed, timeoutMs: 200);
+    }
+
+    /// <summary>
     /// Поворот к цели через CGPlayer_C__ClickToMove.
     /// Пробуем все face clickTypes: 1=FaceTarget(GUID), 2=Face(point).
     /// </summary>

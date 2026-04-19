@@ -143,6 +143,11 @@ public class MarrowgarTactic : IBossTactic
                 Logger.Info("Marrowgar: Impaled на игроке — стою в шипе, не двигаюсь");
                 Say(ctx, "Я в шипе!");
             }
+            // Пока в шипе — держим target на боссе, НЕ на Bone Spike (в котором мы сами).
+            // Попытки face на шип в своей позиции = angle хаос → портит локальный orientation
+            // и после выхода facing клиент-сервер рассинхронизированы.
+            if (ctx.Boss != null && ctx.Player.TargetGuid != ctx.Boss.Guid)
+                return TacticAction.SwitchTarget(ctx.Boss.NpcId);
             return TacticAction.Attack;
         }
         if (_wasImpaled)
@@ -151,6 +156,11 @@ public class MarrowgarTactic : IBossTactic
             Logger.Info("Marrowgar: Impaled снят — возврат во фрейм");
             if (!ctx.IsMaster && !ctx.IsTank)
                 ApplyInFrameLock(ctx);
+            // Facing клиент-сервер рассинхронизирован после выхода из шипа: локально мы смотрим
+            // на босса (cur=needed), но сервер считает что мы развёрнуты как в шипе.
+            // ForceFaceSync вызывает native SetFacing (0x72EA50) в обход проверки alreadyFacing —
+            // шлёт setfacing-пакет серверу принудительно.
+            try { ctx.Navigation.ForceFaceSync(ctx.Player, ctx.Boss); } catch { }
         }
 
         // Детект Bone Storm через ауру на боссе. Aura читается нестабильно — держим активным
@@ -196,15 +206,24 @@ public class MarrowgarTactic : IBossTactic
             Say(ctx, "Вихрь кончился, встаю во фрейм");
         }
 
-        // Bone Storm — слейв стоит и кастует (Attack = face+rotation без approach/MoveBehind).
-        // AoE avoidance на верхнем уровне BotEngine.Tick имеет приоритет и уведёт из лужи если надо.
-        // DoNothing нельзя — SlaveAttackTick вызовется и MoveBehind начнёт гонять вокруг хитбокса.
-        if (_phase == Phase.BoneStorm) return TacticAction.Attack;
-
-        // Bone Spike — свич для не-хилов. Сканируем ObjectManager напрямую.
+        // Bone Spike — свич для не-хилов. Работает и во время вихря (шипы спавнятся и в Bone Storm).
+        // Для мили: переключаемся только если шип в мили-радиусе (не бежим по арене за далёким).
+        // Для рендж: любой шип = свич (всё равно в радиусе каста).
         if (!ctx.IsHealer)
         {
             var spike = FindBoneSpike(ctx);
+
+            if (spike != null && ctx.IsMelee)
+            {
+                // Формула как в CombatExecutor/CombatPositioning: combat reach цели + игрока + 4/3, min 5.
+                float meleeRange = MathF.Max(spike.CombatReach + ctx.Player!.CombatReach + 4f / 3f, 5f);
+                float dist = ctx.Player.DistanceTo2D(spike);
+                if (dist > meleeRange)
+                {
+                    spike = null; // шип далеко — мили игнорит, бьёт текущий target
+                }
+            }
+
             if (spike != null)
             {
                 if (!_hasBoneSpike)
@@ -227,8 +246,17 @@ public class MarrowgarTactic : IBossTactic
                 _hasBoneSpike = false;
                 Logger.Info("Marrowgar: Bone Spike убит — возврат на босса");
                 Say(ctx, "Шип мертв, возврат на босса");
+                // Принудительный switch target на босса — иначе у игрока в игре остаётся мёртвый шип
+                // как target, и CombatExecutor делает Normal approach к его ghost-координатам.
+                return TacticAction.SwitchTarget(ctx.Boss.NpcId);
             }
         }
+
+        // Bone Storm и нет подходящего шипа → стоим и бьём текущий target.
+        // Attack = face+rotation без approach/MoveBehind. AoE avoidance на верхнем уровне BotEngine.Tick
+        // уведёт из лужи если надо. DoNothing нельзя — SlaveAttackTick вызовется и MoveBehind начнёт
+        // гонять вокруг хитбокса.
+        if (_phase == Phase.BoneStorm) return TacticAction.Attack;
 
         // InFrame lock обновляется КАЖДЫЙ тик — всегда ровно сзади текущей позиции/facing босса.
         ApplyInFrameLock(ctx);

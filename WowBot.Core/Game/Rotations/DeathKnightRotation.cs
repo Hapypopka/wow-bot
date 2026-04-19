@@ -34,7 +34,7 @@ public class DeathKnightRotation : ICombatRotation
         -- BLOOD (tank)
         if TryTaunt(56222) then return end
         if TryDefCD(48792,true, 55233,true, 49222,true) then return end
-        if WB_S.AoEThreat~=false and (WB_NCE or 0)>=2 and IR(43265) then Cast(43265) return end
+        -- DnD (43265) кастится через C# CombatHelper.TryGroundAoE (нужен CastTerrainClick)
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
         if WB_S.Pest~=false and hasFF and hasBP and IR(50842) then Cast(50842) return end
@@ -55,7 +55,7 @@ public class DeathKnightRotation : ICombatRotation
         -- AoE: Howling Blast (при Rime proc — free+instant, иначе по CD) + Blood Boil + DnD
         if WB_S.HB_aoe~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(49184) then Cast(49184) return end
         if WB_S.BloodBoil~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(48721) then Cast(48721) return end
-        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        -- DnD (43265) кастится через C# CombatHelper.TryGroundAoE (нужен CastTerrainClick)
         if WB_S.UA~=false and IR(51271) then Cast(51271) return end
         if WB_S.HB~=false and HB(59052) and IR(49184) then Cast(49184) return end
         if WB_S.Oblit~=false and IR(49020) then Cast(49020) return end
@@ -69,8 +69,7 @@ public class DeathKnightRotation : ICombatRotation
         if WB_S.IT~=false and not hasFF then Cast(45477) return end
         if WB_S.PS~=false and not hasBP then Cast(45462) return end
         if WB_S.Pest~=false and hasFF and hasBP and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(50842) then Cast(50842) return end
-        -- DnD поднят выше: в AoE приоритетнее одиночных ударов
-        if WB_S.DnD~=false and (WB_NCET or 0)>=(WB_AEMIN or 3) and IR(43265) then Cast(43265) return end
+        -- DnD (43265) кастится через C# CombatHelper.TryGroundAoE (нужен CastTerrainClick)
         -- Sudden Doom proc (49530 buff ID) — free Death Coil, не тратит RP
         if WB_S.DC~=false and HB(49530) and IR(47541) then Cast(47541) return end
         if WB_S.DC~=false and UnitMana('player')>80 and IR(47541) then Cast(47541) return end

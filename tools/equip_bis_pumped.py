@@ -31,6 +31,7 @@ SLAVES = [
 # Формат: (name, class_id, spec_name)
 SLAVES_BY_NAME = [
     ('Ршамка', 7, 'resto_shaman'),
+    ('Ресторчик', 7, 'resto_shaman'),
 ]
 
 # ItemMod (stat_type) константы WotLK 3.3.5

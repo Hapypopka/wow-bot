@@ -1,5 +1,12 @@
 # Log
 
+## [2026-04-20] fix | DK Death and Decay — ground click через TryGroundAoE
+- Симптом: DK кастил DnD (43265), появлялся зелёный круг прицела, но клика по земле не происходило → каст висел и отменялся.
+- Причина: `Cast(43265)` стоял в Lua-ротации (Blood:37, Frost:58, Unholy:73 — все три спека), но никто не вызывал `_hook.CastTerrainClick(x,y,z)` после каста. У Druid Hurricane и Hunter Volley это делается в `CombatHelper.TryGroundAoE` — DK туда не было добавлено.
+- Фикс: добавлен `"DEATHKNIGHT" => DnD=true ? "WB_DND" : null` в switch TryGroundAoE, обработка checkSpellId=43265 и каст через GetSpellInfo. В Lua ротациях DK строки `Cast(43265)` заменены на комментарии.
+- Тоггл `DnD` в OverlayWindow для всех 3 спеков уже был → флаг через `WB_S.DnD=true` шёл в `SpellFlagsLua`, теперь читается C# хелпером.
+Затронуты: [[combat-system]], [[aoe-system]], [[death-knight]]
+
 ## [2026-04-19] feat | Mark logs — кнопка пометки интервалов
 - Кнопка-кружок (12x12) в шапке оверлея и мастер-панели. Серый → клик → красный (mark активен) → клик → серый.
 - Logger.StartMark/StopMark открывают/закрывают `wowbot_<Char>_mark.log`. Пока активен — каждая запись в основной лог дублируется в mark-файл.
