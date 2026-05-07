@@ -47,6 +47,8 @@ internal sealed class WorldClient : IDisposable
     private const ushort SMSG_WHO                = 0x63;
     private const uint   CMSG_CONTACT_LIST       = 0x66;
     private const ushort SMSG_CONTACT_LIST       = 0x67;
+    private const uint   CMSG_NAME_QUERY         = 0x50;
+    private const ushort SMSG_NAME_QUERY_RESPONSE = 0x51;
 
     private readonly TcpClient _tcp = new();
     private NetworkStream _stream = null!;
@@ -61,6 +63,14 @@ internal sealed class WorldClient : IDisposable
 
     private CancellationTokenSource? _heartbeatCts;
     private Task? _heartbeatTask;
+
+    // кэш resolve'нутых имён по GUID
+    private readonly Dictionary<ulong, string> _nameCache = new();
+    private readonly HashSet<ulong> _pendingNameQueries = new();
+
+    // command mode — реагируем на шёпоты с "!"
+    public bool CommandMode { get; set; }
+    private readonly Queue<(ulong senderGuid, string command)> _pendingCommands = new();
 
     public WorldClient(ushort build) { _build = build; }
 
@@ -154,7 +164,7 @@ internal sealed class WorldClient : IDisposable
         throw new Exception("no SMSG_CHAR_ENUM in 30 packets");
     }
 
-    public async Task<WorldEntryStats> EnterWorldAsync(ulong charGuid, int maxPackets = 50)
+    public async Task<WorldEntryStats> EnterWorldAsync(ulong charGuid, int maxPackets = 300)
     {
         _charGuid = charGuid;
         var payload = new byte[8];
@@ -171,10 +181,12 @@ internal sealed class WorldClient : IDisposable
 
         // Читаем N пакетов или до LOGIN_VERIFY_WORLD — БЕЗ таймаутов на чтение,
         // иначе orphan read десинкает RC4.
+        var debug = Environment.GetEnvironmentVariable("DEBUG_OPCODES") == "1";
         for (var i = 0; i < maxPackets; i++)
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            if (debug) Console.WriteLine($"[ENTER #{i}] op=0x{op:X4} size={size}");
 
             switch (op)
             {
@@ -284,60 +296,85 @@ internal sealed class WorldClient : IDisposable
     public async Task ContactListAsync(TimeSpan? wait = null)
     {
         var payload = new byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(payload, 0x07); // friend|ignore|mute
+        BinaryPrimitives.WriteUInt32LittleEndian(payload, 0x07);
         await SendCmsgEncrypted(CMSG_CONTACT_LIST, payload);
         Console.WriteLine($"[/friend] -> CMSG_CONTACT_LIST");
 
         var deadline = DateTime.UtcNow + (wait ?? TimeSpan.FromSeconds(5));
-        while (DateTime.UtcNow < deadline)
+        List<ContactEntry>? entries = null;
+        while (DateTime.UtcNow < deadline && entries == null)
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
-            if (op == SMSG_CONTACT_LIST)
-            {
-                ParseContactList(body);
-                return;
-            }
-            if (op == SMSG_TIME_SYNC_REQ)
-            {
-                var counter = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(0, 4));
-                var resp = new byte[8];
-                BinaryPrimitives.WriteUInt32LittleEndian(resp.AsSpan(0, 4), counter);
-                BinaryPrimitives.WriteUInt32LittleEndian(resp.AsSpan(4, 4), (uint)Environment.TickCount);
-                await SendCmsgEncrypted(CMSG_TIME_SYNC_RESP, resp);
-            }
+            if (op == SMSG_CONTACT_LIST) entries = ParseContactListBody(body);
+            else if (op == SMSG_TIME_SYNC_REQ) await RespondTimeSync(body);
+            else if (op == SMSG_NAME_QUERY_RESPONSE) HandleNameQueryResponse(body);
+            else if (op == SMSG_MESSAGECHAT) HandleChatMessage(body);
         }
-        Console.WriteLine($"[/friend] !! ответ не пришёл");
+        if (entries == null) { Console.WriteLine($"[/friend] !! ответ не пришёл"); return; }
+
+        // Запросили имена для всех неизвестных guid'ов
+        foreach (var e in entries) await NameQueryAsync(e.Guid);
+
+        // Соберём ответы — ждём пока в кэше появятся имена либо до таймаута
+        var resolveDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        while (DateTime.UtcNow < resolveDeadline && entries.Any(e => !_nameCache.ContainsKey(e.Guid)))
+        {
+            var (size, op) = await ReadEncryptedHeader();
+            var body = await ReadExactly(size - 2);
+            if (op == SMSG_NAME_QUERY_RESPONSE) HandleNameQueryResponse(body);
+            else if (op == SMSG_TIME_SYNC_REQ) await RespondTimeSync(body);
+            else if (op == SMSG_MESSAGECHAT) HandleChatMessage(body);
+        }
+
+        Console.WriteLine($"[/friend] <- {entries.Count} контактов:");
+        foreach (var e in entries)
+        {
+            var name = _nameCache.TryGetValue(e.Guid, out var n) ? n : $"0x{e.Guid:X16}";
+            var kind = (e.Flags & 1) != 0 ? "friend" : (e.Flags & 2) != 0 ? "ignore" : "mute";
+            var status = e.Online ? $"online lvl{e.Level} cls={e.Cls} area={e.Area}" : "offline";
+            var noteStr = e.Note.Length > 0 ? $" note='{e.Note}'" : "";
+            Console.WriteLine($"   [{kind}] {name,-15} {status}{noteStr}");
+        }
     }
 
-    private static void ParseContactList(byte[] body)
+    private sealed record ContactEntry(ulong Guid, uint Flags, string Note, bool Online, byte Status, uint Area, uint Level, uint Cls);
+
+    private static List<ContactEntry> ParseContactListBody(byte[] body)
     {
         var br = new BinaryReader(new MemoryStream(body));
-        var listFlags = br.ReadUInt32();
+        br.ReadUInt32(); // list flags
         var count = br.ReadUInt32();
-        Console.WriteLine($"[/friend] <- {count} контактов:");
+        var list = new List<ContactEntry>();
         for (var i = 0; i < count; i++)
         {
             var guid = br.ReadUInt64();
             var contactFlags = br.ReadUInt32();
             var note = ReadCString(br);
-            var kind = (contactFlags & 1) != 0 ? "friend" : (contactFlags & 2) != 0 ? "ignore" : "mute";
-            string extra = "";
-            if ((contactFlags & 1) != 0) // FRIEND
+            byte status = 0; uint area = 0, level = 0, cls = 0; bool online = false;
+            if ((contactFlags & 1) != 0)
             {
-                var status = br.ReadByte();
+                status = br.ReadByte();
                 if (status > 0)
                 {
-                    var area = br.ReadUInt32();
-                    var level = br.ReadUInt32();
-                    var cls = br.ReadUInt32();
-                    extra = $" online status={status} area={area} lvl{level} cls={cls}";
+                    online = true;
+                    area = br.ReadUInt32();
+                    level = br.ReadUInt32();
+                    cls = br.ReadUInt32();
                 }
-                else extra = " offline";
             }
-            var noteStr = note.Length > 0 ? $" note='{note}'" : "";
-            Console.WriteLine($"   [{kind}] guid=0x{guid:X16}{extra}{noteStr}");
+            list.Add(new ContactEntry(guid, contactFlags, note, online, status, area, level, cls));
         }
+        return list;
+    }
+
+    private async Task RespondTimeSync(byte[] body)
+    {
+        var counter = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(0, 4));
+        var resp = new byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(resp.AsSpan(0, 4), counter);
+        BinaryPrimitives.WriteUInt32LittleEndian(resp.AsSpan(4, 4), (uint)Environment.TickCount);
+        await SendCmsgEncrypted(CMSG_TIME_SYNC_RESP, resp);
     }
 
     public Task SayAsync(string text)         => SendChatAsync(0x00, null, text);
@@ -404,11 +441,183 @@ internal sealed class WorldClient : IDisposable
         Console.WriteLine($"[WORLD] !! PARTY_COMMAND_RESULT не пришёл за {wait.TotalSeconds}s");
     }
 
-    private static void PrintChatMessage(byte[] body)
+    private async Task ProcessPendingCommands()
+    {
+        // Перекладываем в локальный список — нельзя dequeue пока имя не зарезолвлено
+        var stillPending = new Queue<(ulong, string)>();
+        while (_pendingCommands.Count > 0)
+        {
+            var (guid, cmd) = _pendingCommands.Dequeue();
+            if (!_nameCache.TryGetValue(guid, out var senderName))
+            {
+                stillPending.Enqueue((guid, cmd)); // ждём имя
+                continue;
+            }
+            if (senderName == "?") continue; // имя не нашлось
+
+            var response = await ExecuteCommand(senderName, cmd);
+            if (response != null)
+            {
+                Console.WriteLine($"  [CMD] {senderName} '{cmd}' -> ответ '{response}'");
+                await WhisperAsync(senderName, response);
+            }
+        }
+        foreach (var p in stillPending) _pendingCommands.Enqueue(p);
+    }
+
+    private async Task<string?> ExecuteCommand(string senderName, string cmd)
+    {
+        var parts = cmd[1..].Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return null;
+        var verb = parts[0].ToLowerInvariant();
+        var arg = parts.Length > 1 ? parts[1] : "";
+
+        return verb switch
+        {
+            "ping"   => "pong",
+            "help"   => "Команды: !ping !pos !who [name] !invite <name> !help",
+            "pos"    => $"map={_map} pos=({_x:F0}, {_y:F0}, {_z:F0})",
+            "who"    => await DoWhoQuick(arg),
+            "invite" => await DoInvite(arg),
+            _        => $"Неизвестная команда '{verb}'. !help"
+        };
+    }
+
+    private async Task<string> DoWhoQuick(string nameOrLevel)
+    {
+        // быстро — пошлём /who и парсим первый ответ
+        uint min = 1, max = 80;
+        var pattern = "";
+        if (uint.TryParse(nameOrLevel, out var lv)) { min = lv; max = lv; }
+        else pattern = nameOrLevel;
+
+        using var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(min); w.Write(max);
+        w.Write(Encoding.UTF8.GetBytes(pattern)); w.Write((byte)0);
+        w.Write((byte)0);
+        w.Write(0xFFFFFFFFu); w.Write(0xFFFFFFFFu);
+        w.Write((uint)0); w.Write((uint)0);
+        await SendCmsgEncrypted(CMSG_WHO, ms.ToArray());
+
+        // Ждём SMSG_WHO до 2 сек
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < deadline)
+        {
+            var (size, op) = await ReadEncryptedHeader();
+            var body = await ReadExactly(size - 2);
+            if (op == SMSG_WHO)
+            {
+                var br = new BinaryReader(new MemoryStream(body));
+                var disp = br.ReadUInt32();
+                var match = br.ReadUInt32();
+                return $"найдено {match} (показано {disp})";
+            }
+            if (op == SMSG_TIME_SYNC_REQ) await RespondTimeSync(body);
+            else if (op == SMSG_NAME_QUERY_RESPONSE) HandleNameQueryResponse(body);
+            else if (op == SMSG_MESSAGECHAT) HandleChatMessage(body);
+        }
+        return "(/who timeout)";
+    }
+
+    private async Task<string> DoInvite(string targetName)
+    {
+        if (string.IsNullOrEmpty(targetName)) return "укажи имя: !invite <name>";
+        using var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(Encoding.UTF8.GetBytes(targetName)); w.Write((byte)0);
+        w.Write((uint)0);
+        await SendCmsgEncrypted(CMSG_GROUP_INVITE, ms.ToArray());
+        return $"инвайт ушёл -> {targetName}";
+    }
+
+    public async Task NameQueryAsync(ulong guid)
+    {
+        if (_nameCache.ContainsKey(guid) || _pendingNameQueries.Contains(guid)) return;
+        _pendingNameQueries.Add(guid);
+        var payload = new byte[8];
+        BinaryPrimitives.WriteUInt64LittleEndian(payload, guid);
+        await SendCmsgEncrypted(CMSG_NAME_QUERY, payload);
+    }
+
+    public string ResolveCached(ulong guid) =>
+        _nameCache.TryGetValue(guid, out var n) ? n : $"<0x{guid:X16}>";
+
+    private void HandleNameQueryResponse(byte[] body)
     {
         try
         {
             var br = new BinaryReader(new MemoryStream(body));
+            var guid = ReadPackedGuid(br);
+            var notFound = br.ReadByte(); // 0=ok, 1=not found
+            if (notFound != 0)
+            {
+                _nameCache[guid] = "?";
+                _pendingNameQueries.Remove(guid);
+                return;
+            }
+            var name = ReadCString(br);
+            _nameCache[guid] = name;
+            _pendingNameQueries.Remove(guid);
+        }
+        catch { }
+    }
+
+    private void HandleChatMessage(byte[] body)
+    {
+        try
+        {
+            var br = new BinaryReader(new MemoryStream(body));
+            var type = br.ReadByte();
+            br.ReadUInt32(); // language
+            var senderGuid = br.ReadUInt64();
+            br.ReadUInt32(); // unk1
+
+            if (senderGuid != 0 && !_nameCache.ContainsKey(senderGuid) && !_pendingNameQueries.Contains(senderGuid))
+                _ = NameQueryAsync(senderGuid);
+
+            // Извлечём текст сообщения для command mode (только для WHISPER_FROM = 0x07)
+            if (CommandMode && type == 0x07)
+            {
+                var msg = TryExtractMessageText(body, type);
+                if (!string.IsNullOrEmpty(msg) && msg.StartsWith("!"))
+                {
+                    _pendingCommands.Enqueue((senderGuid, msg));
+                    Console.WriteLine($"  [CMD] queued '{msg}' from 0x{senderGuid:X16}");
+                }
+            }
+
+            br.BaseStream.Position = 0;
+            PrintChatMessageImpl(br, body, this);
+        }
+        catch
+        {
+            Console.WriteLine($"  [chat] парсер не справился (body {body.Length} байт)");
+        }
+    }
+
+    private static string? TryExtractMessageText(byte[] body, byte type)
+    {
+        try
+        {
+            var br = new BinaryReader(new MemoryStream(body));
+            br.ReadByte(); br.ReadUInt32(); br.ReadUInt64(); br.ReadUInt32();
+            // для WHISPER (0x06, 0x07) — повтор guid
+            if (type is 0x06 or 0x07 or 0x00 or 0x01 or 0x02 or 0x03 or 0x05 or 0x09 or 0x0A)
+                br.ReadUInt64();
+            else return null;
+            var len = br.ReadUInt32();
+            if (len == 0 || len > body.Length) return null;
+            var bytes = br.ReadBytes((int)len);
+            return Encoding.UTF8.GetString(bytes).TrimEnd('\0', '\n', '\r');
+        }
+        catch { return null; }
+    }
+
+    private static void PrintChatMessageImpl(BinaryReader br, byte[] body, WorldClient self)
+    {
+        try
+        {
             var type = br.ReadByte();
             var language = br.ReadUInt32();
             var senderGuid = br.ReadUInt64();
@@ -447,7 +656,10 @@ internal sealed class WorldClient : IDisposable
 
             var prefix = channel != null ? $"#{channel} " : "";
             var typeName = ChatTypeName(type);
-            Console.WriteLine($"  [{typeName}] {prefix}<0x{senderGuid:X16}> {message}");
+            var senderName = senderGuid != 0
+                ? (self._nameCache.TryGetValue(senderGuid, out var n) ? n : $"<0x{senderGuid:X16}>")
+                : "система";
+            Console.WriteLine($"  [{typeName}] {prefix}{senderName}: {message}");
         }
         catch
         {
@@ -710,8 +922,15 @@ internal sealed class WorldClient : IDisposable
             }
             else if (op == SMSG_MESSAGECHAT)
             {
-                PrintChatMessage(body);
+                HandleChatMessage(body);
             }
+            else if (op == SMSG_NAME_QUERY_RESPONSE)
+            {
+                HandleNameQueryResponse(body);
+            }
+
+            // обработка очереди команд (пытаемся ответить на шёпоты с "!...")
+            if (CommandMode) await ProcessPendingCommands();
             else if (op == SMSG_LOGIN_VERIFY_WORLD && body.Length >= 20)
             {
                 _map = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(0, 4));
@@ -719,6 +938,8 @@ internal sealed class WorldClient : IDisposable
                 _y = BitConverter.ToSingle(body, 8);
                 _z = BitConverter.ToSingle(body, 12);
                 _ori = BitConverter.ToSingle(body, 16);
+                var t = (DateTime.UtcNow - start).TotalSeconds;
+                Console.WriteLine($"[IDLE @ {t:F1}s] LOGIN_VERIFY_WORLD map={_map} pos=({_x:F0}, {_y:F0}, {_z:F0})");
             }
             else if (c == 0 && op != SMSG_UPDATE_OBJECT && op != SMSG_COMPRESSED_UPDATE_OBJECT)
             {

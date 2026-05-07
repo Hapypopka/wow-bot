@@ -110,8 +110,9 @@ internal static class Program
             // ---- Stage 6: idle ----
             var noHb = Environment.GetEnvironmentVariable("NO_HEARTBEAT") == "1";
             if (!noHb) world.StartHeartbeat();
+            world.CommandMode = Environment.GetEnvironmentVariable("COMMAND_MODE") == "1";
             var idleSeconds = int.TryParse(Environment.GetEnvironmentVariable("IDLE_SEC"), out var s) ? s : 90;
-            Console.WriteLine($"\n[POC] idle {idleSeconds}s {(noHb ? "WITHOUT heartbeat" : "with heartbeat")}");
+            Console.WriteLine($"\n[POC] idle {idleSeconds}s{(noHb ? "" : " +heartbeat")}{(world.CommandMode ? " +commands" : "")}");
             await world.IdleAsync(TimeSpan.FromSeconds(idleSeconds));
             if (!noHb) await world.StopHeartbeatAsync();
             Console.WriteLine($"[POC] idle done, still connected — heartbeat works ✓");
