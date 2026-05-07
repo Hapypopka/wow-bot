@@ -107,14 +107,29 @@ internal static class Program
                 await world.WhoAsync(uint.Parse(whoMin), uint.Parse(whoMax),
                     Environment.GetEnvironmentVariable("WHO_NAME") ?? "");
 
-            // ---- Stage 6: idle ----
-            var noHb = Environment.GetEnvironmentVariable("NO_HEARTBEAT") == "1";
-            if (!noHb) world.StartHeartbeat();
+            // ---- Stage 6: heartbeat ON (нужен для движения) + опц. движение ----
+            world.StartHeartbeat();
+
+            // дать серверу осознать что мы залогинились (LOGIN_VERIFY_WORLD должен прийти)
+            await Task.Delay(2000);
+
+            if (int.TryParse(Environment.GetEnvironmentVariable("MOVE_FORWARD"), out var mf) && mf > 0)
+                await world.MoveForwardAsync(TimeSpan.FromSeconds(mf));
+
+            var moveTo = Environment.GetEnvironmentVariable("MOVE_TO");
+            if (!string.IsNullOrEmpty(moveTo))
+            {
+                var parts = moveTo.Split(',');
+                if (parts.Length == 2 && float.TryParse(parts[0], System.Globalization.CultureInfo.InvariantCulture, out var tx)
+                                       && float.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out var ty))
+                    await world.MoveToAsync(tx, ty);
+            }
+
             world.CommandMode = Environment.GetEnvironmentVariable("COMMAND_MODE") == "1";
             var idleSeconds = int.TryParse(Environment.GetEnvironmentVariable("IDLE_SEC"), out var s) ? s : 90;
-            Console.WriteLine($"\n[POC] idle {idleSeconds}s{(noHb ? "" : " +heartbeat")}{(world.CommandMode ? " +commands" : "")}");
+            Console.WriteLine($"\n[POC] idle {idleSeconds}s +heartbeat{(world.CommandMode ? " +commands" : "")}");
             await world.IdleAsync(TimeSpan.FromSeconds(idleSeconds));
-            if (!noHb) await world.StopHeartbeatAsync();
+            await world.StopHeartbeatAsync();
             Console.WriteLine($"[POC] idle done, still connected — heartbeat works ✓");
             return 0;
         }

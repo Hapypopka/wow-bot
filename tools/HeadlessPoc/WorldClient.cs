@@ -41,8 +41,16 @@ internal sealed class WorldClient : IDisposable
     private const ushort SMSG_GROUP_INVITE       = 0x6F;
     private const ushort SMSG_PARTY_COMMAND_RESULT = 0x7F;
     private const uint   MSG_MOVE_HEARTBEAT      = 0xEE;
+    private const uint   MSG_MOVE_START_FORWARD  = 0xB5;
+    private const uint   MSG_MOVE_START_BACKWARD = 0xB6;
+    private const uint   MSG_MOVE_STOP           = 0xB7;
+    private const uint   MSG_MOVE_SET_FACING     = 0xDA;
     private const ushort SMSG_MESSAGECHAT        = 0x96;
     private const uint   CMSG_MESSAGECHAT        = 0x95;
+
+    private const uint MOVEMENTFLAG_FORWARD      = 0x00000001;
+    private const uint MOVEMENTFLAG_BACKWARD     = 0x00000002;
+    private const float DefaultRunSpeed = 7.0f; // 3.3.5 base run speed (yards/sec)
     private const uint   CMSG_WHO                = 0x62;
     private const ushort SMSG_WHO                = 0x63;
     private const uint   CMSG_CONTACT_LIST       = 0x66;
@@ -63,6 +71,8 @@ internal sealed class WorldClient : IDisposable
 
     private CancellationTokenSource? _heartbeatCts;
     private Task? _heartbeatTask;
+    private uint _movementFlags = 0;
+    private DateTime _lastMoveUpdate = DateTime.UtcNow;
 
     // кэш resolve'нутых имён по GUID
     private readonly Dictionary<ulong, string> _nameCache = new();
@@ -831,21 +841,18 @@ internal sealed class WorldClient : IDisposable
     public void StartHeartbeat()
     {
         _heartbeatCts = new CancellationTokenSource();
+        _lastMoveUpdate = DateTime.UtcNow;
         var ct = _heartbeatCts.Token;
         _heartbeatTask = Task.Run(async () =>
         {
             while (!ct.IsCancellationRequested)
             {
-                try { await SendMoveHeartbeatAsync(); }
-                catch (Exception e)
-                {
-                    Console.WriteLine($"[HB] error: {e.Message}");
-                    return;
-                }
-                try { await Task.Delay(500, ct); } catch { return; }
+                try { AdvancePosition(); await SendMovementPacketAsync(MSG_MOVE_HEARTBEAT); }
+                catch (Exception e) { Console.WriteLine($"[HB] error: {e.Message}"); return; }
+                try { await Task.Delay(200, ct); } catch { return; }
             }
         }, ct);
-        Console.WriteLine($"[HB] heartbeat started (every 500ms)");
+        Console.WriteLine($"[HB] heartbeat started (every 200ms)");
     }
 
     public async Task StopHeartbeatAsync()
@@ -854,17 +861,90 @@ internal sealed class WorldClient : IDisposable
         if (_heartbeatTask != null) try { await _heartbeatTask; } catch { }
     }
 
-    private async Task SendMoveHeartbeatAsync()
+    private void AdvancePosition()
+    {
+        var now = DateTime.UtcNow;
+        var dt = (float)(now - _lastMoveUpdate).TotalSeconds;
+        _lastMoveUpdate = now;
+        if (dt <= 0 || dt > 1.0f) return; // санити: либо первый тик, либо большой gap
+
+        if ((_movementFlags & MOVEMENTFLAG_FORWARD) != 0)
+        {
+            _x += DefaultRunSpeed * dt * MathF.Cos(_ori);
+            _y += DefaultRunSpeed * dt * MathF.Sin(_ori);
+        }
+        else if ((_movementFlags & MOVEMENTFLAG_BACKWARD) != 0)
+        {
+            _x -= DefaultRunSpeed * 0.5f * dt * MathF.Cos(_ori);
+            _y -= DefaultRunSpeed * 0.5f * dt * MathF.Sin(_ori);
+        }
+    }
+
+    private async Task SendMovementPacketAsync(uint opcode)
     {
         using var ms = new MemoryStream();
         var w = new BinaryWriter(ms);
         WritePackedGuid(w, _charGuid);
-        w.Write((uint)0);          // movement_flags
-        w.Write((ushort)0);        // movement_flags2
+        w.Write(_movementFlags);
+        w.Write((ushort)0);                  // flags2
         w.Write((uint)Environment.TickCount);
         w.Write(_x); w.Write(_y); w.Write(_z); w.Write(_ori);
-        w.Write((uint)0);          // fall_time
-        await SendCmsgEncrypted(MSG_MOVE_HEARTBEAT, ms.ToArray());
+        w.Write((uint)0);                    // fall_time
+        await SendCmsgEncrypted(opcode, ms.ToArray());
+    }
+
+    public async Task SetFacingAsync(float orientationRad)
+    {
+        _ori = orientationRad;
+        await SendMovementPacketAsync(MSG_MOVE_SET_FACING);
+    }
+
+    public async Task MoveForwardAsync(TimeSpan duration)
+    {
+        Console.WriteLine($"[MOVE] start forward from ({_x:F1},{_y:F1}) ori={_ori:F2} for {duration.TotalSeconds}s");
+        _lastMoveUpdate = DateTime.UtcNow;
+        _movementFlags |= MOVEMENTFLAG_FORWARD;
+        await SendMovementPacketAsync(MSG_MOVE_START_FORWARD);
+        await Task.Delay(duration);
+        _movementFlags &= ~MOVEMENTFLAG_FORWARD;
+        AdvancePosition(); // финальная позиция
+        await SendMovementPacketAsync(MSG_MOVE_STOP);
+        Console.WriteLine($"[MOVE] stopped at ({_x:F1},{_y:F1})");
+    }
+
+    public async Task MoveToAsync(float targetX, float targetY, float tolerance = 2.0f)
+    {
+        var dx = targetX - _x;
+        var dy = targetY - _y;
+        var totalDist = MathF.Sqrt(dx * dx + dy * dy);
+        if (totalDist < tolerance) { Console.WriteLine($"[MOVE] уже на месте"); return; }
+
+        var ori = MathF.Atan2(dy, dx);
+        Console.WriteLine($"[MOVE] -> ({targetX:F1},{targetY:F1}) dist={totalDist:F1} ori={ori:F2}");
+        await SetFacingAsync(ori);
+        await Task.Delay(100);
+
+        _lastMoveUpdate = DateTime.UtcNow;
+        _movementFlags |= MOVEMENTFLAG_FORWARD;
+        await SendMovementPacketAsync(MSG_MOVE_START_FORWARD);
+
+        var maxSeconds = (totalDist / DefaultRunSpeed) + 5.0f; // запас на случай
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(maxSeconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+            var rdx = targetX - _x;
+            var rdy = targetY - _y;
+            var rem = MathF.Sqrt(rdx * rdx + rdy * rdy);
+            if (rem < tolerance) break;
+        }
+
+        _movementFlags &= ~MOVEMENTFLAG_FORWARD;
+        AdvancePosition();
+        await SendMovementPacketAsync(MSG_MOVE_STOP);
+        var finalDx = targetX - _x;
+        var finalDy = targetY - _y;
+        Console.WriteLine($"[MOVE] stopped at ({_x:F1},{_y:F1}) — distance from target: {MathF.Sqrt(finalDx*finalDx + finalDy*finalDy):F1}");
     }
 
     private static void WritePackedGuid(BinaryWriter w, ulong guid)
