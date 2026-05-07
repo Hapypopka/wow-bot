@@ -17,9 +17,11 @@ internal static class Program
 
     static async Task<int> Main(string[] args)
     {
+        if (args.Length >= 1 && args[0] == "nav-test") return NavTest.Run();
         if (args.Length < 2)
         {
             Console.WriteLine("Usage: HeadlessPoc <account> <password> [logon_host] [logon_port] [realm_id]");
+            Console.WriteLine("       HeadlessPoc nav-test  (проверить связь с AmeisenNavServer)");
             return 1;
         }
 

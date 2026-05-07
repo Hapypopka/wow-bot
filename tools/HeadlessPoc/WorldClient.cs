@@ -51,6 +51,14 @@ internal sealed class WorldClient : IDisposable
     private const uint MOVEMENTFLAG_FORWARD      = 0x00000001;
     private const uint MOVEMENTFLAG_BACKWARD     = 0x00000002;
     private const float DefaultRunSpeed = 7.0f; // 3.3.5 base run speed (yards/sec)
+
+    private const ushort SMSG_FORCE_WALK_SPEED_CHANGE = 0xC2;
+    private const ushort SMSG_FORCE_RUN_SPEED_CHANGE  = 0xC4;
+    private const ushort SMSG_FORCE_RUN_BACK_SPEED_CHANGE = 0xC6;
+    private const ushort SMSG_FORCE_SWIM_SPEED_CHANGE = 0xC8;
+    private const uint   CMSG_FORCE_RUN_SPEED_CHANGE_ACK = 0xC5;
+
+    private float _runSpeed = DefaultRunSpeed;
     private const uint   CMSG_WHO                = 0x62;
     private const ushort SMSG_WHO                = 0x63;
     private const uint   CMSG_CONTACT_LIST       = 0x66;
@@ -232,6 +240,10 @@ internal sealed class WorldClient : IDisposable
                     await SendCmsgEncrypted(CMSG_TIME_SYNC_RESP, resp);
                     break;
                 }
+
+                case SMSG_FORCE_RUN_SPEED_CHANGE:
+                    await HandleForceRunSpeedChange(body, DateTime.UtcNow);
+                    break;
 
                 default:
                     // молча скипаем всё остальное
@@ -870,13 +882,13 @@ internal sealed class WorldClient : IDisposable
 
         if ((_movementFlags & MOVEMENTFLAG_FORWARD) != 0)
         {
-            _x += DefaultRunSpeed * dt * MathF.Cos(_ori);
-            _y += DefaultRunSpeed * dt * MathF.Sin(_ori);
+            _x += _runSpeed * dt * MathF.Cos(_ori);
+            _y += _runSpeed * dt * MathF.Sin(_ori);
         }
         else if ((_movementFlags & MOVEMENTFLAG_BACKWARD) != 0)
         {
-            _x -= DefaultRunSpeed * 0.5f * dt * MathF.Cos(_ori);
-            _y -= DefaultRunSpeed * 0.5f * dt * MathF.Sin(_ori);
+            _x -= _runSpeed * 0.5f * dt * MathF.Cos(_ori);
+            _y -= _runSpeed * 0.5f * dt * MathF.Sin(_ori);
         }
     }
 
@@ -891,6 +903,45 @@ internal sealed class WorldClient : IDisposable
         w.Write(_x); w.Write(_y); w.Write(_z); w.Write(_ori);
         w.Write((uint)0);                    // fall_time
         await SendCmsgEncrypted(opcode, ms.ToArray());
+    }
+
+    private async Task HandleForceRunSpeedChange(byte[] body, DateTime sessionStart)
+    {
+        try
+        {
+            var br = new BinaryReader(new MemoryStream(body));
+            var guid = ReadPackedGuid(br);
+            var counter = br.ReadUInt32();
+            br.ReadByte();             // unk (только для run-speed)
+            var newSpeed = br.ReadSingle();
+
+            if (guid != _charGuid) return; // это про другого юнита
+
+            var t = (DateTime.UtcNow - sessionStart).TotalSeconds;
+            Console.WriteLine($"[IDLE @ {t:F1}s] FORCE_RUN_SPEED_CHANGE: {_runSpeed:F2} -> {newSpeed:F2} y/s");
+            _runSpeed = newSpeed;
+
+            // ACK — без правильного формата сервер обычно не disconnect'ит,
+            // но если сервер строгий, тут можно собрать MovementInfo и эхо counter+speed.
+            // Делаем минимальный ACK: packed_guid + counter + минимальная MovementInfo + speed.
+            using var ms = new MemoryStream();
+            var w = new BinaryWriter(ms);
+            WritePackedGuid(w, _charGuid);
+            w.Write(counter);
+            // MovementInfo:
+            w.Write(_movementFlags);
+            w.Write((ushort)0);                    // flags2
+            w.Write((uint)Environment.TickCount);
+            w.Write(_x); w.Write(_y); w.Write(_z); w.Write(_ori);
+            w.Write((uint)0);                      // fall_time
+            // speed
+            w.Write(newSpeed);
+            await SendCmsgEncrypted(CMSG_FORCE_RUN_SPEED_CHANGE_ACK, ms.ToArray());
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SPEED] parse/ack error: {ex.Message}");
+        }
     }
 
     public async Task SetFacingAsync(float orientationRad)
@@ -928,7 +979,7 @@ internal sealed class WorldClient : IDisposable
         _movementFlags |= MOVEMENTFLAG_FORWARD;
         await SendMovementPacketAsync(MSG_MOVE_START_FORWARD);
 
-        var maxSeconds = (totalDist / DefaultRunSpeed) + 5.0f; // запас на случай
+        var maxSeconds = (totalDist / _runSpeed) + 5.0f; // запас на случай
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(maxSeconds);
         while (DateTime.UtcNow < deadline)
         {
@@ -1007,6 +1058,18 @@ internal sealed class WorldClient : IDisposable
             else if (op == SMSG_NAME_QUERY_RESPONSE)
             {
                 HandleNameQueryResponse(body);
+            }
+            else if (op == SMSG_FORCE_RUN_SPEED_CHANGE)
+            {
+                await HandleForceRunSpeedChange(body, start);
+            }
+            else if (op == SMSG_FORCE_WALK_SPEED_CHANGE
+                  || op == SMSG_FORCE_RUN_BACK_SPEED_CHANGE
+                  || op == SMSG_FORCE_SWIM_SPEED_CHANGE)
+            {
+                // парсим но не применяем — мы только бегаем вперёд
+                var t = (DateTime.UtcNow - start).TotalSeconds;
+                Console.WriteLine($"[IDLE @ {t:F1}s] FORCE_*_SPEED_CHANGE op=0x{op:X4} (игнорируем)");
             }
 
             // обработка очереди команд (пытаемся ответить на шёпоты с "!...")
