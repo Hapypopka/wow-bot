@@ -82,17 +82,39 @@ internal static class Program
 
             if (characters.Count == 0) return 0;
 
-            // ---- Stage 4: enter world with first char, observe 8 sec ----
+            // ---- Stage 4: enter world ----
             var first = characters[0];
             Console.WriteLine($"\n[POC] entering world as '{first.Name}' (guid 0x{first.Guid:X16})");
-            var stats = await world.EnterWorldAsync(first.Guid, TimeSpan.FromSeconds(8));
+            var stats = await world.EnterWorldAsync(first.Guid);
+            Console.WriteLine($"  position : map={stats.Map} ({stats.X:F1}, {stats.Y:F1}, {stats.Z:F1})");
 
-            Console.WriteLine($"\n=== world entry stats ===");
-            Console.WriteLine($"  position : map={stats.Map} ({stats.X:F1}, {stats.Y:F1}, {stats.Z:F1}) ori={stats.Orientation:F2}");
-            Console.WriteLine($"  update packets received : {stats.UpdateObjectPackets}");
-            Console.WriteLine($"  unique nearby GUIDs seen: {stats.NearbyGuids.Count}");
-            foreach (var g in stats.NearbyGuids.Take(20))
-                Console.WriteLine($"    0x{g:X16}  type=0x{(g >> 52) & 0xFFF:X3}");
+            // ---- Stage 5: optional chat send ----
+            var sayMsg = Environment.GetEnvironmentVariable("SAY");
+            var yellMsg = Environment.GetEnvironmentVariable("YELL");
+            var whisperTo = Environment.GetEnvironmentVariable("WHISPER_TO");
+            var whisperMsg = Environment.GetEnvironmentVariable("WHISPER_MSG");
+
+            if (!string.IsNullOrEmpty(sayMsg)) await world.SayAsync(sayMsg);
+            if (!string.IsNullOrEmpty(yellMsg)) await world.YellAsync(yellMsg);
+            if (!string.IsNullOrEmpty(whisperTo) && !string.IsNullOrEmpty(whisperMsg))
+                await world.WhisperAsync(whisperTo, whisperMsg);
+
+            if (Environment.GetEnvironmentVariable("FRIENDS") == "1")
+                await world.ContactListAsync();
+            var whoMin = Environment.GetEnvironmentVariable("WHO_MIN");
+            var whoMax = Environment.GetEnvironmentVariable("WHO_MAX");
+            if (!string.IsNullOrEmpty(whoMin) && !string.IsNullOrEmpty(whoMax))
+                await world.WhoAsync(uint.Parse(whoMin), uint.Parse(whoMax),
+                    Environment.GetEnvironmentVariable("WHO_NAME") ?? "");
+
+            // ---- Stage 6: idle ----
+            var noHb = Environment.GetEnvironmentVariable("NO_HEARTBEAT") == "1";
+            if (!noHb) world.StartHeartbeat();
+            var idleSeconds = int.TryParse(Environment.GetEnvironmentVariable("IDLE_SEC"), out var s) ? s : 90;
+            Console.WriteLine($"\n[POC] idle {idleSeconds}s {(noHb ? "WITHOUT heartbeat" : "with heartbeat")}");
+            await world.IdleAsync(TimeSpan.FromSeconds(idleSeconds));
+            if (!noHb) await world.StopHeartbeatAsync();
+            Console.WriteLine($"[POC] idle done, still connected — heartbeat works ✓");
             return 0;
         }
         catch (Exception ex)
