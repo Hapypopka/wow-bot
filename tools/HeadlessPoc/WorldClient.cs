@@ -86,6 +86,9 @@ internal sealed class WorldClient : IDisposable
     /// <summary>NavQuery для коррекции Z по навмешу. Опциональный.</summary>
     public NavQuery? Nav { get; set; }
 
+    /// <summary>Снэпшот мира — все известные сущности рядом.</summary>
+    public WorldState World { get; } = new();
+
     // кэш resolve'нутых имён по GUID
     private readonly Dictionary<ulong, string> _nameCache = new();
     private readonly HashSet<ulong> _pendingNameQueries = new();
@@ -510,12 +513,30 @@ internal sealed class WorldClient : IDisposable
         return verb switch
         {
             "ping"   => "pong",
-            "help"   => "Команды: !ping !pos !who [name] !invite <name> !help",
+            "help"   => "Команды: !ping !pos !nearby !who [name] !invite <name> !help",
             "pos"    => $"map={_map} pos=({_x:F0}, {_y:F0}, {_z:F0})",
             "who"    => await DoWhoQuick(arg),
             "invite" => await DoInvite(arg),
+            "nearby" => DoNearby(arg),
             _        => $"Неизвестная команда '{verb}'. !help"
         };
+    }
+
+    private string DoNearby(string arg)
+    {
+        var radius = float.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : 50f;
+        var units = World.NearbyUnits(_x, _y, _z, radius);
+        if (units.Count == 0) return $"вокруг {radius:F0}y никого не вижу (всего в worldstate {World.Count})";
+        var top = units
+            .OrderBy(u => (u.X - _x) * (u.X - _x) + (u.Y - _y) * (u.Y - _y))
+            .Take(5)
+            .Select(u => {
+                var name = u.Name ?? (_nameCache.TryGetValue(u.Guid, out var n) ? n : $"0x{u.Guid:X8}");
+                var hp = u.MaxHealth > 0 ? $" {100 * u.Health / u.MaxHealth}%" : "";
+                var dist = MathF.Sqrt((u.X-_x)*(u.X-_x) + (u.Y-_y)*(u.Y-_y));
+                return $"{name} lvl{u.Level}{hp} {dist:F0}y";
+            });
+        return string.Join("; ", top);
     }
 
     private async Task<string> DoWhoQuick(string nameOrLevel)
@@ -1104,6 +1125,25 @@ internal sealed class WorldClient : IDisposable
             else if (op == SMSG_NAME_QUERY_RESPONSE)
             {
                 HandleNameQueryResponse(body);
+            }
+            else if (op == SMSG_UPDATE_OBJECT)
+            {
+                var st = UpdateObjectParser.Parse(body, World);
+                if (st.Created > 0 || st.Removed > 0)
+                {
+                    var t = (DateTime.UtcNow - start).TotalSeconds;
+                    Console.WriteLine($"[IDLE @ {t:F1}s] world: +{st.Created}/-{st.Removed} (всего {World.Count})");
+                }
+            }
+            else if (op == SMSG_COMPRESSED_UPDATE_OBJECT)
+            {
+                var decompressed = ZlibDecompress(body);
+                var st = UpdateObjectParser.Parse(decompressed, World);
+                if (st.Created > 0 || st.Removed > 0)
+                {
+                    var t = (DateTime.UtcNow - start).TotalSeconds;
+                    Console.WriteLine($"[IDLE @ {t:F1}s] world(compressed): +{st.Created}/-{st.Removed} (всего {World.Count})");
+                }
             }
             else if (op == SMSG_FORCE_RUN_SPEED_CHANGE)
             {

@@ -142,6 +142,22 @@ internal static class Program
             Console.WriteLine($"\n[POC] idle {idleSeconds}s +heartbeat{(world.CommandMode ? " +commands" : "")}");
             await world.IdleAsync(TimeSpan.FromSeconds(idleSeconds));
             await world.StopHeartbeatAsync();
+
+            // Финальный отчёт о мире
+            Console.WriteLine($"\n=== world snapshot ({world.World.Count} entities) ===");
+            var snap = world.World.Snapshot();
+            var grouped = snap.GroupBy(e => e.Type).OrderByDescending(g => g.Count());
+            foreach (var g in grouped)
+                Console.WriteLine($"  {g.Key}: {g.Count()}");
+
+            var units = snap.Where(e => e.Type == WowObjectType.Unit || e.Type == WowObjectType.Player)
+                            .Where(e => e.MaxHealth > 0 || e.Level > 0)
+                            .Take(15);
+            foreach (var u in units)
+            {
+                var hpStr = u.MaxHealth > 0 ? $" {u.Health}/{u.MaxHealth}" : "";
+                Console.WriteLine($"  [{u.Type}] guid=0x{u.Guid:X16} entry={u.Entry} lvl{u.Level}{hpStr} ({u.X:F0},{u.Y:F0},{u.Z:F0})");
+            }
             Console.WriteLine($"[POC] idle done, still connected — heartbeat works ✓");
             return 0;
         }
