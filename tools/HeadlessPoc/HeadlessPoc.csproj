@@ -8,4 +8,8 @@
     <RootNamespace>WowBot.HeadlessPoc</RootNamespace>
     <AssemblyName>HeadlessPoc</AssemblyName>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DotRecast.Core" Version="2026.1.3" />
+    <PackageReference Include="DotRecast.Detour" Version="2026.1.3" />
+  </ItemGroup>
 </Project>

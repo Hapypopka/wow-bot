@@ -1,4 +1,4 @@
-// Smoke test для AmeisenNavClient
+// Smoke test для NavQuery (DotRecast + TC mmap).
 // dotnet run --project HeadlessPoc -- nav-test
 
 using WowBot.HeadlessPoc.Nav;
@@ -9,41 +9,40 @@ internal static class NavTest
 {
     public static int Run()
     {
-        using var nav = new AmeisenNavClient();
-        if (!nav.TryConnect())
+        var mmapDir = Environment.GetEnvironmentVariable("MMAP_DIR")
+                      ?? @"D:\SPP\SPP_Classics_V2\SPP_Server\Modules\wotlk\mmaps";
+        Console.WriteLine($"[NAV TEST] mmap dir: {mmapDir}");
+        if (!Directory.Exists(mmapDir))
         {
-            Console.WriteLine("[NAV TEST] не смогли подключиться к 127.0.0.1:47110");
+            Console.WriteLine($"[NAV TEST] папка не существует");
             return 1;
         }
-        Console.WriteLine("[NAV TEST] connected");
-        nav.SetClientState(ClientState.Normal);
-        nav.SetAreaCosts(ground: 1f, road: 0.75f, water: 1.6f, badLiquid: 4f);
-        nav.ApplyFilter();
-        Console.WriteLine($"[NAV TEST] filter applied (dirty={nav.IsFilterDirty})");
 
-        // Stormwind в центре города
-        var z0 = nav.GetHeight(0, new Vector3(-8950f, 520f, 96f));
-        Console.WriteLine($"[NAV TEST] GetHeight(Stormwind) = ({z0.X:F1}, {z0.Y:F1}, {z0.Z:F2})");
+        using var nav = new NavQuery(mmapDir);
+
+        // Stormwind
+        var z0 = nav.GetHeight(0, -8950f, 520f);
+        Console.WriteLine($"[NAV TEST] GetHeight(Stormwind -8950, 520) = {z0:F2}  (ожидается ~96)");
 
         // Stranglethorn
-        var z1 = nav.GetHeight(0, new Vector3(-11099.9f, -1562.6f, 28f));
-        Console.WriteLine($"[NAV TEST] GetHeight(STV) = ({z1.X:F1}, {z1.Y:F1}, {z1.Z:F2})");
+        var z1 = nav.GetHeight(0, -11099.9f, -1562.6f);
+        Console.WriteLine($"[NAV TEST] GetHeight(STV -11100, -1562) = {z1:F2}  (ожидается ~28)");
 
-        // Outland
-        var z2 = nav.GetHeight(530, new Vector3(-3984.6f, -11672.4f, -139f));
-        Console.WriteLine($"[NAV TEST] GetHeight(Outland) = ({z2.X:F1}, {z2.Y:F1}, {z2.Z:F2})");
+        // Outland — текущая позиция Узянбаевой под лестницей
+        var z2 = nav.GetHeight(530, -3984.6f, -11672.4f);
+        Console.WriteLine($"[NAV TEST] GetHeight(Outland -3984, -11672) = {z2:F2}");
 
         // Northrend Dalaran
-        var z3 = nav.GetHeight(571, new Vector3(5797f, 656f, 657f));
-        Console.WriteLine($"[NAV TEST] GetHeight(Dalaran) = ({z3.X:F1}, {z3.Y:F1}, {z3.Z:F2})");
+        var z3 = nav.GetHeight(571, 5797f, 656f);
+        Console.WriteLine($"[NAV TEST] GetHeight(Dalaran 5797, 656) = {z3:F2}  (ожидается ~657)");
 
-        // Path в Stranglethorn
-        var path = nav.GetPath(0, new Vector3(-11099.9f, -1562.6f, 28f), new Vector3(-11050f, -1530f, 28f));
-        if (path == null) Console.WriteLine($"[NAV TEST] GetPath: null");
+        // Path в STV
+        var path = nav.FindPath(0, -11099.9f, -1562.6f, 28f, -11050f, -1530f, 28f);
+        if (path == null) Console.WriteLine($"[NAV TEST] FindPath: null");
         else
         {
-            Console.WriteLine($"[NAV TEST] GetPath: {path.Length} waypoints");
-            foreach (var p in path) Console.WriteLine($"   ({p.X:F1}, {p.Y:F1}, {p.Z:F1})");
+            Console.WriteLine($"[NAV TEST] FindPath: {path.Count} waypoints");
+            foreach (var (x, y, z) in path) Console.WriteLine($"   ({x:F1}, {y:F1}, {z:F2})");
         }
         return 0;
     }

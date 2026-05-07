@@ -73,6 +73,16 @@ internal static class Program
             // ---- Stage 3: world server ----
             var (worldHost, worldPort) = ParseAddress(target.Address);
             using var world = new WorldClient(ClientBuild);
+
+            // NavQuery — опционально, если указана MMAP_DIR с навмешами
+            var mmapDir = Environment.GetEnvironmentVariable("MMAP_DIR")
+                          ?? @"D:\SPP\SPP_Classics_V2\SPP_Server\Modules\wotlk\mmaps";
+            if (Directory.Exists(mmapDir))
+            {
+                world.Nav = new Nav.NavQuery(mmapDir);
+                Console.WriteLine($"[POC] NavQuery подключён: {mmapDir}");
+            }
+
             await world.ConnectAndAuthAsync(worldHost, worldPort, account, target.Id, sessionKey);
             var characters = await world.GetCharactersAsync();
 

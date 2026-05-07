@@ -11,6 +11,7 @@ using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using WowBot.HeadlessPoc.Nav;
 
 namespace WowBot.HeadlessPoc;
 
@@ -81,6 +82,9 @@ internal sealed class WorldClient : IDisposable
     private Task? _heartbeatTask;
     private uint _movementFlags = 0;
     private DateTime _lastMoveUpdate = DateTime.UtcNow;
+
+    /// <summary>NavQuery для коррекции Z по навмешу. Опциональный.</summary>
+    public NavQuery? Nav { get; set; }
 
     // кэш resolve'нутых имён по GUID
     private readonly Dictionary<ulong, string> _nameCache = new();
@@ -217,6 +221,15 @@ internal sealed class WorldClient : IDisposable
                     verifyReceived = true;
                     _map = map; _x = x; _y = y; _z = z; _ori = ori;
                     Console.WriteLine($"[WORLD] <- LOGIN_VERIFY_WORLD map={map} pos=({x:F1}, {y:F1}, {z:F1}) ori={ori:F2}");
+                    if (Nav != null)
+                    {
+                        var groundZ = Nav.GetHeight((int)_map, _x, _y, _z);
+                        if (!float.IsNaN(groundZ))
+                        {
+                            Console.WriteLine($"[WORLD]    nav: ground Z = {groundZ:F2} (delta {groundZ - _z:F1})");
+                            _z = groundZ;
+                        }
+                    }
                     break;
 
                 case SMSG_UPDATE_OBJECT:
@@ -880,15 +893,30 @@ internal sealed class WorldClient : IDisposable
         _lastMoveUpdate = now;
         if (dt <= 0 || dt > 1.0f) return; // санити: либо первый тик, либо большой gap
 
+        var moved = false;
         if ((_movementFlags & MOVEMENTFLAG_FORWARD) != 0)
         {
             _x += _runSpeed * dt * MathF.Cos(_ori);
             _y += _runSpeed * dt * MathF.Sin(_ori);
+            moved = true;
         }
         else if ((_movementFlags & MOVEMENTFLAG_BACKWARD) != 0)
         {
             _x -= _runSpeed * 0.5f * dt * MathF.Cos(_ori);
             _y -= _runSpeed * 0.5f * dt * MathF.Sin(_ori);
+            moved = true;
+        }
+
+        if (moved && Nav != null)
+        {
+            var groundZ = Nav.GetHeight((int)_map, _x, _y, _z);
+            if (!float.IsNaN(groundZ))
+            {
+                // плавно корректируем Z (max 5 ярдов за тик чтобы не «прыгать»)
+                var delta = groundZ - _z;
+                if (MathF.Abs(delta) <= 5f) _z = groundZ;
+                else _z += MathF.Sign(delta) * 5f;
+            }
         }
     }
 
@@ -965,13 +993,33 @@ internal sealed class WorldClient : IDisposable
 
     public async Task MoveToAsync(float targetX, float targetY, float tolerance = 2.0f)
     {
+        // Если есть NavQuery — пробуем pathfinding через навмеш (обход стен)
+        if (Nav != null)
+        {
+            var path = Nav.FindPath((int)_map, _x, _y, _z, targetX, targetY, _z);
+            if (path != null && path.Count > 1)
+            {
+                Console.WriteLine($"[MOVE] FindPath: {path.Count} waypoints");
+                foreach (var (wx, wy, wz) in path.Skip(1)) // первая точка — наша start
+                {
+                    await MoveStraightToAsync(wx, wy, tolerance);
+                }
+                return;
+            }
+            Console.WriteLine($"[MOVE] FindPath не вернул путь — иду напрямую");
+        }
+        await MoveStraightToAsync(targetX, targetY, tolerance);
+    }
+
+    private async Task MoveStraightToAsync(float targetX, float targetY, float tolerance)
+    {
         var dx = targetX - _x;
         var dy = targetY - _y;
         var totalDist = MathF.Sqrt(dx * dx + dy * dy);
-        if (totalDist < tolerance) { Console.WriteLine($"[MOVE] уже на месте"); return; }
+        if (totalDist < tolerance) return;
 
         var ori = MathF.Atan2(dy, dx);
-        Console.WriteLine($"[MOVE] -> ({targetX:F1},{targetY:F1}) dist={totalDist:F1} ori={ori:F2}");
+        Console.WriteLine($"[MOVE]   -> ({targetX:F1},{targetY:F1}) dist={totalDist:F1}");
         await SetFacingAsync(ori);
         await Task.Delay(100);
 
@@ -979,7 +1027,7 @@ internal sealed class WorldClient : IDisposable
         _movementFlags |= MOVEMENTFLAG_FORWARD;
         await SendMovementPacketAsync(MSG_MOVE_START_FORWARD);
 
-        var maxSeconds = (totalDist / _runSpeed) + 5.0f; // запас на случай
+        var maxSeconds = (totalDist / _runSpeed) + 3.0f;
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(maxSeconds);
         while (DateTime.UtcNow < deadline)
         {
@@ -993,9 +1041,7 @@ internal sealed class WorldClient : IDisposable
         _movementFlags &= ~MOVEMENTFLAG_FORWARD;
         AdvancePosition();
         await SendMovementPacketAsync(MSG_MOVE_STOP);
-        var finalDx = targetX - _x;
-        var finalDy = targetY - _y;
-        Console.WriteLine($"[MOVE] stopped at ({_x:F1},{_y:F1}) — distance from target: {MathF.Sqrt(finalDx*finalDx + finalDy*finalDy):F1}");
+        Console.WriteLine($"[MOVE]   stopped at ({_x:F1},{_y:F1},{_z:F1})");
     }
 
     private static void WritePackedGuid(BinaryWriter w, ulong guid)
