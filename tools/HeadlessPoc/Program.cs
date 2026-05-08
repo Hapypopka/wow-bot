@@ -83,6 +83,26 @@ internal static class Program
                 Console.WriteLine($"[POC] NavQuery подключён: {mmapDir}");
             }
 
+            // Warden CR база — опционально. Если указан CR_FILE с путём к .cr из vmangos/warden_modules,
+            // обрабатываем HASH_REQUEST через lookup и переключаем RC4 keys → проходим Warden handshake.
+            var crFile = Environment.GetEnvironmentVariable("CR_FILE");
+            if (!string.IsNullOrEmpty(crFile) && File.Exists(crFile))
+            {
+                try
+                {
+                    world.WardenCr = WardenCrFile.Load(crFile);
+                    Console.WriteLine($"[POC] Warden CR подключён: {crFile} ({world.WardenCr.Entries.Count} pre-computed responses)");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[POC] !! не удалось загрузить CR: {ex.Message}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[POC] CR_FILE не задан — Warden пассивен (kick через ~2 минуты)");
+            }
+
             await world.ConnectAndAuthAsync(worldHost, worldPort, account, target.Id, sessionKey);
             var characters = await world.GetCharactersAsync();
 

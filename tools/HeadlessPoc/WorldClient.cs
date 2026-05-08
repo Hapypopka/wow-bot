@@ -91,6 +91,12 @@ internal sealed class WorldClient : IDisposable
     private WardenCrypt? _warden;
     private byte[]? _sessionKey;
 
+    /// <summary>База pre-computed Warden ответов из vmangos/warden_modules. Опционально.
+    /// Если задано — обрабатываем HASH_REQUEST через CR lookup и переключаем RC4 keys.</summary>
+    public WardenCrFile? WardenCr { get; set; }
+    private bool _wardenKeysSwitched = false;
+    private int _wardenCheatCheckCount = 0;
+
     /// <summary>Снэпшот мира — все известные сущности рядом.</summary>
     public WorldState World { get; } = new();
 
@@ -451,21 +457,82 @@ internal sealed class WorldClient : IDisposable
     private const byte WARDEN_CMSG_HASH_RESULT        = 4;
     private const byte WARDEN_CMSG_MODULE_FAILED      = 5;
 
-    private Task HandleWardenData(byte[] body)
+    private async Task HandleWardenData(byte[] body)
     {
-        if (_warden == null) return Task.CompletedTask;
+        if (_warden == null) return;
         var copy = body.ToArray();
         _warden.Decrypt(copy);
         var serverCmd = copy[0];
         _lastWardenChallenge = copy;
-        Console.WriteLine($"[WARDEN] <- cmd=0x{serverCmd:X2} ({DescribeWardenServerCmd(serverCmd)}) size={copy.Length}");
 
-        // Не отвечаем. Опытным путём:
-        //   MODULE_FAILED → кик за 35 сек
-        //   игнор         → кик за 116 сек (медленнее)
-        //   фальш HASH_RESULT → кик мгновенно (server валидирует контент)
-        // Полный bypass требует реверс WoWCircle anti-cheat модуля (зашифрованный x86 код).
-        return Task.CompletedTask;
+        // Если CR база не задана — пассивный режим (старое поведение, кик через ~2 минуты)
+        if (WardenCr == null)
+        {
+            Console.WriteLine($"[WARDEN] <- cmd=0x{serverCmd:X2} ({DescribeWardenServerCmd(serverCmd)}) size={copy.Length} [PASSIVE — no CR loaded]");
+            return;
+        }
+
+        switch (serverCmd)
+        {
+            case WARDEN_SMSG_MODULE_USE:
+                // Сервер шлёт module hash + key + size. Мы притворяемся что модуль уже cached,
+                // отвечаем MODULE_OK — сервер пропускает MODULE_DATA фазу и сразу шлёт HASH_REQUEST.
+                Console.WriteLine($"[WARDEN] <- MODULE_USE — отвечаем MODULE_OK (cached)");
+                await SendWardenAsync(new byte[] { WARDEN_CMSG_MODULE_OK });
+                break;
+
+            case WARDEN_SMSG_HASH_REQUEST:
+                // Body: 1 byte cmd + 16 bytes seed
+                if (copy.Length < 17) { Console.WriteLine("[WARDEN] !! HASH_REQUEST too short"); break; }
+                var seed = copy.AsSpan(1, 16).ToArray();
+                var seedHex = Convert.ToHexString(seed);
+                var entry = WardenCr.LookupBySeed(seed);
+                if (entry == null)
+                {
+                    Console.WriteLine($"[WARDEN] <- HASH_REQUEST seed={seedHex[..16]}.. — НЕ найдено в CR ({WardenCr.Entries.Count} записей). Молчим.");
+                    break;
+                }
+                Console.WriteLine($"[WARDEN] <- HASH_REQUEST seed={seedHex[..16]}.. — найден в CR, шлём pre-computed reply");
+                var resp = new byte[21];
+                resp[0] = WARDEN_CMSG_HASH_RESULT;
+                Array.Copy(entry.Reply, 0, resp, 1, 20);
+                await SendWardenAsync(resp);
+                // ВАЖНО: переключаем RC4 keys ПОСЛЕ отправки HASH_RESULT,
+                // следующие SMSG_WARDEN сервер шлёт уже под module-keys.
+                _warden.ReplaceKeys(entry.ClientKey, entry.ServerKey);
+                _wardenKeysSwitched = true;
+                Console.WriteLine($"[WARDEN] переключили RC4 на module-keys из CR (clientKey={Convert.ToHexString(entry.ClientKey)[..16]}.. serverKey={Convert.ToHexString(entry.ServerKey)[..16]}..)");
+                break;
+
+            case WARDEN_SMSG_CHEAT_CHECKS_REQ:
+                _wardenCheatCheckCount++;
+                Console.WriteLine($"[WARDEN] <- CHEAT_CHECKS_REQUEST #{_wardenCheatCheckCount} ({copy.Length}b) — пока не обрабатываем (тест толерантности)");
+                // TODO Phase 4.3: парсить чек-типы и отвечать через port WoWee handlers
+                break;
+
+            case WARDEN_SMSG_MODULE_INIT:
+                Console.WriteLine($"[WARDEN] <- MODULE_INITIALIZE ({copy.Length}b) — игнорируем");
+                break;
+
+            case WARDEN_SMSG_MODULE_CACHE:
+                Console.WriteLine($"[WARDEN] <- MODULE_CACHE chunk ({copy.Length}b) — не должны были получить (отказались от MODULE_OK)");
+                break;
+
+            default:
+                Console.WriteLine($"[WARDEN] <- unknown cmd=0x{serverCmd:X2} size={copy.Length}");
+                break;
+        }
+    }
+
+    /// <summary>Зашифровать body под текущим WardenCrypt и отправить как CMSG_WARDEN_DATA.</summary>
+    private async Task SendWardenAsync(byte[] plaintextBody)
+    {
+        if (_warden == null) return;
+        var encBody = (byte[])plaintextBody.Clone();
+        _warden.Encrypt(encBody);
+        Console.WriteLine($"[WARDEN] -> CMSG (plain={Convert.ToHexString(plaintextBody)} enc={Convert.ToHexString(encBody)})");
+        await SendCmsgEncrypted(0x02E7 /* CMSG_WARDEN_DATA */, encBody);
+        Console.WriteLine($"[WARDEN] -> sent OK");
     }
 
     private static string DescribeWardenServerCmd(byte c) => c switch

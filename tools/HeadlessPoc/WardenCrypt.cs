@@ -18,11 +18,11 @@ namespace WowBot.HeadlessPoc;
 
 internal sealed class WardenCrypt
 {
-    private readonly Rc4 _outgoing;  // CMSG_WARDEN_DATA encrypt
-    private readonly Rc4 _incoming;  // SMSG_WARDEN_DATA decrypt
+    private Rc4 _outgoing;  // CMSG_WARDEN_DATA encrypt
+    private Rc4 _incoming;  // SMSG_WARDEN_DATA decrypt
     public byte[] Seed { get; }
-    public byte[] OutgoingKey { get; }
-    public byte[] IncomingKey { get; }
+    public byte[] OutgoingKey { get; private set; }
+    public byte[] IncomingKey { get; private set; }
 
     public WardenCrypt(byte[] sessionKey)
     {
@@ -37,6 +37,21 @@ internal sealed class WardenCrypt
 
     public void Decrypt(Span<byte> data) => _incoming.Process(data);
     public void Encrypt(Span<byte> data) => _outgoing.Process(data);
+
+    /// <summary>
+    /// Переключиться на новые RC4 ключи после успешной HASH_RESULT.
+    /// outgoingKey = шифр клиент→сервер (CMSG), incomingKey = расшифровка сервер→клиент (SMSG).
+    /// Берутся из .cr записи — pre-computed module keys.
+    /// </summary>
+    public void ReplaceKeys(byte[] outgoingKey, byte[] incomingKey)
+    {
+        if (outgoingKey.Length != 16 || incomingKey.Length != 16)
+            throw new ArgumentException("Warden RC4 keys must be 16 bytes");
+        OutgoingKey = (byte[])outgoingKey.Clone();
+        IncomingKey = (byte[])incomingKey.Clone();
+        _outgoing = new Rc4(OutgoingKey);
+        _incoming = new Rc4(IncomingKey);
+    }
 
     // ---- helpers ----
 

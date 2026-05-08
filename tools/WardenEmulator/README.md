@@ -90,10 +90,39 @@ Entries (1000 × 68 bytes):
 
 ### Будущее: что осталось делать
 
-**Phase 4.2 (несколько часов):**
-- Парсер .cr на Python или C#
-- Обработчик HASH_REQUEST с lookup
-- Switch к pre-computed RC4 keys
+**Phase 4.2 (несколько часов):** ✅ СДЕЛАНО
+- ✅ Парсер .cr на C# (`HeadlessPoc/WardenCrFile.cs`)
+- ✅ Обработчик MODULE_USE → MODULE_OK
+- ✅ Обработчик HASH_REQUEST с lookup (готов отвечать)
+- ✅ ReplaceKeys для switch к pre-computed RC4 keys
+
+### ⚠ ТЕКУЩИЙ БЛОКЕР Phase 4.2
+
+При тесте на WoWCircle x100 headless:
+1. SRP6 OK ✓
+2. CMSG_AUTH_SESSION → AUTH_RESPONSE result=0x0C (AUTH_OK) ✓
+3. Получили SMSG_WARDEN MODULE_USE (37 байт) ✓
+4. Расшифровали body, code=0x00 (MODULE_USE) ✓
+5. Отправили CMSG_WARDEN MODULE_OK (1 байт, encrypted) ✓
+6. **Сервер НЕ шлёт HASH_REQUEST** ✗
+7. Через ~47 секунд: «Your anticheat seems to be inactive»
+8. Кик через ~114 секунд
+
+Странность: в MITM с реальным клиентом MODULE_OK работал и сервер шёл дальше.
+В headless с тем же K, тем же WardenCrypt кодом — не работает.
+
+**Гипотезы:**
+- WoWCircle TC может быть кастомизирован — ожидает что-то ещё в MODULE_OK теле
+- Тонкий timing/state issue который в MITM не проявлялся
+- Ошибка в encryption stream sync, не очевидная из анализа
+
+**Что попробовать в следующей сессии:**
+1. Запустить MITM параллельно с headless и побайтово сравнить CMSG_WARDEN bytes
+2. Попробовать MODULE_MISSING вместо MODULE_OK — если сервер начнёт стримить модуль,
+   значит наша крипта ОК, проблема в логике reaction на MODULE_OK
+3. Проверить вторую SMSG_WARDEN packet — может HASH_REQUEST приходит, но мы его
+   неправильно декодируем (не как 0x02E6)
+4. Попробовать с локальным TC сервером (где у нас полный доступ к логам)
 
 **Phase 4.3 (несколько дней):**
 - Порт WoWee `warden_handler.cpp` check handlers
