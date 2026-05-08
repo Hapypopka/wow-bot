@@ -17,3 +17,5 @@ wiki/.obsidian/workspace-mobile.json
 wiki/.obsidian/appearance.json
 tools/__pycache__/
 tools/_all_commands.txt
+tools/MitmProxy/mitm.log
+tools/HeadlessPoc/*.log
