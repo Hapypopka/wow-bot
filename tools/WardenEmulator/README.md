@@ -10,23 +10,31 @@
 - `SmokeTestRunner/` — консольный runner с диагностикой step-by-step
 - `native/unicorn.dll` — Windows x64 DLL (взято из `pip install unicorn`, 2.1.4)
 
-## Текущий блокер
+## Решено: subprocess Python
 
-`Unicorn.EmuStart()` валит процесс с exit code 9 (native crash). 
-Прошлые шаги работают:
-- ✅ `new Unicorn(UC_ARCH_X86, UC_MODE_32)` — создание инстанса
-- ✅ `MemMap` — выделение памяти
-- ✅ `MemWrite` — запись кода
-- ❌ `EmuStart` — нативный краш
+`Unicorn.EmuStart()` валит процесс из .NET (на Windows стабильно exit code 9 без stack trace).
+Проверены: F# binding 2.1.3, direct P/Invoke, separate thread, native DLL 2.0.1, 2.1.3 (MSVC), 2.1.4 (pip).
+Python с тем же DLL работает идеально → проблема в .NET ↔ Unicorn JIT интеграции на Windows.
 
-**Гипотеза:** ABI mismatch между .NET binding `UnicornEngine.Unicorn 2.1.3` (компилировано под 2.1.0/2.1.1) и DLL `unicorn 2.1.4`. Возможно поменялась calling convention или порядок аргументов.
+**Решение:** делегируем эмуляцию **subprocess Python**. C# спавнит python.exe с
+`py_helper/warden_emu_helper.py`, общается JSON-сообщениями через stdin/stdout.
 
-## Что попробовать в следующей сессии
+```
+HeadlessPoc (C#) ──JSON over pipes── python.exe (warden_emu_helper.py)
+                                              └── unicorn (x86 emulator)
+```
 
-1. **Synced version:** найти `unicorn.dll` ровно от версии 2.1.3 (которой собирался binding) — на github releases или archive
-2. **Direct P/Invoke:** написать свой `[DllImport("unicorn")]` в обход F# binding — будет ровно та сигнатура которая в native
-3. **Альтернатива:** взять другой x86 emulator (Triton, IcedFlame), но Unicorn — стандарт
-4. **Пересобрать binding:** склонировать binding из github, перекомпилировать против native 2.1.4
+`PythonEmulatorBridge.cs` — высокоуровневый wrapper: Ping/Open/Map/Write/Emu/RegRead/Close.
+
+## Текущее состояние
+
+- ✅ Захват модуля работает (см. `MitmProxy --capture-module`)
+- ✅ Python helper эмулирует x86 — smoke + multi-register сценарий
+- ✅ C# bridge стабилен
+- ⏳ Порт логики WoWee `warden_module.cpp` (PE loader) на Python
+- ⏳ Порт `warden_emulator.cpp` (API stubs) на Python
+- ⏳ Порт `warden_handler.cpp` (state machine) на C#
+- ⏳ Интеграция в HeadlessPoc
 
 ## Reference: WoWee
 

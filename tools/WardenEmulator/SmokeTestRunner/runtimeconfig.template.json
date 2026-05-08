@@ -1,0 +1,7 @@
+{
+  "configProperties": {
+    "System.Runtime.CompilerServices.UserShadowStack": false,
+    "DOTNET_EnableWriteXorExecute": false,
+    "System.Globalization.Invariant": false
+  }
+}

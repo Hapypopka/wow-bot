@@ -21,6 +21,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>unicorn.dll</Link>
     </Content>
+    <!-- Python helper рядом с DLL — это наш actual emulator backend -->
+    <Content Include="py_helper/*.py" Condition="Exists('py_helper')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>py_helper/%(Filename)%(Extension)</Link>
+    </Content>
   </ItemGroup>
 
   <!-- SmokeTestRunner — отдельный проект, не компилируем как часть библиотеки -->

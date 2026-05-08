@@ -4,6 +4,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Отключаем CET shadow stack — он не пускает JIT-сгенерированный нативный код (Unicorn) -->
+    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <ItemGroup>
