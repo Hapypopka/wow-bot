@@ -30,6 +30,10 @@ tools/WardenEmulator/native/
 tools/MitmProxy/warden_module*.bin
 tools/MitmProxy/warden_module_info.txt
 
+# Pinned (seed → reply) пара захваченная через MITM — привязана к серверу/модулю/аккаунту
+tools/MitmProxy/warden_pinned_response.bin
+tools/MitmProxy/warden_pinned_response_info.txt
+
 # WoWee — склонированный референс
 tools/WoWee-reference/
 

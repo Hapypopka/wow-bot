@@ -94,6 +94,12 @@ internal sealed class WorldClient : IDisposable
     /// <summary>База pre-computed Warden ответов из vmangos/warden_modules. Опционально.
     /// Если задано — обрабатываем HASH_REQUEST через CR lookup и переключаем RC4 keys.</summary>
     public WardenCrFile? WardenCr { get; set; }
+
+    /// <summary>Pinned (seed → reply) pair захваченная через MITM. Если задано — используется ВНЕ CR lookup,
+    /// для серверов с фиксированным seed которого нет в vmangos pool. После HASH_RESULT мы НЕ знаем module keys
+    /// (их вычисляет модуль), поэтому RC4 не переключаем — последующие SMSG_WARDEN расшифруются как мусор,
+    /// но сервер хотя бы пропустит handshake gate.</summary>
+    public (byte[] Seed, byte[] Reply)? WardenPinnedResponse { get; set; }
     private bool _wardenKeysSwitched = false;
     private int _wardenCheatCheckCount = 0;
 
@@ -193,6 +199,7 @@ internal sealed class WorldClient : IDisposable
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            await TryHandleWardenAsync(op, body); // КРИТИЧНО: иначе RC4 desync если сервер шлёт warden между AUTH_RESPONSE и CHAR_ENUM
             if (op == SMSG_CHAR_ENUM)
             {
                 var chars = ParseCharEnum(body);
@@ -277,7 +284,12 @@ internal sealed class WorldClient : IDisposable
                     break;
 
                 default:
-                    // молча скипаем всё остальное
+                    // ловим пропущенные опкоды чтобы не упустить warden под нестандартным id
+                    if (op != SMSG_UPDATE_OBJECT && op != SMSG_COMPRESSED_UPDATE_OBJECT)
+                    {
+                        var hex = Convert.ToHexString(body.AsSpan(0, Math.Min(body.Length, 32)));
+                        Console.WriteLine($"[ENTER #{i}] unhandled op=0x{op:X4} size={size} body[0..32]={hex}");
+                    }
                     break;
             }
             // ранний выход после LOGIN_VERIFY_WORLD + хотя бы 1 update пакета
@@ -309,6 +321,7 @@ internal sealed class WorldClient : IDisposable
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            await TryHandleWardenAsync(op, body);
             if (op == SMSG_WHO)
             {
                 ParseWhoResponse(body);
@@ -359,6 +372,7 @@ internal sealed class WorldClient : IDisposable
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            await TryHandleWardenAsync(op, body);
             if (op == SMSG_CONTACT_LIST) entries = ParseContactListBody(body);
             else if (op == SMSG_TIME_SYNC_REQ) await RespondTimeSync(body);
             else if (op == SMSG_NAME_QUERY_RESPONSE) HandleNameQueryResponse(body);
@@ -375,6 +389,7 @@ internal sealed class WorldClient : IDisposable
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            await TryHandleWardenAsync(op, body);
             if (op == SMSG_NAME_QUERY_RESPONSE) HandleNameQueryResponse(body);
             else if (op == SMSG_TIME_SYNC_REQ) await RespondTimeSync(body);
             else if (op == SMSG_MESSAGECHAT) HandleChatMessage(body);
@@ -457,13 +472,29 @@ internal sealed class WorldClient : IDisposable
     private const byte WARDEN_CMSG_HASH_RESULT        = 4;
     private const byte WARDEN_CMSG_MODULE_FAILED      = 5;
 
+    /// <summary>Безопасно вызывается из любого read цикла. Сохраняет Warden RC4 sync даже если SMSG_WARDEN_DATA прилетел в неожиданном месте.</summary>
+    private async Task TryHandleWardenAsync(ushort op, byte[] body)
+    {
+        if (op == 0x02E6) await HandleWardenData(body);
+    }
+
+    private static bool SeedsEqual(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (var i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
+
     private async Task HandleWardenData(byte[] body)
     {
         if (_warden == null) return;
+        var encHex = Convert.ToHexString(body.AsSpan(0, Math.Min(body.Length, 32)));
         var copy = body.ToArray();
         _warden.Decrypt(copy);
         var serverCmd = copy[0];
         _lastWardenChallenge = copy;
+        var decHex = Convert.ToHexString(copy.AsSpan(0, Math.Min(copy.Length, 32)));
+        Console.WriteLine($"[WARDEN] <- 0x02E6 size={body.Length} enc={encHex} dec={decHex}");
 
         // Если CR база не задана — пассивный режим (старое поведение, кик через ~2 минуты)
         if (WardenCr == null)
@@ -477,6 +508,14 @@ internal sealed class WorldClient : IDisposable
             case WARDEN_SMSG_MODULE_USE:
                 // Сервер шлёт module hash + key + size. Мы притворяемся что модуль уже cached,
                 // отвечаем MODULE_OK — сервер пропускает MODULE_DATA фазу и сразу шлёт HASH_REQUEST.
+                // Env WARDEN_MODULE_MISSING=1 — диагностический режим: шлём MODULE_MISSING (0x00),
+                // тогда сервер начинает стримить MODULE_CACHE. Если стриминг идёт — крипта на CMSG ОК.
+                if (Environment.GetEnvironmentVariable("WARDEN_MODULE_MISSING") == "1")
+                {
+                    Console.WriteLine($"[WARDEN] <- MODULE_USE — отвечаем MODULE_MISSING (диагностика крипты)");
+                    await SendWardenAsync(new byte[] { WARDEN_CMSG_MODULE_MISSING });
+                    break;
+                }
                 Console.WriteLine($"[WARDEN] <- MODULE_USE — отвечаем MODULE_OK (cached)");
                 await SendWardenAsync(new byte[] { WARDEN_CMSG_MODULE_OK });
                 break;
@@ -486,6 +525,20 @@ internal sealed class WorldClient : IDisposable
                 if (copy.Length < 17) { Console.WriteLine("[WARDEN] !! HASH_REQUEST too short"); break; }
                 var seed = copy.AsSpan(1, 16).ToArray();
                 var seedHex = Convert.ToHexString(seed);
+
+                // Приоритет: pinned response (захваченный через MITM для конкретного seed) > CR lookup
+                if (WardenPinnedResponse.HasValue && SeedsEqual(WardenPinnedResponse.Value.Seed, seed))
+                {
+                    var pinnedReply = WardenPinnedResponse.Value.Reply;
+                    Console.WriteLine($"[WARDEN] <- HASH_REQUEST seed={seedHex[..16]}.. — PINNED ответ из MITM-захвата");
+                    var resp2 = new byte[21];
+                    resp2[0] = WARDEN_CMSG_HASH_RESULT;
+                    Array.Copy(pinnedReply, 0, resp2, 1, 20);
+                    await SendWardenAsync(resp2);
+                    Console.WriteLine($"[WARDEN] HASH_RESULT отправлен. Module keys неизвестны — следующие SMSG будут мусором, но handshake gate пройден");
+                    break;
+                }
+
                 var entry = WardenCr.LookupBySeed(seed);
                 if (entry == null)
                 {
@@ -621,6 +674,7 @@ internal sealed class WorldClient : IDisposable
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            await TryHandleWardenAsync(op, body);
 
             Console.WriteLine($"[WORLD]    <- opcode=0x{op:X4} size={size}");
             switch (op)
@@ -800,6 +854,7 @@ internal sealed class WorldClient : IDisposable
         {
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
+            await TryHandleWardenAsync(op, body);
             if (op == SMSG_WHO)
             {
                 var br = new BinaryReader(new MemoryStream(body));
@@ -1442,7 +1497,8 @@ internal sealed class WorldClient : IDisposable
             else if (c == 0 && op != SMSG_UPDATE_OBJECT && op != SMSG_COMPRESSED_UPDATE_OBJECT)
             {
                 var t = (DateTime.UtcNow - start).TotalSeconds;
-                Console.WriteLine($"[IDLE @ {t:F1}s] новый опкод 0x{op:X4} size={size}");
+                var hex = Convert.ToHexString(body.AsSpan(0, Math.Min(body.Length, 32)));
+                Console.WriteLine($"[IDLE @ {t:F1}s] новый опкод 0x{op:X4} size={size} body[0..32]={hex}");
             }
         }
         var totalTime = (DateTime.UtcNow - start).TotalSeconds;

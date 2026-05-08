@@ -56,6 +56,10 @@ internal sealed class WorldBridge
     private readonly List<byte> _capturedModuleChunks = new();
     private bool _moduleOkSwappedToMissing = false;
     private bool _moduleSaved = false;
+
+    // HASH capture: запомнить (seed → reply) пару чтобы headless мог пройти handshake без эмуляции модуля.
+    private byte[]? _capturedHashSeed;
+    private bool _hashPairSaved = false;
     private readonly SemaphoreSlim _serverWriteLock = new(1, 1);
     private readonly SemaphoreSlim _clientWriteLock = new(1, 1);
     private readonly Action<string> _log;
@@ -240,6 +244,7 @@ internal sealed class WorldBridge
                     }
 
                     if (_verbose) _log($"WARDEN ↑ {body.Length}b code=0x{code:X2} (re-encrypt phase)");
+                    HandleCmsgWardenPlaintext(body);
                     _wardenServer.Encrypt(body);
 
                     // HASH_RESULT (0x04) — последний пакет на исходных ключах. После него TC переключается на module keys.
@@ -303,6 +308,49 @@ internal sealed class WorldBridge
             {
                 SaveCapturedModule();
                 _moduleSaved = true;
+            }
+        }
+
+        // HASH_REQUEST (0x05): cmd + seed[16] — сохраняем seed чтобы потом смэтчить с CMSG HASH_RESULT
+        if (code == 0x05 && body.Length >= 17 && _capturedHashSeed == null)
+        {
+            _capturedHashSeed = body.AsSpan(1, 16).ToArray();
+            _log($"HASH_REQUEST captured: seed={Convert.ToHexString(_capturedHashSeed)}");
+        }
+    }
+
+    /// <summary>Захватываем CMSG HASH_RESULT (cmd=4, body=cmd+reply[20]) и сохраняем пару (seed, reply) на диск
+    /// для headless pinned-response fallback.</summary>
+    private void HandleCmsgWardenPlaintext(byte[] body)
+    {
+        if (body.Length < 1) return;
+        var code = body[0];
+
+        if (code == 0x04 && body.Length >= 21 && _capturedHashSeed != null && !_hashPairSaved)
+        {
+            var reply = body.AsSpan(1, 20).ToArray();
+            _log($"HASH_RESULT captured: reply={Convert.ToHexString(reply)}");
+            try
+            {
+                var dir = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+                var path = System.IO.Path.Combine(dir, "warden_pinned_response.bin");
+                // Формат: seed[16] || reply[20] = 36 байт. Простой бинарный.
+                using var fs = System.IO.File.Create(path);
+                fs.Write(_capturedHashSeed);
+                fs.Write(reply);
+                _log($"HASH pair saved: {path} (seed[16]+reply[20]=36b)");
+
+                var infoPath = System.IO.Path.Combine(dir, "warden_pinned_response_info.txt");
+                System.IO.File.WriteAllText(infoPath,
+                    $"module_hash: {(_moduleHash != null ? Convert.ToHexString(_moduleHash) : "(unknown)")}\n" +
+                    $"seed:        {Convert.ToHexString(_capturedHashSeed)}\n" +
+                    $"reply:       {Convert.ToHexString(reply)}\n");
+                _log($"HASH pair info → {infoPath}");
+                _hashPairSaved = true;
+            }
+            catch (Exception ex)
+            {
+                _log($"HASH pair save failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
     }

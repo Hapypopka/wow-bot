@@ -103,6 +103,26 @@ internal static class Program
                 Console.WriteLine($"[POC] CR_FILE не задан — Warden пассивен (kick через ~2 минуты)");
             }
 
+            // Pinned response — захваченная через MITM пара (seed → reply) для конкретного сервера/модуля.
+            // Используется когда seed сервера НЕ входит в pool vmangos .cr (как у WoWCircle).
+            // Файл: 36 байт = seed[16] + reply[20]. Пишется MitmProxy.HandleCmsgWardenPlaintext.
+            var pinnedFile = Environment.GetEnvironmentVariable("WARDEN_PINNED_FILE");
+            if (!string.IsNullOrEmpty(pinnedFile) && File.Exists(pinnedFile))
+            {
+                var bytes = File.ReadAllBytes(pinnedFile);
+                if (bytes.Length == 36)
+                {
+                    var seed = bytes.AsSpan(0, 16).ToArray();
+                    var reply = bytes.AsSpan(16, 20).ToArray();
+                    world.WardenPinnedResponse = (seed, reply);
+                    Console.WriteLine($"[POC] Warden PINNED подключён: seed={Convert.ToHexString(seed)[..16]}.. reply={Convert.ToHexString(reply)[..16]}..");
+                }
+                else
+                {
+                    Console.WriteLine($"[POC] !! WARDEN_PINNED_FILE плохого размера {bytes.Length} (ожидалось 36)");
+                }
+            }
+
             await world.ConnectAndAuthAsync(worldHost, worldPort, account, target.Id, sessionKey);
             var characters = await world.GetCharactersAsync();
 
