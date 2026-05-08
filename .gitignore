@@ -19,6 +19,7 @@ tools/__pycache__/
 tools/_all_commands.txt
 tools/MitmProxy/mitm.log
 tools/HeadlessPoc/*.log
+WowBot.Headless/*.log
 
 # WoWee — склонированный референс, не коммитим (есть в README ссылка)
 tools/WoWee-reference/

@@ -67,6 +67,13 @@ public sealed class WorldClient : IDisposable
     private const uint   CMSG_NAME_QUERY         = 0x50;
     private const ushort SMSG_NAME_QUERY_RESPONSE = 0x51;
 
+    // Spell tracking (Phase B/C)
+    private const ushort SMSG_CAST_FAILED        = 0x130; // client-validation отказ (плохой target и т.п.)
+    private const ushort SMSG_SPELL_START        = 0x131; // каст начался (для cast-time спеллов)
+    private const ushort SMSG_SPELL_GO           = 0x132; // каст успешно прошёл
+    private const ushort SMSG_SPELL_FAILURE      = 0x133; // каст провалился по фактической логике
+    private const ushort SMSG_SPELL_FAILED_OTHER = 0x2A6;
+
     private readonly TcpClient _tcp = new();
     private NetworkStream _stream = null!;
     private WowCrypt _crypt = null!;
@@ -82,6 +89,13 @@ public sealed class WorldClient : IDisposable
     public ulong LocalPlayerGuid => _charGuid;
     /// <summary>WorldState — снэпшот мира из UpdateObject парсера. Доступен для адаптеров.</summary>
     public WorldState WorldState => World;
+
+    /// <summary>Spell событие — каст спелла начался (cast-time spells), серверный ack.</summary>
+    public event Action<ulong /*caster*/, int /*spellId*/>? SpellStarted;
+    /// <summary>Spell событие — каст успешно завершился (instant и cast-time spells).</summary>
+    public event Action<ulong /*caster*/, int /*spellId*/>? SpellSucceeded;
+    /// <summary>Spell событие — каст провалился. Для нашего собственного каста выводит причину.</summary>
+    public event Action<ulong /*caster*/, int /*spellId*/, byte /*reason*/>? SpellFailed;
 
     private CancellationTokenSource? _heartbeatCts;
     private Task? _heartbeatTask;
@@ -299,8 +313,9 @@ public sealed class WorldClient : IDisposable
                     }
                     break;
             }
-            // ранний выход после LOGIN_VERIFY_WORLD + хотя бы 1 update пакета
-            if (verifyReceived && updatePackets >= 1) break;
+            // выход после LOGIN_VERIFY_WORLD + ≥5 update-пакетов (даём время CREATE_OBJECT'ам
+            // для близлежащих NPC долететь, иначе они в WorldState с entry=0/hp=0).
+            if (verifyReceived && updatePackets >= 5) break;
         }
 
         if (!verifyReceived)
@@ -1165,6 +1180,9 @@ public sealed class WorldClient : IDisposable
         finally { _sendLock.Release(); }
     }
 
+    /// <summary>Отправить произвольный CMSG. Доступно адаптерам для своих opcode'ов.</summary>
+    public async Task SendCmsgAsync(uint opcode, byte[] payload) => await SendCmsgEncrypted(opcode, payload);
+
     private async Task SendCmsgEncrypted(uint opcode, byte[] payload)
     {
         await _sendLock.WaitAsync();
@@ -1365,6 +1383,113 @@ public sealed class WorldClient : IDisposable
         Console.WriteLine($"[MOVE]   stopped at ({_x:F1},{_y:F1},{_z:F1})");
     }
 
+    /// <summary>Записать packed GUID (WoW-формат: маска + non-zero байты). Public для адаптеров.</summary>
+    public static void WritePackedGuidPublic(BinaryWriter w, ulong guid) => WritePackedGuid(w, guid);
+
+    /// <summary>Парсер SMSG_SPELL_START / SPELL_GO / SPELL_FAILURE / CAST_FAILED. Поднимает события.</summary>
+    private void ParseSpellEvent(ushort op, byte[] body)
+    {
+        try
+        {
+            using var ms = new MemoryStream(body);
+            using var br = new BinaryReader(ms);
+
+            if (op == SMSG_CAST_FAILED)
+            {
+                // body: uint8 castCount, uint32 spellId, uint8 reason
+                if (body.Length < 6) return;
+                br.ReadByte(); // castCount
+                var spellId = br.ReadUInt32();
+                var reason = br.ReadByte();
+                Console.WriteLine($"[SPELL] CAST_FAILED spellId={spellId} reason=0x{reason:X2} ({DescribeSpellFailReason(reason)})");
+                SpellFailed?.Invoke(_charGuid, (int)spellId, reason);
+                return;
+            }
+
+            if (op == SMSG_SPELL_FAILURE || op == SMSG_SPELL_FAILED_OTHER)
+            {
+                // body: packedGuid caster, uint8 castCount, uint32 spellId, uint8 reason
+                var caster = ReadPackedGuid(br);
+                br.ReadByte(); // castCount
+                var spellId = br.ReadUInt32();
+                var reason = body.Length > br.BaseStream.Position ? br.ReadByte() : (byte)0;
+                Console.WriteLine($"[SPELL] FAILURE caster=0x{caster:X16} spellId={spellId} reason=0x{reason:X2} ({DescribeSpellFailReason(reason)})");
+                SpellFailed?.Invoke(caster, (int)spellId, reason);
+                return;
+            }
+
+            // SMSG_SPELL_START / SMSG_SPELL_GO format:
+            //   packedGuid casterUnit
+            //   packedGuid casterItem (часто == casterUnit)
+            //   uint8 castCount
+            //   uint32 spellId
+            //   uint32 castFlags
+            //   ... (cast time / targets / etc — нам не критично)
+            var unit = ReadPackedGuid(br);
+            var item = ReadPackedGuid(br);
+            br.ReadByte(); // castCount
+            var sid = br.ReadUInt32();
+
+            if (op == SMSG_SPELL_START)
+            {
+                Console.WriteLine($"[SPELL] START caster=0x{unit:X16} spellId={sid}");
+                SpellStarted?.Invoke(unit, (int)sid);
+            }
+            else if (op == SMSG_SPELL_GO)
+            {
+                Console.WriteLine($"[SPELL] GO caster=0x{unit:X16} spellId={sid}");
+                SpellSucceeded?.Invoke(unit, (int)sid);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SPELL] !! parse error op=0x{op:X4}: {ex.Message}");
+        }
+    }
+
+    /// <summary>SpellCastResult enum в TC. Краткие описания самых частых.</summary>
+    private static string DescribeSpellFailReason(byte reason) => reason switch
+    {
+        0x00 => "SUCCESS",
+        0x01 => "AFFECTING_COMBAT",
+        0x02 => "ALREADY_AT_FULL_HEALTH",
+        0x03 => "ALREADY_AT_FULL_MANA",
+        0x09 => "BAD_TARGETS",
+        0x0F => "CANT_DO_THAT_RIGHT_NOW",
+        0x14 => "EQUIPPED_ITEM",
+        0x18 => "FIZZLE",
+        0x1A => "INTERRUPTED",
+        0x21 => "LINE_OF_SIGHT",
+        0x27 => "MAX_TARGETS",
+        0x29 => "NEED_AMMO",
+        0x36 => "NOT_HERE",
+        0x37 => "NOT_INFRONT",
+        0x38 => "NOT_IN_CONTROL",
+        0x39 => "NOT_KNOWN",
+        0x3A => "NOT_MOUNTED",
+        0x3D => "NOT_READY",
+        0x44 => "NO_VALID_TARGETS",
+        0x4A => "OUT_OF_RANGE",
+        0x4B => "PACIFIED",
+        0x4C => "POSSESSED",
+        0x4F => "REQUIRES",
+        0x53 => "SPELL_IN_PROGRESS",
+        0x54 => "SPELL_LEARNED",
+        0x55 => "SPELL_UNAVAILABLE",
+        0x56 => "STUNNED",
+        0x57 => "TARGETS_DEAD",
+        0x59 => "TARGET_AURASTATE",
+        0x5C => "TARGET_DUELING",
+        0x5D => "TARGET_ENEMY",
+        0x60 => "TARGET_FRIENDLY",
+        0x65 => "TARGET_NOT_DEAD",
+        0x67 => "TARGET_NOT_PLAYER",
+        0x68 => "TARGET_NO_POCKETS",
+        0x69 => "TARGET_NO_WEAPONS",
+        0x6E => "UNIT_NOT_INFRONT",
+        _ => $"unk0x{reason:X2}"
+    };
+
     private static void WritePackedGuid(BinaryWriter w, ulong guid)
     {
         var maskPos = w.BaseStream.Position;
@@ -1475,6 +1600,11 @@ public sealed class WorldClient : IDisposable
             else if (op == 0x02E6)
             {
                 await HandleWardenData(body);
+            }
+            else if (op == SMSG_SPELL_START || op == SMSG_SPELL_GO
+                  || op == SMSG_SPELL_FAILURE || op == SMSG_CAST_FAILED || op == SMSG_SPELL_FAILED_OTHER)
+            {
+                ParseSpellEvent(op, body);
             }
             else if (op == SMSG_FORCE_RUN_SPEED_CHANGE)
             {
