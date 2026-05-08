@@ -1,5 +1,13 @@
 # Log
 
+## [2026-05-09] decision | Headless архитектура — Hexagonal (Ports & Adapters)
+- Целевая цель: «10-й игрок» в 5-man подземельях, бот без WoW.exe, запуск одной командой. Может быть N=1..5 ботов в одном процессе.
+- Решения: (1) один процесс, N инстансов через TCP для headless; (2) профили данжей как C# код; (3) BehaviorTree порт `AmeisenBotX.BehaviorTree` MIT, потом адаптация под наши нужды; (4) memory-режим оставляем работающим, headless параллельная ветка.
+- Архитектура: эволюция `ICombatRotation` Lua→`BotAction`-based, новый `IGameActions` интерфейс, два адаптера (Memory+Lua и Headless), общий `WowBot.Core`.
+- Phase C первый класс: Demonology Warlock (Узянбаева на destroyer.cool — тестовый чар).
+- Создано: [[2026-05-09-headless-architecture]], [[headless-overview]], [[headless-roadmap]].
+- Затронуты: [[index]]
+
 ## [2026-04-20] fix | DK Death and Decay — ground click через TryGroundAoE
 - Симптом: DK кастил DnD (43265), появлялся зелёный круг прицела, но клика по земле не происходило → каст висел и отменялся.
 - Причина: `Cast(43265)` стоял в Lua-ротации (Blood:37, Frost:58, Unholy:73 — все три спека), но никто не вызывал `_hook.CastTerrainClick(x,y,z)` после каста. У Druid Hurricane и Hunter Volley это делается в `CombatHelper.TryGroundAoE` — DK туда не было добавлено.

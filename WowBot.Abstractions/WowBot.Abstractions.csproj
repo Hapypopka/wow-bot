@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Cross-platform abstractions — без -windows и x86, чтобы headless (net9.0/AnyCPU)
+       и memory-mode (net8.0-windows/x86) могли оба ссылаться. -->
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <PlatformTarget>x86</PlatformTarget>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

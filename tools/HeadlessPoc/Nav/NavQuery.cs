@@ -11,7 +11,7 @@ using DotRecast.Detour;
 
 namespace WowBot.HeadlessPoc.Nav;
 
-internal sealed class NavQuery : IDisposable
+public sealed class NavQuery : IDisposable
 {
     private readonly string _mmapDir;
     private readonly ConcurrentDictionary<int, DtNavMesh> _meshCache = new();

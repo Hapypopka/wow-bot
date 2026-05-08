@@ -13,6 +13,8 @@
 - [[boss-engine]] — BossEngine, CLEU listener, MarrowgarTactic
 - [[updater]] — GitHub Releases, patch.zip, бэкап/откат
 - [[overlay-ui]] — WPF оверлей, настройки per-character, spell toggles
+- [[headless-overview]] — **Headless архитектура (Ports & Adapters), бот без WoW.exe**
+- [[headless-roadmap]] — план реализации headless по фазам
 
 ## Классы
 - [[warrior]] — Arms/Fury/Prot. AoE: Prot Thunder Clap
@@ -37,6 +39,7 @@
 ## Решения
 - [[2025-04-15-wb-ncet]] — WB_NCET: подсчёт врагов рядом с таргетом для рейнж DPS
 - [[2025-04-16-own-aoe-filter]] — Фильтр своих AoE в Avoidance (Hurricane/Volley/DnD/Consecration)
+- [[2026-05-09-headless-architecture]] — **Hexagonal Architecture для headless: Ports & Adapters, эволюция ICombatRotation**
 
 ## Источники
 - [[npcbots]] — TrinityCore NPCBots AI, что портировано, что можно портировать

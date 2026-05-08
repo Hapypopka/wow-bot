@@ -16,7 +16,7 @@
 
 namespace WowBot.HeadlessPoc;
 
-internal sealed class WardenCrFile
+public sealed class WardenCrFile
 {
     public uint MemoryRead { get; }
     public uint PageScanCheck { get; }

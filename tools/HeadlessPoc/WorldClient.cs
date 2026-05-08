@@ -15,15 +15,15 @@ using WowBot.HeadlessPoc.Nav;
 
 namespace WowBot.HeadlessPoc;
 
-internal sealed record CharInfo(
+public sealed record CharInfo(
     ulong Guid, string Name, byte Race, byte Class, byte Gender,
     byte Level, uint Zone, uint Map, float X, float Y, float Z);
 
-internal sealed record WorldEntryStats(
+public sealed record WorldEntryStats(
     uint Map, float X, float Y, float Z, float Orientation,
     int UpdateObjectPackets, int ObjectsCreated, List<ulong> NearbyGuids);
 
-internal sealed class WorldClient : IDisposable
+public sealed class WorldClient : IDisposable
 {
     private const ushort SMSG_AUTH_CHALLENGE     = 0x1EC;
     private const uint   CMSG_AUTH_SESSION       = 0x1ED;
@@ -77,6 +77,11 @@ internal sealed class WorldClient : IDisposable
     private ulong _charGuid;
     private uint _map;
     private float _x, _y, _z, _ori;
+
+    /// <summary>GUID локального игрока (текущий персонаж). 0 пока не вошли в мир.</summary>
+    public ulong LocalPlayerGuid => _charGuid;
+    /// <summary>WorldState — снэпшот мира из UpdateObject парсера. Доступен для адаптеров.</summary>
+    public WorldState WorldState => World;
 
     private CancellationTokenSource? _heartbeatCts;
     private Task? _heartbeatTask;
@@ -259,12 +264,14 @@ internal sealed class WorldClient : IDisposable
 
                 case SMSG_UPDATE_OBJECT:
                     updatePackets++;
+                    UpdateObjectParser.Parse(body, World);
                     objectsCreated += TryExtractGuids(body, nearbyGuids);
                     break;
 
                 case SMSG_COMPRESSED_UPDATE_OBJECT:
                     updatePackets++;
                     var decompressed = ZlibDecompress(body);
+                    UpdateObjectParser.Parse(decompressed, World);
                     objectsCreated += TryExtractGuids(decompressed, nearbyGuids);
                     break;
 

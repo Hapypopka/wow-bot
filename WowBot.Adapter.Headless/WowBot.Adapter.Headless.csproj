@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Headless адаптер: реализует WowBot.Abstractions поверх HeadlessPoc network layer.
+       net9.0/AnyCPU — ничего Windows-specific не требуется (чистый протокол). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>WowBot.Adapter.Headless</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WowBot.Abstractions\WowBot.Abstractions.csproj" />
+    <ProjectReference Include="..\tools\HeadlessPoc\HeadlessPoc.csproj" />
+  </ItemGroup>
+
+</Project>

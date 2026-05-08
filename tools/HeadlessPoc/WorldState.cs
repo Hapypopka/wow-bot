@@ -5,7 +5,7 @@
 namespace WowBot.HeadlessPoc;
 
 /// <summary>Тип объекта (TypeId) в WoW 3.3.5.</summary>
-internal enum WowObjectType : byte
+public enum WowObjectType : byte
 {
     Object = 0,
     Item = 1,
@@ -18,7 +18,7 @@ internal enum WowObjectType : byte
 }
 
 /// <summary>Сущность в мире — юнит, игрок, моб, объект.</summary>
-internal sealed class WorldEntity
+public sealed class WorldEntity
 {
     public ulong Guid { get; init; }
     public WowObjectType Type { get; set; }
@@ -45,7 +45,7 @@ internal sealed class WorldEntity
 }
 
 /// <summary>Снэпшот окружающего мира — все известные сущности.</summary>
-internal sealed class WorldState
+public sealed class WorldState
 {
     private readonly Dictionary<ulong, WorldEntity> _entities = new();
     private readonly object _lock = new();
