@@ -86,6 +86,11 @@ internal sealed class WorldClient : IDisposable
     /// <summary>NavQuery для коррекции Z по навмешу. Опциональный.</summary>
     public NavQuery? Nav { get; set; }
 
+    private byte[]? _lastWardenChallenge;
+    public byte[]? LastWardenChallenge => _lastWardenChallenge;
+    private WardenCrypt? _warden;
+    private byte[]? _sessionKey;
+
     /// <summary>Снэпшот мира — все известные сущности рядом.</summary>
     public WorldState World { get; } = new();
 
@@ -107,6 +112,8 @@ internal sealed class WorldClient : IDisposable
 
     public async Task ConnectAndAuthAsync(string host, int port, string account, byte realmId, byte[] sessionKey)
     {
+        _sessionKey = sessionKey;
+        _warden = new WardenCrypt(sessionKey);
         Console.WriteLine($"[WORLD] connecting to {host}:{port}");
         await _tcp.ConnectAsync(host, port);
         _stream = _tcp.GetStream();
@@ -165,7 +172,8 @@ internal sealed class WorldClient : IDisposable
                 if (r != 0x0C && r != 0x0D) throw new Exception($"world auth rejected 0x{r:X2}");
                 return;
             }
-            Console.WriteLine($"[WORLD]    skip pre-auth opcode=0x{op:X4} size={size}");
+            if (op == 0x02E6) await HandleWardenData(body);
+            else Console.WriteLine($"[WORLD]    skip pre-auth opcode=0x{op:X4} size={size}");
         }
         throw new Exception("no SMSG_AUTH_RESPONSE in 5 packets");
     }
@@ -212,6 +220,7 @@ internal sealed class WorldClient : IDisposable
             var (size, op) = await ReadEncryptedHeader();
             var body = await ReadExactly(size - 2);
             if (debug) Console.WriteLine($"[ENTER #{i}] op=0x{op:X4} size={size}");
+            if (op == 0x02E6) await HandleWardenData(body);
 
             switch (op)
             {
@@ -406,6 +415,99 @@ internal sealed class WorldClient : IDisposable
         return list;
     }
 
+    /// <summary>True если опкод — это движение другого юнита (нам пересылается сервером).</summary>
+    private static bool IsMovementOpcode(ushort op) => op switch
+    {
+        0xB5 => true, // MSG_MOVE_START_FORWARD
+        0xB6 => true, // MSG_MOVE_START_BACKWARD
+        0xB7 => true, // MSG_MOVE_STOP
+        0xB8 => true, // MSG_MOVE_START_STRAFE_LEFT
+        0xB9 => true, // MSG_MOVE_START_STRAFE_RIGHT
+        0xBA => true, // MSG_MOVE_STOP_STRAFE
+        0xBB => true, // MSG_MOVE_JUMP
+        0xBC => true, // MSG_MOVE_START_TURN_LEFT
+        0xBD => true, // MSG_MOVE_START_TURN_RIGHT
+        0xBE => true, // MSG_MOVE_STOP_TURN
+        0xBF => true, // MSG_MOVE_START_PITCH_UP
+        0xC0 => true, // MSG_MOVE_START_PITCH_DOWN
+        0xC1 => true, // MSG_MOVE_STOP_PITCH
+        0xDA => true, // MSG_MOVE_SET_FACING
+        0xDB => true, // MSG_MOVE_SET_PITCH
+        0xEE => true, // MSG_MOVE_HEARTBEAT
+        0xEF => true, // MSG_MOVE_FALL_LAND
+        _ => false
+    };
+
+    // Warden opcodes (первый байт расшифрованного payload)
+    private const byte WARDEN_SMSG_MODULE_USE         = 0;
+    private const byte WARDEN_SMSG_MODULE_CACHE       = 1;
+    private const byte WARDEN_SMSG_CHEAT_CHECKS_REQ   = 2;
+    private const byte WARDEN_SMSG_MODULE_INIT        = 3;
+    private const byte WARDEN_SMSG_HASH_REQUEST       = 5;
+
+    private const byte WARDEN_CMSG_MODULE_MISSING     = 0;
+    private const byte WARDEN_CMSG_MODULE_OK          = 1;
+    private const byte WARDEN_CMSG_CHEAT_CHECKS_RES   = 2;
+    private const byte WARDEN_CMSG_HASH_RESULT        = 4;
+    private const byte WARDEN_CMSG_MODULE_FAILED      = 5;
+
+    private Task HandleWardenData(byte[] body)
+    {
+        if (_warden == null) return Task.CompletedTask;
+        var copy = body.ToArray();
+        _warden.Decrypt(copy);
+        var serverCmd = copy[0];
+        _lastWardenChallenge = copy;
+        Console.WriteLine($"[WARDEN] <- cmd=0x{serverCmd:X2} ({DescribeWardenServerCmd(serverCmd)}) size={copy.Length}");
+
+        // Не отвечаем. Опытным путём:
+        //   MODULE_FAILED → кик за 35 сек
+        //   игнор         → кик за 116 сек (медленнее)
+        //   фальш HASH_RESULT → кик мгновенно (server валидирует контент)
+        // Полный bypass требует реверс WoWCircle anti-cheat модуля (зашифрованный x86 код).
+        return Task.CompletedTask;
+    }
+
+    private static string DescribeWardenServerCmd(byte c) => c switch
+    {
+        0 => "MODULE_USE",
+        1 => "MODULE_CACHE",
+        2 => "CHEAT_CHECKS_REQUEST",
+        3 => "MODULE_INITIALIZE",
+        5 => "HASH_REQUEST",
+        _ => $"unk{c}"
+    };
+
+    private void HandleEntityMovement(byte[] body)
+    {
+        try
+        {
+            var br = new BinaryReader(new MemoryStream(body));
+            var guid = ReadPackedGuid(br);
+            if (guid == _charGuid) return;
+            var entity = World.Get(guid);
+            if (entity == null) return;
+
+            var movFlags = br.ReadUInt32();
+            br.ReadUInt16(); // flags2
+            br.ReadUInt32(); // timestamp
+            var x = br.ReadSingle();
+            var y = br.ReadSingle();
+            var z = br.ReadSingle();
+            var ori = br.ReadSingle();
+
+            // Санити-проверка — координаты должны быть в разумных пределах
+            if (MathF.Abs(x) > 20000 || MathF.Abs(y) > 20000 || MathF.Abs(z) > 20000) return;
+            // Если телепортнуло на сотни ярдов — игнорим (вероятно desync)
+            var dx = x - entity.X; var dy = y - entity.Y;
+            if (entity.X != 0 && (dx*dx + dy*dy) > 10000) return; // > 100y скачок
+
+            entity.X = x; entity.Y = y; entity.Z = z; entity.Orientation = ori;
+            entity.LastSeen = DateTime.UtcNow;
+        }
+        catch { /* ignore desync */ }
+    }
+
     private async Task RespondTimeSync(byte[] body)
     {
         var counter = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(0, 4));
@@ -493,33 +595,102 @@ internal sealed class WorldClient : IDisposable
             }
             if (senderName == "?") continue; // имя не нашлось
 
-            var response = await ExecuteCommand(senderName, cmd);
-            if (response != null)
-            {
-                Console.WriteLine($"  [CMD] {senderName} '{cmd}' -> ответ '{response}'");
-                await WhisperAsync(senderName, response);
-            }
+            await ExecuteCommand(senderName, guid, cmd);
         }
         foreach (var p in stillPending) _pendingCommands.Enqueue(p);
     }
 
-    private async Task<string?> ExecuteCommand(string senderName, string cmd)
+    private async Task ExecuteCommand(string senderName, ulong senderGuid, string cmd)
     {
+        Console.WriteLine($"  [CMD] {senderName} <- '{cmd}'");
         var parts = cmd[1..].Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return null;
+        if (parts.Length == 0) return;
         var verb = parts[0].ToLowerInvariant();
         var arg = parts.Length > 1 ? parts[1] : "";
 
-        return verb switch
+        switch (verb)
         {
-            "ping"   => "pong",
-            "help"   => "Команды: !ping !pos !nearby !who [name] !invite <name> !help",
-            "pos"    => $"map={_map} pos=({_x:F0}, {_y:F0}, {_z:F0})",
-            "who"    => await DoWhoQuick(arg),
-            "invite" => await DoInvite(arg),
-            "nearby" => DoNearby(arg),
-            _        => $"Неизвестная команда '{verb}'. !help"
-        };
+            case "ping":   await Reply(senderName, "pong"); break;
+            case "help":   await Reply(senderName, "!ping !pos !nearby !who !invite !come !followme !stop !help"); break;
+            case "pos":    await Reply(senderName, $"map={_map} pos=({_x:F0}, {_y:F0}, {_z:F0})"); break;
+            case "who":    await Reply(senderName, await DoWhoQuick(arg)); break;
+            case "invite": await Reply(senderName, await DoInvite(arg)); break;
+            case "nearby": await Reply(senderName, DoNearby(arg)); break;
+            case "come":
+            case "ко":
+                await DoCome(senderName, senderGuid);
+                break;
+            case "followme":
+            case "follow":
+                await DoFollow(senderName, senderGuid);
+                break;
+            case "stop":
+                _followCts?.Cancel();
+                await Reply(senderName, "стою");
+                break;
+            default:
+                await Reply(senderName, $"Неизвестная команда '{verb}'. !help");
+                break;
+        }
+    }
+
+    private async Task Reply(string to, string text)
+    {
+        Console.WriteLine($"  [CMD] -> '{text}'");
+        await WhisperAsync(to, text);
+    }
+
+    private async Task DoCome(string senderName, ulong senderGuid)
+    {
+        var target = World.Get(senderGuid);
+        if (target == null || (target.X == 0 && target.Y == 0))
+        {
+            await Reply(senderName, "не вижу тебя");
+            return;
+        }
+        var dx = target.X - _x;
+        var dy = target.Y - _y;
+        var dist = MathF.Sqrt(dx * dx + dy * dy);
+        if (dist < 5f) { await Reply(senderName, $"уже рядом ({dist:F0}y)"); return; }
+        await Reply(senderName, $"иду, {dist:F0}y");
+        var stopX = target.X - dx / dist * 3;
+        var stopY = target.Y - dy / dist * 3;
+        await MoveToAsync(stopX, stopY, tolerance: 2f);
+        await Reply(senderName, "пришла");
+    }
+
+    private CancellationTokenSource? _followCts;
+
+    private async Task DoFollow(string senderName, ulong senderGuid)
+    {
+        _followCts?.Cancel();
+        _followCts = new CancellationTokenSource();
+        var ct = _followCts.Token;
+        await Reply(senderName, "следую за тобой (!stop чтобы остановить)");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    var target = World.Get(senderGuid);
+                    if (target != null)
+                    {
+                        var dx = target.X - _x;
+                        var dy = target.Y - _y;
+                        var dist = MathF.Sqrt(dx * dx + dy * dy);
+                        if (dist > 5f) // догоняем если >5 ярдов
+                        {
+                            var stopX = target.X - dx / dist * 3;
+                            var stopY = target.Y - dy / dist * 3;
+                            await MoveToAsync(stopX, stopY, tolerance: 2f);
+                        }
+                    }
+                    try { await Task.Delay(1000, ct); } catch { return; }
+                }
+            }
+            catch (Exception ex) { Console.WriteLine($"[FOLLOW] error: {ex.Message}"); }
+        }, ct);
     }
 
     private string DoNearby(string arg)
@@ -1083,6 +1254,18 @@ internal sealed class WorldClient : IDisposable
 
     // ------- общий цикл чтения пакетов -------
 
+    public sealed class OpcodeStat
+    {
+        public int Count;
+        public double FirstAt;
+        public double LastAt;
+        public int FirstBodySize;
+        public byte[]? FirstBodyHex;  // первые 32 байта первого пакета
+    }
+    private readonly Dictionary<ushort, OpcodeStat> _opStats = new();
+
+    public IReadOnlyDictionary<ushort, OpcodeStat> OpcodeStatistics => _opStats;
+
     public async Task IdleAsync(TimeSpan duration)
     {
         var start = DateTime.UtcNow;
@@ -1109,6 +1292,17 @@ internal sealed class WorldClient : IDisposable
 
             stats.TryGetValue(op, out var c);
             stats[op] = c + 1;
+
+            // Детальная статистика для анализа anti-cheat'а
+            var elapsedNow = (DateTime.UtcNow - start).TotalSeconds;
+            if (!_opStats.TryGetValue(op, out var os))
+            {
+                os = new OpcodeStat { FirstAt = elapsedNow, FirstBodySize = body.Length,
+                    FirstBodyHex = body.AsSpan(0, Math.Min(body.Length, 32)).ToArray() };
+                _opStats[op] = os;
+            }
+            os.Count++;
+            os.LastAt = elapsedNow;
 
             if (op == SMSG_TIME_SYNC_REQ)
             {
@@ -1144,6 +1338,14 @@ internal sealed class WorldClient : IDisposable
                     var t = (DateTime.UtcNow - start).TotalSeconds;
                     Console.WriteLine($"[IDLE @ {t:F1}s] world(compressed): +{st.Created}/-{st.Removed} (всего {World.Count})");
                 }
+            }
+            else if (IsMovementOpcode(op))
+            {
+                HandleEntityMovement(body);
+            }
+            else if (op == 0x02E6)
+            {
+                await HandleWardenData(body);
             }
             else if (op == SMSG_FORCE_RUN_SPEED_CHANGE)
             {

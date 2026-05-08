@@ -143,6 +143,20 @@ internal static class Program
             await world.IdleAsync(TimeSpan.FromSeconds(idleSeconds));
             await world.StopHeartbeatAsync();
 
+            // Анализ опкодов — ищем кандидаты на anti-cheat ping
+            Console.WriteLine($"\n=== opcode stats ===");
+            Console.WriteLine($"  opcode  count   first    last  interval  size  hex");
+            foreach (var kv in world.OpcodeStatistics
+                .OrderBy(p => p.Value.FirstAt)
+                .Where(p => p.Value.Count >= 1))
+            {
+                var op = kv.Key;
+                var st = kv.Value;
+                var interval = st.Count > 1 ? (st.LastAt - st.FirstAt) / (st.Count - 1) : 0;
+                var hex = st.FirstBodyHex != null ? Convert.ToHexString(st.FirstBodyHex) : "";
+                Console.WriteLine($"  0x{op:X4} {st.Count,5}  {st.FirstAt,6:F1}  {st.LastAt,6:F1}    {interval,6:F1}  {st.FirstBodySize,4}  {hex}");
+            }
+
             // Финальный отчёт о мире
             Console.WriteLine($"\n=== world snapshot ({world.World.Count} entities) ===");
             var snap = world.World.Snapshot();
