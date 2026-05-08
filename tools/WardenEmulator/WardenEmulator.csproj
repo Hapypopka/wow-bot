@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WowBot.WardenEmulator</RootNamespace>
+    <AssemblyName>WardenEmulator</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="UnicornEngine.Unicorn" Version="2.1.3" />
+  </ItemGroup>
+
+  <!-- NuGet пакет включает только Linux/macOS native binaries.
+       Windows DLL берём из локальной копии (взято из Python pip install unicorn).
+       Копируем в КОРЕНЬ bin/ чтобы P/Invoke нашёл её рядом с exe. -->
+  <ItemGroup>
+    <Content Include="native/unicorn.dll" Condition="Exists('native/unicorn.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>unicorn.dll</Link>
+    </Content>
+  </ItemGroup>
+
+  <!-- SmokeTestRunner — отдельный проект, не компилируем как часть библиотеки -->
+  <ItemGroup>
+    <Compile Remove="SmokeTestRunner/**" />
+    <None Remove="SmokeTestRunner/**" />
+  </ItemGroup>
+</Project>

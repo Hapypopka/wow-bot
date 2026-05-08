@@ -58,6 +58,7 @@ internal static class Program
         var realHost = GetArg(args, "--real-host") ?? "logon.wowcircle.com";
         var realPort = int.Parse(GetArg(args, "--real-port") ?? "3724");
         WorldProxy.LogVerbose = args.Contains("--verbose");
+        WorldProxy.CaptureModule = args.Contains("--capture-module");
 
         Console.WriteLine($"[main] account={account.ToUpper()} realm-pattern='{realmPattern}'");
         Console.WriteLine($"[main] logon proxy :{logonPort} | world proxy :{worldPort} | real-server {realHost}:{realPort}");

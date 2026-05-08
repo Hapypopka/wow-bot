@@ -46,6 +46,16 @@ internal sealed class WorldBridge
     // После HASH_RESULT TC re-init'ит Warden RC4 ключами из модуля (одинаковые для клиента и сервера).
     // Мы их не знаем → переходим в passthrough: не трогаем тела Warden, оба endpoint'а шифруют тем же модульным ключом.
     private volatile bool _wardenPassthrough = false;
+
+    // Module capture mode (--capture-module): подменяем MODULE_OK от клиента на MODULE_MISSING,
+    // сервер начинает стримить модуль чанками SMSG MODULE_CACHE, мы их склеиваем и сохраняем.
+    private readonly bool _captureModule;
+    private byte[]? _moduleHash;
+    private byte[]? _moduleKey;
+    private uint _moduleSize;
+    private readonly List<byte> _capturedModuleChunks = new();
+    private bool _moduleOkSwappedToMissing = false;
+    private bool _moduleSaved = false;
     private readonly SemaphoreSlim _serverWriteLock = new(1, 1);
     private readonly SemaphoreSlim _clientWriteLock = new(1, 1);
     private readonly Action<string> _log;
@@ -53,7 +63,7 @@ internal sealed class WorldBridge
 
     public WorldBridge(NetworkStream clientStream, NetworkStream serverStream,
                        byte[] kClient, byte[] kServer,
-                       Action<string> log, bool verbose)
+                       Action<string> log, bool verbose, bool captureModule = false)
     {
         _clientStream = clientStream;
         _serverStream = serverStream;
@@ -63,6 +73,8 @@ internal sealed class WorldBridge
         _wardenServer = new WardenCrypt(kServer);
         _log = log;
         _verbose = verbose;
+        _captureModule = captureModule;
+        if (_captureModule) _log("module capture enabled — will force MODULE_MISSING and save bytes");
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -167,6 +179,7 @@ internal sealed class WorldBridge
                 {
                     _wardenServer.Decrypt(body);
                     if (_verbose) _log($"WARDEN ↓ {body.Length}b code=0x{body[0]:X2} (re-encrypt phase)");
+                    HandleSmsgWardenPlaintext(body);
                     _wardenClient.Decrypt(body);
                 }
                 else if (opcode == SMSG_WARDEN_DATA && _verbose)
@@ -216,6 +229,16 @@ internal sealed class WorldBridge
                 {
                     _wardenClient.Encrypt(body);
                     var code = body[0];
+
+                    // Capture mode: подменяем MODULE_OK (0x01) на MODULE_MISSING (0x00) — сервер начнёт стримить модуль
+                    if (_captureModule && code == 0x01 && !_moduleOkSwappedToMissing && body.Length == 1)
+                    {
+                        body[0] = 0x00;
+                        _moduleOkSwappedToMissing = true;
+                        _log("CAPTURE: swapped CMSG MODULE_OK → MODULE_MISSING — server will stream module");
+                        code = 0x00;
+                    }
+
                     if (_verbose) _log($"WARDEN ↑ {body.Length}b code=0x{code:X2} (re-encrypt phase)");
                     _wardenServer.Encrypt(body);
 
@@ -246,6 +269,117 @@ internal sealed class WorldBridge
             }
         }
         catch (Exception ex) { _log($"client→server pump ended: {ex.Message}"); }
+    }
+
+    // ----- Warden module capture -----
+
+    private void HandleSmsgWardenPlaintext(byte[] body)
+    {
+        if (body.Length < 1) return;
+        var code = body[0];
+
+        // MODULE_USE (0x00): cmd + module_hash[16] + module_key[16] + module_size[uint32 LE]
+        if (code == 0x00 && body.Length >= 37)
+        {
+            _moduleHash = body.AsSpan(1, 16).ToArray();
+            _moduleKey  = body.AsSpan(17, 16).ToArray();
+            _moduleSize = BitConverter.ToUInt32(body, 33);
+            _log($"MODULE_USE: hash={Convert.ToHexString(_moduleHash)} key={Convert.ToHexString(_moduleKey)} size={_moduleSize}b");
+            return;
+        }
+
+        // MODULE_CACHE (0x01): cmd + chunk_size[uint16 LE] + chunk_data[chunk_size]
+        if (code == 0x01 && _captureModule && !_moduleSaved && body.Length >= 3)
+        {
+            var chunkSize = BitConverter.ToUInt16(body, 1);
+            if (chunkSize == 0 || body.Length < 3 + chunkSize) return;
+
+            for (int i = 0; i < chunkSize; i++)
+                _capturedModuleChunks.Add(body[3 + i]);
+
+            _log($"CAPTURE: MODULE_CACHE chunk +{chunkSize}b (total {_capturedModuleChunks.Count}/{_moduleSize})");
+
+            if (_moduleSize > 0 && _capturedModuleChunks.Count >= _moduleSize)
+            {
+                SaveCapturedModule();
+                _moduleSaved = true;
+            }
+        }
+    }
+
+    private void SaveCapturedModule()
+    {
+        try
+        {
+            var dir = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+            var compressedPath = System.IO.Path.Combine(dir, "warden_module_compressed.bin");
+            var modulePath     = System.IO.Path.Combine(dir, "warden_module.bin");
+            var infoPath       = System.IO.Path.Combine(dir, "warden_module_info.txt");
+
+            var bytes = _capturedModuleChunks.ToArray();
+            var rc4 = new ModuleRc4(_moduleKey!);
+            rc4.Process(bytes); // RC4-decrypt with module_key → zlib-compressed bytes
+
+            System.IO.File.WriteAllBytes(compressedPath, bytes);
+            _log($"CAPTURE: saved {bytes.Length}b RC4-decrypted → {compressedPath}");
+
+            // Формат: первые 4 байта (LE uint32) = uncompressed size, далее zlib stream
+            try
+            {
+                if (bytes.Length < 4) throw new Exception("too small for header");
+                var uncompressedSize = BitConverter.ToUInt32(bytes, 0);
+                _log($"CAPTURE: header says uncompressed size = {uncompressedSize}b");
+
+                using var ms = new System.IO.MemoryStream(bytes, 4, bytes.Length - 4);
+                using var zs = new System.IO.Compression.ZLibStream(ms, System.IO.Compression.CompressionMode.Decompress);
+                using var output = new System.IO.MemoryStream();
+                zs.CopyTo(output);
+                System.IO.File.WriteAllBytes(modulePath, output.ToArray());
+                _log($"CAPTURE: zlib decompressed {output.Length}b → {modulePath}");
+            }
+            catch (Exception ex)
+            {
+                _log($"CAPTURE: zlib decompress failed ({ex.Message}) — only compressed saved");
+            }
+
+            System.IO.File.WriteAllText(infoPath,
+                $"hash: {Convert.ToHexString(_moduleHash!)}\n" +
+                $"key:  {Convert.ToHexString(_moduleKey!)}\n" +
+                $"size: {_moduleSize}\n");
+            _log($"CAPTURE: module info → {infoPath}");
+            _log("CAPTURE: done. Live session may break — restart WoW to play normally.");
+        }
+        catch (Exception ex)
+        {
+            _log($"CAPTURE: SaveCapturedModule failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    // Минимальный RC4 для дешифровки тела модуля (отдельно от WowCrypt/WardenCrypt чтобы не плодить инстансы).
+    private sealed class ModuleRc4
+    {
+        private readonly byte[] _s = new byte[256];
+        private int _i, _j;
+        public ModuleRc4(byte[] key)
+        {
+            for (var k = 0; k < 256; k++) _s[k] = (byte)k;
+            var jj = 0;
+            for (var i = 0; i < 256; i++)
+            {
+                jj = (jj + _s[i] + key[i % key.Length]) & 0xFF;
+                (_s[i], _s[jj]) = (_s[jj], _s[i]);
+            }
+        }
+        public void Process(byte[] data)
+        {
+            for (var n = 0; n < data.Length; n++)
+            {
+                _i = (_i + 1) & 0xFF;
+                _j = (_j + _s[_i]) & 0xFF;
+                (_s[_i], _s[_j]) = (_s[_j], _s[_i]);
+                data[n] = (byte)(data[n] ^ _s[(_s[_i] + _s[_j]) & 0xFF]);
+            }
+        }
     }
 
     // ----- Chat parser -----

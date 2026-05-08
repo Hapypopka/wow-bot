@@ -15,6 +15,7 @@ internal sealed class WorldProxy
     private const uint   CMSG_AUTH_SESSION   = 0x01ED;
 
     public static bool LogVerbose = false;
+    public static bool CaptureModule = false;
 
     /// <summary>Текущий активный мост — если есть. Используется для inject из stdin.</summary>
     public WorldBridge? ActiveBridge { get; private set; }
@@ -68,7 +69,7 @@ internal sealed class WorldProxy
             if (!await DoAuthHandshakeAsync(session, cs, ss)) return;
 
             // Encrypted phase — делегируем bridge'у
-            var bridge = new WorldBridge(cs, ss, session.K_Client, session.K_Server, Log, LogVerbose);
+            var bridge = new WorldBridge(cs, ss, session.K_Client, session.K_Server, Log, LogVerbose, CaptureModule);
             ActiveBridge = bridge;
             try
             {

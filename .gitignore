@@ -19,3 +19,13 @@ tools/__pycache__/
 tools/_all_commands.txt
 tools/MitmProxy/mitm.log
 tools/HeadlessPoc/*.log
+
+# WoWee — склонированный референс, не коммитим (есть в README ссылка)
+tools/WoWee-reference/
+
+# Native unicorn.dll — берётся из pip install unicorn локально
+tools/WardenEmulator/native/
+
+# Captured Warden module — содержит проприетарные данные с сервера
+tools/MitmProxy/warden_module*.bin
+tools/MitmProxy/warden_module_info.txt
