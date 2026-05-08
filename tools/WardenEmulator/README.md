@@ -30,11 +30,26 @@ HeadlessPoc (C#) ──JSON over pipes── python.exe (warden_emu_helper.py)
 
 - ✅ Захват модуля работает (см. `MitmProxy --capture-module`)
 - ✅ Python helper эмулирует x86 — smoke + multi-register сценарий
-- ✅ C# bridge стабилен
-- ⏳ Порт логики WoWee `warden_module.cpp` (PE loader) на Python
-- ⏳ Порт `warden_emulator.cpp` (API stubs) на Python
-- ⏳ Порт `warden_handler.cpp` (state machine) на C#
-- ⏳ Интеграция в HeadlessPoc
+- ✅ C# bridge стабилен (PythonEmulatorBridge)
+- ✅ Phase 4.1: парсер `parseExecutableFormat` + `applyRelocations` (`module_loader.py`)
+  - Из 6 форматов WoWee (3 layout × u16/u32) ни один **не подошёл** к WoWCircle модулю
+  - Сработал raw fallback: image[i] = file[i+4], получили 45056-байтовый образ
+- ⏳ **Блокер Phase 4.1:** WoWCircle использует кастомный формат модуля, отличающийся от стандартного TC.
+  Граница code↔relocs неизвестна. Релоки видны в районе 0x76C0..0x7745 файла, но точно где начинаются — надо реверсить.
+- ⏳ Phase 4.2: API stubs (GetTickCount, IsDebuggerPresent, ...)
+- ⏳ Phase 4.3: PE map (fake WoW.exe sections)
+- ⏳ Phase 4.4: state machine для WARDEN_HASH_REQUEST → emulate → reply
+- ⏳ Phase 4.5: интеграция в HeadlessPoc
+
+## Что нужно для следующей сессии
+
+1. **Реверс формата WoWCircle модуля** — определить где кончается code, где начинаются relocs.
+   Подходы:
+   - Дисассемблировать `warden_module_image.bin` в IDA Free, найти последнюю валидную инструкцию
+   - Перебирать кандидаты границы и тестировать в Unicorn (если эмуляция работает = граница верная)
+   - Сравнить с известными TC модулями (нужен другой захваченный с TC сервера)
+
+2. **После того как формат разобран** — Phase 4.2-4.5 по плану выше.
 
 ## Reference: WoWee
 

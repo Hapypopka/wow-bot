@@ -29,3 +29,6 @@ tools/WardenEmulator/native/
 # Captured Warden module — содержит проприетарные данные с сервера
 tools/MitmProxy/warden_module*.bin
 tools/MitmProxy/warden_module_info.txt
+
+# WoWee — склонированный референс
+tools/WoWee-reference/
