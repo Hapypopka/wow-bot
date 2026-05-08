@@ -51,6 +51,60 @@ HeadlessPoc (C#) ──JSON over pipes── python.exe (warden_emu_helper.py)
 
 2. **После того как формат разобран** — Phase 4.2-4.5 по плану выше.
 
+## ⚡ КРИТИЧЕСКИЕ НАХОДКИ ИССЛЕДОВАНИЯ
+
+**Unicorn эмуляция МОЖЕТ БЫТЬ НЕ НУЖНА.** Найдена альтернативная стратегия через
+готовые pre-computed responses.
+
+### vmangos/warden_modules (https://github.com/vmangos/warden_modules)
+
+Публичная коллекция **73 Warden модулей** для TC-семейства серверов. Каждый модуль
+сопровождается:
+- `.bin` — модуль (зашифрованный)
+- `.key` — RC4 ключ
+- `.cr` — **pre-computed challenge-response база** (1000 записей × 68 байт)
+
+**Наш модуль 79C0768D657977D697E10BAD956CCED1 ЕСТЬ в коллекции.** Размер совпадает,
+RC4 ключ совпадает байт-в-байт.
+
+### Формат .cr файла
+
+```
+Header (17 bytes):
+  [0..3]  uint32 memoryRead
+  [4..7]  uint32 pageScanCheck
+  [8..16] uint8[9] check opcodes (MEM, MODULE, PAGE_A, PAGE_B, MPQ, LUA, PROC, DRIVER, TIMING)
+
+Entries (1000 × 68 bytes):
+  seed[16]      — challenge
+  reply[20]     — pre-computed SHA1 reply
+  clientKey[16] — post-handshake CMSG RC4
+  serverKey[16] — post-handshake SMSG RC4
+```
+
+### Стратегия (revised)
+
+1. **HASH_REQUEST handling** — lookup seed в .cr → возврат reply + переключение RC4
+2. **CHEAT_CHECKS_REQUEST handling** — реализация 9 check handlers (порт из WoWee)
+3. **Никакой эмуляции модуля не требуется** — все вычисления статические
+
+### Будущее: что осталось делать
+
+**Phase 4.2 (несколько часов):**
+- Парсер .cr на Python или C#
+- Обработчик HASH_REQUEST с lookup
+- Switch к pre-computed RC4 keys
+
+**Phase 4.3 (несколько дней):**
+- Порт WoWee `warden_handler.cpp` check handlers
+- Скормить fake WoW.exe для MEM/PAGE сканов
+
+**Phase 4.4 (полдня):**
+- Интеграция в HeadlessPoc
+
+Размер задачи: **дни**, не недели. Unicorn integration отложен — может пригодиться
+если seed не найден в CR (~ 0% случаев если CR покрывает все seeds сервера).
+
 ## Reference: WoWee
 
 Полная C++ реализация которую мы портируем — `c:\Проекты\wow-bot\tools\WoWee-reference\`.

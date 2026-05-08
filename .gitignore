@@ -32,3 +32,6 @@ tools/MitmProxy/warden_module_info.txt
 
 # WoWee — склонированный референс
 tools/WoWee-reference/
+
+# vmangos warden modules collection — публичная, но большая (73 модуля + .cr файлы)
+tools/vmangos-warden/
