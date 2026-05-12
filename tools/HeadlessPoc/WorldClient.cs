@@ -46,11 +46,14 @@ public sealed class WorldClient : IDisposable
     private const uint   MSG_MOVE_START_BACKWARD = 0xB6;
     private const uint   MSG_MOVE_STOP           = 0xB7;
     private const uint   MSG_MOVE_SET_FACING     = 0xDA;
+    private const uint   MSG_MOVE_JUMP           = 0xCB;
+    private const uint   MSG_MOVE_FALL_LAND      = 0xC9;
     private const ushort SMSG_MESSAGECHAT        = 0x96;
     private const uint   CMSG_MESSAGECHAT        = 0x95;
 
     private const uint MOVEMENTFLAG_FORWARD      = 0x00000001;
     private const uint MOVEMENTFLAG_BACKWARD     = 0x00000002;
+    private const uint MOVEMENTFLAG_FALLING      = 0x00002000;
     private const float DefaultRunSpeed = 7.0f; // 3.3.5 base run speed (yards/sec)
 
     private const ushort SMSG_FORCE_WALK_SPEED_CHANGE = 0xC2;
@@ -265,15 +268,10 @@ public sealed class WorldClient : IDisposable
                     verifyReceived = true;
                     _map = map; _x = x; _y = y; _z = z; _ori = ori;
                     Console.WriteLine($"[WORLD] <- LOGIN_VERIFY_WORLD map={map} pos=({x:F1}, {y:F1}, {z:F1}) ori={ori:F2}");
-                    if (Nav != null)
-                    {
-                        var groundZ = Nav.GetHeight((int)_map, _x, _y, _z);
-                        if (!float.IsNaN(groundZ))
-                        {
-                            Console.WriteLine($"[WORLD]    nav: ground Z = {groundZ:F2} (delta {groundZ - _z:F1})");
-                            _z = groundZ;
-                        }
-                    }
+                    // Не корректируем Z через nav — серверная Z это где перс реально сохранён.
+                    // Расхождение между server mmap/vmap и client .m2/.wmo (визуальное "парение" на ~0.2y)
+                    // — known-issue WoWCircle, чинится через VMAP server (Phase D+) или manual workaround
+                    // (зайти Узянбаевой в WoW.exe, пройти 5y туда-обратно, выйти — серверная Z обновится).
                     break;
 
                 case SMSG_UPDATE_OBJECT:
@@ -1209,14 +1207,31 @@ public sealed class WorldClient : IDisposable
         var ct = _heartbeatCts.Token;
         _heartbeatTask = Task.Run(async () =>
         {
+            // KEEP_ALIVE раз в 30с для стоящего бота — anti-AFK без position update.
+            // Movement heartbeat только когда бот двигается (флаги FORWARD/BACKWARD).
+            // Иначе сервер при каждом MSG_MOVE_HEARTBEAT делает UpdateGroundPositionZ через свой VMAP
+            // и нашу Z поднимает на nav-clearance (0.2y) — визуальное "парение" для других игроков.
+            var lastKeepAlive = DateTime.UtcNow;
             while (!ct.IsCancellationRequested)
             {
-                try { AdvancePosition(); await SendMovementPacketAsync(MSG_MOVE_HEARTBEAT); }
+                try
+                {
+                    AdvancePosition();
+                    if (_movementFlags != 0)
+                    {
+                        await SendMovementPacketAsync(MSG_MOVE_HEARTBEAT);
+                    }
+                    else if ((DateTime.UtcNow - lastKeepAlive).TotalSeconds >= 30)
+                    {
+                        await SendCmsgEncrypted(CMSG_KEEP_ALIVE, Array.Empty<byte>());
+                        lastKeepAlive = DateTime.UtcNow;
+                    }
+                }
                 catch (Exception e) { Console.WriteLine($"[HB] error: {e.Message}"); return; }
                 try { await Task.Delay(200, ct); } catch { return; }
             }
         }, ct);
-        Console.WriteLine($"[HB] heartbeat started (every 200ms)");
+        Console.WriteLine($"[HB] heartbeat started (movement: 200мс, idle: KEEP_ALIVE 30с)");
     }
 
     public async Task StopHeartbeatAsync()
@@ -1268,7 +1283,9 @@ public sealed class WorldClient : IDisposable
         w.Write((ushort)0);                  // flags2
         w.Write((uint)Environment.TickCount);
         w.Write(_x); w.Write(_y); w.Write(_z); w.Write(_ori);
-        w.Write((uint)0);                    // fall_time
+        // MSG_MOVE_FALL_LAND ожидает «персонаж только что приземлился» — fall_time>0 на некоторых форках
+        // триггерит server-side ground snap через VMAP.
+        w.Write(opcode == MSG_MOVE_FALL_LAND ? 500u : 0u);  // fall_time
         await SendCmsgEncrypted(opcode, ms.ToArray());
     }
 

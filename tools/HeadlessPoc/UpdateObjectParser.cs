@@ -22,7 +22,7 @@ using System.Text;
 
 namespace WowBot.HeadlessPoc;
 
-internal static class UpdateObjectParser
+public static class UpdateObjectParser
 {
     // updateType
     private const byte UPDATETYPE_VALUES         = 0;
