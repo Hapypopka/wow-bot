@@ -15,6 +15,10 @@ public class Hivemind
 
     private const string CHANNEL = "WBHIVE";
 
+    /// <summary>Lua-выражение канала addon-сообщений: RAID если в рейде, иначе PARTY.
+    /// Hivemind работает и в обычной группе, и в рейде.</summary>
+    private const string CHAN = "(GetNumRaidMembers()>0 and 'RAID' or 'PARTY')";
+
     public void SetBotEngine(BotEngine engine) => _botEngine = engine;
 
     public enum Role { None, Master, Slave }
@@ -132,7 +136,7 @@ public class Hivemind
         }
 
         _retryCount++;
-        _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','{_pendingMsg}','PARTY')", 200);
+        _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','{_pendingMsg}',{CHAN})", 200);
         _lastSendTime = DateTime.UtcNow;
         Logger.Info($"ACK: retry #{_retryCount} seq#{_pendingSeq} waiting for: {string.Join(",", _pendingAcks)}");
     }
@@ -153,7 +157,7 @@ public class Hivemind
     {
         string myName = _objectManager.GetPlayerName() ?? "";
         string msg = $"ACK:{seq}~{myName}";
-        _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','{msg}','PARTY')", 100);
+        _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})", 100);
     }
 
     // ==================== МАСТЕР ====================
@@ -201,7 +205,7 @@ public class Hivemind
         _cmdSeq++;
         string fullArg = string.IsNullOrEmpty(targets) ? arg : $"{arg}~{targets}";
         string msg = $"{cmd}:{fullArg}#{_cmdSeq}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
 
         // ACK tracking: служебные команды (SetBuff, Wipe, InFrame и т.д.) не требуют ACK,
@@ -241,7 +245,7 @@ public class Hivemind
         string arg = cmd == Command.Stop ? "" : masterName;
         string fullArg = $"{arg}~{slaveName}";
         string msg = $"{cmd}:{fullArg}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
 
         // Обновить ActiveCommand (служебные команды не меняют статус)
@@ -456,7 +460,7 @@ public class Hivemind
     {
         if (CurrentRole != Role.Master) return;
         string msg = $"SetBuff:{buffType}={buffKey}~{slaveName}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
         Logger.Info($"Hivemind: MASTER SetBuff {buffType}={buffKey} → {slaveName}");
     }
@@ -477,7 +481,7 @@ public class Hivemind
     {
         if (CurrentRole != Role.Master) return;
         string msg = $"RefreshGuid:{targetName}~{slaveName}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
         Logger.Info($"Hivemind: MASTER RefreshGuid {slaveName} → {targetName}");
     }
@@ -487,7 +491,7 @@ public class Hivemind
         // Шлём напрямую, без адресации — все палы получат
         if (CurrentRole != Role.Master) return;
         string msg = $"SetBuff:{buffType}={buffKey}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
         Logger.Info($"Hivemind: MASTER SetBuff {buffType}={buffKey}");
     }
@@ -501,7 +505,7 @@ public class Hivemind
         if (shaman == null) { Logger.Info("Hivemind: no shaman slave for Heroism"); return; }
 
         string msg = $"CastHeroism:1~{shaman.Name}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
         Logger.Info($"Hivemind: MASTER Heroism → {shaman.Name}");
     }
@@ -517,7 +521,7 @@ public class Hivemind
             string targets = string.Join(",", NavSelectedSlaves);
             string fullArg = $"{coords}~{targets}";
             string msg2 = $"Goto:{fullArg}";
-            string lua2 = $"SendAddonMessage('{CHANNEL}','{msg2}','PARTY')";
+            string lua2 = $"SendAddonMessage('{CHANNEL}','{msg2}',{CHAN})";
             _hook.ExecuteLua(lua2, 200);
 
             foreach (var name in NavSelectedSlaves)
@@ -726,7 +730,7 @@ public class Hivemind
         string msg = string.IsNullOrEmpty(buffSettings)
             ? $"Register:{name};{playerClass}"
             : $"Register:{name};{playerClass};{buffSettings}";
-        string lua = $"SendAddonMessage('{CHANNEL}','{msg}','PARTY')";
+        string lua = $"SendAddonMessage('{CHANNEL}','{msg}',{CHAN})";
         _hook.ExecuteLua(lua, 200);
         Logger.Info($"Hivemind: SLAVE sent Register — {name} ({playerClass}) buffs=[{buffSettings}]");
     }
@@ -1176,7 +1180,7 @@ WB_HIVE_REG_Q = ''
 
             case Command.Ping:
                 string myName = _objectManager.GetPlayerName() ?? "slave";
-                _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','Pong:{myName}','PARTY')", 200);
+                _hook.ExecuteLua($"SendAddonMessage('{CHANNEL}','Pong:{myName}',{CHAN})", 200);
                 Logger.Info("Hivemind: SLAVE pong");
                 break;
 

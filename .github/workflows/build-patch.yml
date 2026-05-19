@@ -7,6 +7,7 @@ on:
       - 'WowBot.Core/**'
       - 'WowBot.Injector/**'
       - '.github/workflows/**'
+  workflow_dispatch:   # ручной запуск — собирает ещё и полный архив full.zip
 
 permissions:
   contents: write
@@ -54,29 +55,53 @@ jobs:
           if (Test-Path publish/app.ico) { Copy-Item publish/app.ico _patch/ }
           Compress-Archive -Path _patch/* -DestinationPath patch.zip -Force
 
-      - name: Upload artifact
+      - name: Upload patch artifact
         uses: actions/upload-artifact@v4
         with:
           name: patch
           path: patch.zip
 
+      # Полный архив (вся папка publish) — только при ручном запуске.
+      # Нужен чтобы дать бота с нуля новому человеку; обычные пуши его не собирают.
+      - name: Create full.zip
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath full.zip -Force
+
+      - name: Upload full artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: full
+          path: full.zip
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifact
+      - name: Download patch artifact
         uses: actions/download-artifact@v4
         with:
           name: patch
+
+      - name: Download full artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: full
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: v${{ needs.build.outputs.version }}
-          files: patch.zip
+          files: |
+            patch.zip
+            full.zip
+          fail_on_unmatched_files: false
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # VPS скачивает patch.zip из Release автоматически через TG бота
+      # full.zip появляется в Release только при ручном запуске workflow
